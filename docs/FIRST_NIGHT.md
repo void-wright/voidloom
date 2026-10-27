@@ -128,6 +128,11 @@ the embedding model every thirty minutes — and you arm one deliberately:
 WIZARD_CRON_ONLY=gap-research bash ~/.claude/memory/install/install_crons.sh
 ```
 
+Gap research asks the thinker to focus on "what someone working with this topic would need
+to know". To point it at your own field, add one line to `~/.voidloom/wizard-library-env`,
+outside the managed block, for example
+`WIZARD_GAP_RESEARCH_FOCUS='Focus on what a data engineer would need to know.'`
+
 ### Verify before enabling — and use this loop, not the old one
 
 The previous version of this page shipped a check that reported **every** unit as

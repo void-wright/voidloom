@@ -1274,7 +1274,18 @@ def acknowledge_gap(
 # Auto-Research Dispatch
 # ============================================================
 
-def _build_research_prompt(entity: str, gap_type: str) -> str:
+DEFAULT_RESEARCH_FOCUS = "Focus on what someone working with this topic would need to know."
+
+
+def _research_focus(cfg: Optional[Dict[str, Any]] = None) -> str:
+    """The one sentence that points gap research at the owner's field. An owner sets it as
+    WIZARD_GAP_RESEARCH_FOCUS (the env file every scheduled job reads) or as 'research_focus' in a --config file;
+    the config wins, then the environment, then the generic default."""
+    v = ((cfg or {}).get("research_focus") or os.environ.get("WIZARD_GAP_RESEARCH_FOCUS") or "").strip()
+    return v or DEFAULT_RESEARCH_FOCUS
+
+
+def _build_research_prompt(entity: str, gap_type: str, focus: Optional[str] = None) -> str:
     """Build a concise research prompt for a gap topic."""
     type_context = {
         'thin_entity': "This entity appears rarely in my knowledge base.",
@@ -1288,7 +1299,7 @@ def _build_research_prompt(entity: str, gap_type: str) -> str:
     return (
         f"Research: {entity}. {context} "
         f"Provide key facts, recent developments (2025-2026), and actionable insights. "
-        f"Focus on what someone working with this topic would need to know. "
+        f"{(focus or DEFAULT_RESEARCH_FOCUS).rstrip()} "
         f"Be concise (500 words max). Cite sources where possible. "
         f"If you cannot identify this entity, or find nothing verifiable about it, reply with one line "
         f"that starts with {NO_ANSWER_SENTINEL} followed by the reason, and nothing else."
@@ -1571,7 +1582,7 @@ def dispatch_auto_research(
     results = []
 
     for gap_id, entity, gap_type, score in rows:
-        prompt = _build_research_prompt(entity, gap_type)
+        prompt = _build_research_prompt(entity, gap_type, _research_focus(cfg))
 
         # Log dispatch start (the column says 'thinker'; the command names the backend that was asked)
         conn.execute("""
@@ -2124,6 +2135,20 @@ def unit_tests():
     # ---- Test 20: Research prompt generation ----
     prompt = _build_research_prompt("Faraday Grid competitive landscape", "weak_recall")
     assert_true("T20: prompt contains entity", "Faraday Grid" in prompt)
+    assert_true("T20b: the generic focus by default", DEFAULT_RESEARCH_FOCUS in prompt)
+    _prev = os.environ.get("WIZARD_GAP_RESEARCH_FOCUS")
+    os.environ["WIZARD_GAP_RESEARCH_FOCUS"] = "Focus on what a gardener would need to know."
+    try:
+        assert_true("T20c: the owner's focus from the environment",
+                    "a gardener" in _build_research_prompt("x", "weak_recall", _research_focus({})))
+        assert_true("T20d: a config value wins over the environment",
+                    "a sailor" in _build_research_prompt("x", "weak_recall",
+                                                         _research_focus({"research_focus": "Focus on a sailor."})))
+    finally:
+        if _prev is None:
+            os.environ.pop("WIZARD_GAP_RESEARCH_FOCUS", None)
+        else:
+            os.environ["WIZARD_GAP_RESEARCH_FOCUS"] = _prev
     assert_true("T20: prompt contains context", "poor results" in prompt)
     assert_true("T20: prompt requests concise output", "500 words" in prompt)
 

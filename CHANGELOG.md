@@ -4,6 +4,14 @@ All notable changes to Voidloom are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `WIZARD_GAP_RESEARCH_FOCUS` (in the env file the scheduled jobs read) points gap research at
+  your own field; the default stays generic. A `research_focus` key in a `--config` file wins
+  over it.
+
 ## [1.0.0] — 2026-10-27
 
 The first public release, under the Apache License 2.0.

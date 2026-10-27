@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "5c82eb6",
+  "derived_at_head": "11c96bf",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 416,
   "platforms": [
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 7381,
+   "bytes": 7610,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "db5b69497e36171c323881339c3f94fbff9a2c6908346bb1d049e303f928dcd3",
+   "sha256": "982ab11c921c25c598ac9fd50dc6038401ca426ef60e43f99a497f84cd78c7db",
    "src": "CHANGELOG.md"
   },
   {
@@ -725,13 +725,13 @@
    "src": "docs/COUNCIL_README.md"
   },
   {
-   "bytes": 15821,
+   "bytes": 16123,
    "component": "core",
    "dst": "docs/FIRST_NIGHT.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "aebc4a0eb97ebc759d5f70c63c7850252cac02481ba67adf2cfc1bb8eb16f9f2",
+   "sha256": "c35368333c8d2beb2c64d2287c8bfdfa44a9006a7d1a164b8a1444a242e352a6",
    "src": "docs/FIRST_NIGHT.md"
   },
   {
@@ -1685,13 +1685,13 @@
    "src": "organs/embedding_upgrade.py"
   },
   {
-   "bytes": 105687,
+   "bytes": 107155,
    "component": "core",
    "dst": "organs/gap_mapping.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "53ec5b2e2f1c5d6b695cd5f120c3ad866353b32536f2b5d78b1cafca5e121ac2",
+   "sha256": "9e659adec01af772f8ef0ca60bd9d5a75666334e428262a3ab77123d3a5abcba",
    "src": "organs/gap_mapping.py"
   },
   {
