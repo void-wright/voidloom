@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import sqlite3
 import sys
@@ -87,26 +88,58 @@ def _resolve_seed_path() -> Path:
     return Path(__file__).resolve().parent.parent / "seed" / "seed_pack.json"
 
 
-# ---------------------------------------------------------------------------
-# FTS5 query sanitizer — IDENTICAL semantics to claude_memory_lite._sanitize_fts_query.
-# A bare hyphen is FTS5 NEGATION; a dot can be a syntax error; AND/OR/NOT/NEAR
-# (uppercase) flip into boolean mode. Wrap special-char tokens as quoted phrases
-# and lowercase boolean keywords so natural-language queries behave intuitively.
-# ---------------------------------------------------------------------------
-_FTS5_SPECIAL = set('-."*():^')
-_FTS5_KEYWORDS = {"AND", "OR", "NOT", "NEAR"}
+# FTS5 query building -- the SAME rules as hybrid_retrieval._sanitize_fts_query and
+# hybrid_retrieval._fts_match_expr, kept stdlib-only here so this file never needs
+# the heavy stack. voidloom/tests/test_fts_any_word.py asserts the copies agree.
+#
+# Safety: FTS5 reads a bare hyphen as NEGATION, a dot or '?' or an apostrophe as a
+# syntax error, and uppercase AND/OR/NOT/NEAR as operators. So: keep only word
+# characters, hyphens and dots; quote any token with a hyphen or dot as a phrase;
+# lowercase the operator words.
+#
+# Matching: OR over the content words, ranked by BM25 (any word can match; a
+# memory scores by how many rare query words it holds). Joining with spaces made
+# FTS5 require EVERY word, "when" and "did" included, and with '?' or an
+# apostrophe in the query the old sanitiser raised a syntax error -- so a natural
+# question found nothing (measured 2026-10-27).
+FTS_STOPWORDS = frozenset("""
+a an the of to in on at for and or but is are was were be been do does did what when where who whom which why
+how that this these those with from by as it its into about i you he she they we his her their our my your has
+have had will would can could should
+s t d ll m re ve
+""".split())
+
+# An OR costs one posting-list scan per term, so a pasted page would cost seconds
+# (measured on a 31k-memory brain: 1,000 words 2.3 s; one common word repeated 1,000
+# times 85 s). Queries are questions, not documents: the first 32 content words
+# carry them. Logged live questions are far shorter (p99 17 words; 1 of 17,597 had
+# 40 content words, so its last 8 were dropped).
+FTS_MAX_TERMS = 32
 
 
 def _sanitize_fts_query(query: str) -> str:
-    out = []
-    for tok in query.split():
-        if tok in _FTS5_KEYWORDS:
-            out.append(tok.lower())
-        elif any(ch in _FTS5_SPECIAL for ch in tok):
-            out.append('"' + tok.replace('"', '""') + '"')
+    cleaned = re.sub(r'["]', " ", query or "")
+    cleaned = re.sub(r"[^\w\s.\-]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    tokens = []
+    for tok in cleaned.split():
+        if not re.search(r"\w", tok):
+            continue
+        if tok.upper() in {"AND", "OR", "NOT", "NEAR"}:
+            tokens.append(tok.lower())
+        elif "-" in tok or "." in tok:
+            stripped = tok.strip(".-")
+            if stripped:
+                tokens.append(f'"{stripped}"')
         else:
-            out.append(tok)
-    return " ".join(out)
+            tokens.append(tok)
+    return " ".join(tokens)
+
+
+def _fts_match_expr(query: str) -> str:
+    tokens = _sanitize_fts_query(query).split()
+    content = [t for t in tokens if t.startswith('"') or t.lower() not in FTS_STOPWORDS]
+    return " OR ".join((content or tokens)[:FTS_MAX_TERMS])
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +343,9 @@ def _recall(conn, query: str, limit: int = 5):
     ORDER BY rank ASC, m.importance DESC, m.created_at DESC
     LIMIT ?
     """
-    sanitized = _sanitize_fts_query(query)
+    sanitized = _fts_match_expr(query)
+    if not sanitized:
+        return []
     rows = conn.execute(sql, (sanitized, limit)).fetchall()
     return [(r[0], r[1]) for r in rows]
 

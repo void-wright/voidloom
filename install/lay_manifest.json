@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 399,
+    "core": 400,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 354,
+    "all": 355,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 387,
+    "brain": 388,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "e9567c6",
+  "derived_at_head": "c3ba61d",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 417,
+  "entries": 418,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 7902,
+   "bytes": 9469,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "df3be6a10bed80cf69f9c3d2414e7bce44a2a1c6bb090f45812804d4d2500320",
+   "sha256": "9e3b3792a78a261ff0288fd51a080fab4143332eb0c9d7d95f908170efddf086",
    "src": "CHANGELOG.md"
   },
   {
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "991e78bee98bcc95bb09fa4e86ae31098da9e6342dc8f40d1652e5aa89e037f6",
+   "sha256": "cb9abe672f9f31560b8ef9b98a2428d858b24b196ae7e5395234370e43812411",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1065,13 +1065,13 @@
    "src": "install/requirements.txt"
   },
   {
-   "bytes": 49306,
+   "bytes": 50913,
    "component": "core",
    "dst": "install/self_check.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1bf69ed41047c7a1b3cb19b74d5297c000845c6faa7c92b9011dc744989dfe9d",
+   "sha256": "5f9f5a6e516c3b97b4d7b686caa07e14a885d22af3cc8fa999c18c8ee5731d00",
    "src": "install/self_check.py"
   },
   {
@@ -1575,13 +1575,13 @@
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 39513,
+   "bytes": 40794,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "73a4f8007fff6e60915d4a9393027a10fcbe5366ce4d8d8cc35ce23b06a565e4",
+   "sha256": "ba0d3e266092a95a2d6ab18a6979bcf12e61b079c9e428b6819aadffe44f2f28",
    "src": "organs/claude_memory_lite.py"
   },
   {
@@ -1715,13 +1715,13 @@
    "src": "organs/gpu_guard.py"
   },
   {
-   "bytes": 78734,
+   "bytes": 80784,
    "component": "core",
    "dst": "organs/hybrid_retrieval.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "05285e6f8681b1cd43864ed80585962559b6e3fa43ec6a7d453e10b57774c151",
+   "sha256": "6aab8e7261c5bd2e2999c94f03e6c908d9b421134291adf436dfc3cf06c03f17",
    "src": "organs/hybrid_retrieval.py"
   },
   {
@@ -3345,6 +3345,16 @@
    "src": "voidloom/tests/test_first_night_is_derived.py"
   },
   {
+   "bytes": 9287,
+   "component": "core",
+   "dst": "voidloom/tests/test_fts_any_word.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "7c6676405f55cef514b778533d8f02635fb749a006d7bc2b5060dd677da35405",
+   "src": "voidloom/tests/test_fts_any_word.py"
+  },
+  {
    "bytes": 962,
    "component": "core",
    "dst": "voidloom/tests/test_fts_lone_punctuation_r2.py",
@@ -4125,13 +4135,13 @@
    "src": "voidloom/tests/test_thinker_typed_errors.py"
   },
   {
-   "bytes": 9770,
+   "bytes": 10878,
    "component": "core",
    "dst": "voidloom/tests/test_tier0_alone_is_a_brain.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "2949d715ea300084a09bf673ee1004dbec595fa8eb604cab1e83c048f8eb583a",
+   "sha256": "3518d31676e81652011ae613d11b3c42f8339d4f58c37cc8b9809477e7bf4485",
    "src": "voidloom/tests/test_tier0_alone_is_a_brain.py"
   },
   {

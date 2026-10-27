@@ -535,6 +535,44 @@ def _sanitize_fts_query(query: str) -> str:
     return " ".join(tokens)
 
 
+# English function words dropped from the MATCH expression. A fixed list,
+# written before any measurement and never tuned on a benchmark: it removes
+# noise and cost, not relevance (FTS5 already gives such words almost no IDF).
+# A query in another language keeps every token.
+FTS_STOPWORDS = frozenset("""
+a an the of to in on at for and or but is are was were be been do does did what when where who whom which why
+how that this these those with from by as it its into about i you he she they we his her their our my your has
+have had will would can could should
+s t d ll m re ve
+""".split())
+
+# An OR costs one posting-list scan per term, so a pasted page would cost seconds
+# (measured on a 31k-memory brain: 1,000 words 2.3 s; one common word repeated 1,000
+# times 85 s). Queries are questions, not documents: the first 32 content words
+# carry them. Logged live questions are far shorter (p99 17 words; 1 of 17,597 had
+# 40 content words, so its last 8 were dropped).
+FTS_MAX_TERMS = 32
+
+
+def _fts_match_expr(query: str) -> str:
+    """Build the FTS5 MATCH expression: ANY content word, ranked by BM25.
+
+    The sanitised tokens used to be joined with spaces, which FTS5 reads as
+    implicit AND: a memory had to contain EVERY word of the query, "when" and
+    "did" included. Measured 2026-10-27, that left 2 of 152 LoCoMo questions
+    with any keyword candidate at all, so "hybrid" recall was vectors plus the
+    reranker for nearly every question. OR over the content words is how BM25
+    is meant to be used: a memory scores by how many rare query terms it holds.
+
+    Quoted phrases (hyphen/dot tokens) are always kept. A query made only of
+    stopwords keeps its words, so it still searches. Returns "" when the query
+    has no usable token.
+    """
+    tokens = _sanitize_fts_query(query).split()
+    content = [t for t in tokens if t.startswith('"') or t.lower() not in FTS_STOPWORDS]
+    return " OR ".join((content or tokens)[:FTS_MAX_TERMS])
+
+
 def fts_match(
     conn: sqlite3.Connection,
     query: str,
@@ -550,7 +588,8 @@ def fts_match(
 
     Args:
         conn: sqlite3 connection with FTS5 extension (built into sqlite3).
-        query: free-text query string. Will be sanitised for FTS5 grammar.
+        query: free-text query string. Sanitised for FTS5 grammar, then OR-joined
+            over its content words (``_fts_match_expr``): any word can match.
         top_k: max results.
         exclude_archived: if True (default), filter out is_archived=1
             memories at the JOIN step. Matches ``cmd_recall``'s behaviour.
@@ -564,7 +603,7 @@ def fts_match(
         Does not raise; logs warning + returns [] on OperationalError so
         callers can fall back to vector-only without try/except boilerplate.
     """
-    sanitized = _sanitize_fts_query(query)
+    sanitized = _fts_match_expr(query)
     if not sanitized:
         return []
 

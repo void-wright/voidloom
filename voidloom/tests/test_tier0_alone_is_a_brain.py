@@ -29,12 +29,12 @@ if Tier 0 ever grows a dependency on a file not named here, this goes red.
 
 WHAT IT ASSERTS, and what it deliberately does not. Keyword recall over the seed
 corpus RETURNS ROWS. Not that it ranks well — FTS5 is a keyword engine and ranking
-is Tier 1's job. A single-term query is used on purpose: FTS5's implicit AND means
-a five-word natural-language question can legitimately return zero on a 66-memory
-corpus, and asserting over that would make this test a measurement of my query
-rather than of the engine. (My first hand-probe did exactly that and read `status:
-ok, hits: 0` as a defect. The engine was right; the probe was semantic and the
-engine is not.)
+is Tier 1's job. The first test uses a single term; the natural-question test below
+asks the way a person does, with stopwords and a question mark. That second test
+did not exist while the engine joined words with implicit AND: a natural question
+then returned zero, and this docstring called that legitimate. It was the defect
+(2026-10-27: the query builder now ORs the content words, and a '?' or an
+apostrophe no longer raises an FTS5 syntax error).
 """
 from __future__ import annotations
 
@@ -130,8 +130,7 @@ class TestTier0AloneIsABrain(unittest.TestCase):
             c.close()
         self.assertEqual(in_box, loaded, "the seed pack was loaded somewhere other than the box's brain")
 
-        # A SINGLE TERM, deliberately. See the module docstring: FTS5's implicit
-        # AND makes a multi-word natural-language query a test of the query.
+        # A single term first; the natural question has its own test below.
         rec = self._run("organs/claude_memory_lite.py", "recall",
                         "--query", "memory", "--top_k", "3")
         self.assertEqual(rec.returncode, 0, rec.stderr[-600:])
@@ -146,6 +145,23 @@ class TestTier0AloneIsABrain(unittest.TestCase):
         mode = env.get("mode") or env.get("retrieval_path") or ""
         self.assertIn("keyword", str(mode).lower(),
                       f"Tier-0 recall did not name its mode: {mode!r}")
+
+    def test_tier0_natural_question_finds_its_answer(self):
+        """A question asked the way a person asks it -- stopwords, an apostrophe and a
+        question mark -- returns rows. Under the old implicit-AND builder this raised
+        an FTS5 syntax error on the '?', fell back to matching the whole question as
+        one phrase, and returned nothing."""
+        st = self._run("organs/claude_memory_lite.py", "store",
+                       "--content", "The lighthouse keeper repainted the north tower in May",
+                       "--category", "insight")
+        self.assertEqual(st.returncode, 0, st.stderr[-600:])
+        rec = self._run("organs/claude_memory_lite.py", "recall",
+                        "--query", "When did the keeper's tower get repainted?", "--top_k", "5")
+        self.assertEqual(rec.returncode, 0, rec.stderr[-600:])
+        env = _envelope(rec.stdout)
+        results = env.get("results") or (env.get("data") or {}).get("results") or []
+        self.assertTrue(any("lighthouse keeper" in (r.get("content") or "") for r in results),
+                        "a natural question did not find the memory that answers it")
 
     def test_tier0_can_store_as_well_as_read(self):
         """A brain you cannot write to is an archive."""

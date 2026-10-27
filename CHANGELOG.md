@@ -12,6 +12,29 @@ All notable changes to Voidloom are recorded here. The format follows
   your own field; the default stays generic. A `research_focus` key in a `--config` file wins
   over it.
 
+### Fixed
+
+- Keyword recall now matches any content word of a query, ranked by BM25. It used to require
+  every word ("when" and "did" included), so a natural question almost never found a keyword
+  match: 2 of 152 benchmark questions on one test conversation. "Hybrid" recall was in
+  practice vectors plus the reranker. Common English function words are left out of the
+  match, and a query made only of them still searches.
+- The keyword-only engine (Tier 0) no longer fails on a question mark or an apostrophe.
+  Those raised an FTS5 syntax error, the fallback then searched for the whole question as one
+  phrase, and a natural question found nothing.
+- The match uses at most the first 32 content words, so a pasted page costs about what a
+  question does instead of seconds.
+- Two signals change as a result, and neither is retuned here.
+  - **The diversity cap.** It widens the result pool when the keyword signal is weak, and now
+    sees a keyword score for questions. That score usually clears the cap's "strong match"
+    threshold, so for most questions the cap now equals top-k instead of twice top-k: on one
+    test set, 393 of 446 questions at k=10, where 440 of 446 sat at 2 × k before. Its
+    thresholds need recalibrating for any-word matching.
+  - **The lexical-miss log.** It suggests when a sparse lane might help, and now counts a miss
+    only when no content word of the query appears anywhere in the brain. Such misses are
+    rare, so the suggestion will seldom fire. Its rolling window moves to the new meaning
+    within 500 recalls.
+
 ### Changed
 
 - The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned
