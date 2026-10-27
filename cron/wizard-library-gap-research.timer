@@ -1,0 +1,13 @@
+[Unit]
+Description=Wizard Library Gap Research Timer — weekly Monday 8:30 AM local time (30 min after inventory)
+
+[Timer]
+# WSL2 HYBRID cron pattern (memory #3674):
+# Fires 30 minutes after wizard-library-gap-mapping.timer (8:00 AM local time Monday).
+# This guarantees inventory (TimeoutStartSec=600) completes before dispatch runs.
+# Persistent=true catches missed runs (laptop lid closed, WSL suspended).
+OnCalendar=Mon *-*-* 08:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+[Unit]
+Description=Voidloom organ yield sentinel — reports organs that run but produce nothing
+Documentation=https://github.com/void-wright/voidloom
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+# On a two-GPU machine card 0 may drive the monitor. This job needs no GPU at all, but the guard is
+# written in anyway: every wizard-library unit carries it, and a unit that does
+# not need it today may grow a dependency that does.
+# NO Environment=CUDA_VISIBLE_DEVICES here. CRUCIBLE-3 / PKG-01: this unit
+# shipped `CUDA_VISIBLE_DEVICES=1` -- one machine's answer, baked into the
+# package. On a single-GPU host index 1 does not exist and CUDA silently sees
+# no device; on a two-GPU host it may name the card driving the display. The
+# device is RESOLVED AT INSTALL TIME by install.sh:resolve_gpu_device() and
+# written into the EnvironmentFile above, so the pin has exactly one source.
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/organ_yield_sentinel.py %h/.claude/memory/claude_memory.db
+# THE EXIT CODES ARE FOUR-VALUED, AND NONE IS SHARED WITH THE INTERPRETER.
+#
+#   0  every organ measured, none broken
+#   3  at least one organ is BROKEN — that is the POINT of the sentinel, not a
+#      failure of it, so systemd must not report the unit failed while it is
+#      doing its job correctly and loudly
+#   2  the sentinel COULD NOT SEE — a database it could not read, a clock whose
+#      values do not parse. That is NOT an all-clear and it must NOT be listed
+#      here. beta's version could only ever return 0 or 1, so a blind sensor was
+#      structurally incapable of surfacing through systemd at all.
+#   1  the sentinel CRASHED — Python's own status for an uncaught exception.
+#      "BROKEN found" used to be 1 and this line said `0 1`, so a crash read as
+#      a finding and a finding read as success: measured on the reference host,
+#      a NameError on every run since at least 2026-09-18, journal "Finished",
+#      ledger "success", five mornings of five (reference-host round, R6).
+#
+# So: 0 and 3 are successes. 1 and 2 are genuine unit failures and are left out.
+SuccessExitStatus=0 3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

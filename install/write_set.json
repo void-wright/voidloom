@@ -1,0 +1,691 @@
+{
+ "_doc": [
+  "THE DECLARED WRITE-SET of install.sh -- every path the installer may touch OUTSIDE its",
+  "install root (${CLAUDE_HOME}), per step, with the reason. Council #12, F4: the isolation",
+  "boundary is a snapshot-diff test, not a scratch directory. install.sh --print-write-set",
+  "resolves every ${VAR} for the invocation it is given and prints this list with `active`",
+  "per entry; voidloom/tests/harness/outside_target_diff.py snapshots a $HOME before and",
+  "after a run and refuses (rc 1) on any difference this list does not name.",
+  "",
+  "Inside ${CLAUDE_HOME} (memory/, skills/, commands/, hooks/) is the TARGET: what lands",
+  "there is bound by install/lay_manifest.json, not by this file. Two members of the",
+  "target root are nevertheless graded by the harness from their own before/after records",
+  "(${CLAUDE_HOME}/settings.json, ${CLAUDE_HOME}/CLAUDE.md): install.sh writes neither (except settings.json on a STEP P yes, below),",
+  "so they carry no entry here and any change to them is RED.",
+  "",
+  "path syntax: exact path, or a directory followed by /** (anything beneath), or a",
+  "basename glob (tmp.*). {unit} expands to the roster's armed-by-default names.",
+  "`when` names the invocation condition; entries whose condition is false are printed",
+  "with active=false and may NOT be touched on that run.",
+  "",
+  "`verbs` are the calls made to a scheduler/manager rather than writes to the",
+  "filesystem -- the HKCU class on Linux (round-1 reflection, item 3). A user manager",
+  "answers `systemctl --user enable --now` by writing under ${SYSTEMD_USER_DIR}/",
+  "timers.target.wants/ (declared above as paths, expand=armed_units), which a recorder",
+  "shim standing in for the manager never writes. So the shim's log is graded against",
+  "this list (harness verb `verbs`): every recorded call must be an active declared verb",
+  "and every active verb must have been recorded. `effect: read-only` marks a call that",
+  "reads the manager; it is declared because every call is graded, not because it writes.",
+  "",
+  "SHAPES (reference-host round, R1). An entry or verb may carry `shape` (venv | tier0 | ambient): it is",
+  "active only in that install shape, which --print-write-set resolves exactly as the run does (the",
+  "--tier1-ambient flag, else <brain>/INSTALL_RECORD). `when: venv shape` marks what only the venv shape",
+  "writes (pip's wheel cache). Step R and the ambient pre-image live INSIDE the install root when the brain",
+  "is at its default path: the harness does not grade the target, but they are generated, not laid, so the",
+  "lay manifest cannot bind them -- they are declared here so that every file the installer creates that",
+  "no manifest names is named somewhere, with its reason.",
+  "",
+  "THE OVERNIGHT THINKER (model-choice unit, Round 1, Wave B -- M17). Step T is the a-e answer being proven and",
+  "recorded before Step A: `when: a thinker answer` (--thinker, or an answer <brain>/THINKER_RECORD already holds --",
+  "an interactive answer cannot be known to --print-write-set, and a harness run has no terminal) and `when: a thinker",
+  "to prove` (that answer names a model: not e/off). A verb may carry `match: glob` -- its call is an fnmatch pattern,",
+  "because the probe's transient unit name and its candidate file are fresh per run; everything else in it is literal.",
+  "`untouched` lists paths the installer and every child it runs must leave BYTE-IDENTICAL: the owner's everyday",
+  "vendor logins. The harness grades each untouched path on its own (a change there is RED even if a broader",
+  "declaration would cover it).",
+  "THE PERSONA FORGE (Step P). install.sh calls install/install_persona_forge.sh after the acceptance gate passes;",
+  "it lays lay_manifest component `forge` (skills/persona-forge/, commands/persona-forge.md) under the never-",
+  "clobber contract. Its only generated writes are the *.voidloom-bak.* backups of a differing same-named item --",
+  "inside the target root, declared so every file the installer creates is named somewhere. The forge's runtime",
+  "writes (persona.json via `voidloom persona declare`, the persona_forge.declined marker via `voidloom persona",
+  "decline`, the persona's own skill folder) happen later, in a Claude Code session, at the owner's direction --",
+  "never in the installer.",
+  "STEP P ALSO ASKS whether to wire the SessionStart hook (the first-run Persona Forge offer rides it). Only a yes",
+  "-- --wire-hooks, or y at the terminal -- writes ${CLAUDE_HOME}/settings.json (`when: --wire-hooks`); otherwise",
+  "the named-member rule above holds unchanged.",
+  "THE THINKER'S PROGRAM (Gemini-thinker Round 1, lane L-I). When the answer's program is missing and the owner says yes",
+  "(--install-thinker-cli, or y to \"Run it now? [y/N]\"), the vendor's own installer runs before the guide's Part:",
+  "`when: an offered thinker install` (--install-thinker-cli with a CLI answer; an interactive yes cannot be known to",
+  "--print-write-set). A write carrying `backend` is active only for that answer. An `untouched` entry carrying",
+  "`unless_installing` is dropped from the list on exactly that offered install (the program's own folder is new then)."
+ ],
+ "variables": [
+  "HOME",
+  "CLAUDE_HOME",
+  "BRAIN_DIR",
+  "BRAIN_DIR_TARGET",
+  "LOCAL_BIN",
+  "ENV_FILE",
+  "ENV_FILE_TARGET",
+  "ENV_DIR",
+  "CONFIG_DIR",
+  "SLEEP_CFG",
+  "SYSTEMD_USER_DIR",
+  "CACHE_HOME",
+  "LAUNCHD_DIR",
+  "LAUNCHD_PREFIX",
+  "ATTACH_DB",
+  "ATTACH_PREIMAGE",
+  "TMPDIR",
+  "DB_PATH",
+  "INSTALL_RECORD",
+  "INSTALL_LOG",
+  "THINKER_HOME",
+  "DB_DIR",
+  "WIZARD_CONFIG",
+  "WIZARD_CONFIG_DIR"
+ ],
+ "target_root": "${CLAUDE_HOME}",
+ "steps": [
+  {
+   "step": "A",
+   "name": "lay + the CLI on PATH",
+   "when": "always",
+   "writes": [
+    {
+     "path": "${LOCAL_BIN}",
+     "kind": "dir",
+     "why": "created if absent, so the launcher symlink has a directory to live in"
+    },
+    {
+     "path": "${LOCAL_BIN}/voidloom",
+     "kind": "symlink",
+     "why": "the `voidloom` command on PATH, pointing at ${BRAIN_DIR}/voidloom/voidloom (Step A.1d)"
+    },
+    {
+     "path": "${BRAIN_DIR_TARGET}/**",
+     "kind": "dir",
+     "why": "the brain's RESOLVED directory (os.path.realpath of ${BRAIN_DIR}): when ${BRAIN_DIR} is a symlink -- a brain kept in another directory or on another disk -- every file this install lays or writes into the brain (Steps A-E and R: the package files, the DB and its sidecars, the pre-image, the record) lands beneath the link's TARGET, outside the target root, and the link itself is unchanged; equal to ${BRAIN_DIR}, inside the target root, otherwise (env-file writer pass, iteration 4: the symlinked geometry was undeclared)"
+    },
+    {
+     "path": "${HOME}/.nv/**",
+     "kind": "cache",
+     "why": "the CUDA driver's compute (JIT) cache. Written by Step A.1b-i (organs/voidloom_manifest.py write -- the hardware probe, which initialises CUDA on EVERY wet install on a host with an NVIDIA driver, --tier0-only and --force-cpu included; measured: the probe alone creates ~/.nv/ComputeCache, nvidia-smi does not) and again by the Tier-1 embed/rerank. Declared under the ALWAYS step because its writer is; absent on a host without the driver, which is permitted (a declaration is a permission, not an obligation)"
+    }
+   ]
+  },
+  {
+   "step": "B",
+   "name": "attach an existing brain in place",
+   "when": "--attach-db",
+   "writes": [
+    {
+     "path": "${ATTACH_DB}",
+     "kind": "file",
+     "why": "the attached brain, migrated in place by organs/schema_migrator.py and seeded once if the agnostic pack is absent"
+    },
+    {
+     "path": "${ATTACH_DB}-wal",
+     "kind": "sidecar",
+     "why": "SQLite WAL sidecar of the attached brain, created by any writer"
+    },
+    {
+     "path": "${ATTACH_DB}-shm",
+     "kind": "sidecar",
+     "why": "SQLite shared-memory sidecar of the attached brain"
+    },
+    {
+     "path": "${ATTACH_PREIMAGE}",
+     "kind": "file",
+     "why": "the pre-image written BESIDE the brain via sqlite3 backup() before the migrator touches it -- never cp"
+    }
+   ]
+  },
+  {
+   "step": "B",
+   "name": "the ambient upgrade's verified pre-image, beside the brain",
+   "when": "always",
+   "shape": "ambient",
+   "writes": [
+    {
+     "path": "${DB_PATH}.pre-upgrade-*.db",
+     "kind": "file",
+     "why": "the verified pre-image (sqlite3 backup(), read back by memories count) the ambient upgrade takes before this package's migrations touch the brain -- the same mechanism --attach-db uses (R1, amendment C7)"
+    },
+    {
+     "path": "${DB_PATH}-wal",
+     "kind": "sidecar",
+     "why": "SQLite WAL sidecar: the migrator writes the brain, and a read-only connection with the vec0 extension loaded materialises it beside a rollback-journal brain (measured on the fixture; the brain's bytes are unchanged by the read)"
+    },
+    {
+     "path": "${DB_PATH}-shm",
+     "kind": "sidecar",
+     "why": "SQLite shared-memory sidecar, as above"
+    }
+   ]
+  },
+  {
+   "step": "C",
+   "name": "Tier 1 venv wheel cache",
+   "when": "venv shape",
+   "writes": [
+    {
+     "path": "${CACHE_HOME}/pip/**",
+     "kind": "cache",
+     "why": "pip's wheel cache while building the venv (the venv itself is under ${BRAIN_DIR}/venv, inside the target); pip writes under ${XDG_CACHE_HOME:-$HOME/.cache}, which install.sh resolves as CACHE_HOME -- the writer's rule -- the VENV shape only: the ambient shape builds no venv and runs no pip (R1)"
+    }
+   ]
+  },
+  {
+   "step": "C",
+   "name": "Tier 1 model + kernel caches (venv or ambient)",
+   "when": "not --tier0-only",
+   "writes": [
+    {
+     "path": "${CACHE_HOME}/huggingface/**",
+     "kind": "cache",
+     "why": "the embedder + reranker snapshots huggingface_hub downloads at install (sizes are printed by the installer); huggingface_hub writes under ${XDG_CACHE_HOME:-$HOME/.cache} when HF_HOME is unset, and the snapshot-diff harness drops HF_HOME/HF_HUB_CACHE so that is the path; in the AMBIENT shape nothing is downloaded (P3 runs with HF_HUB_OFFLINE=1), but loading the cached model writes its trust_remote_code modules and lock files here (measured)"
+    },
+    {
+     "path": "${HOME}/.triton/**",
+     "kind": "cache",
+     "why": "Triton's compiled-kernel cache, written by torch when the embed or the reranker runs on a GPU (found by the round-1 cold gate's diff)"
+    },
+    {
+     "path": "${TMPDIR}/torchinductor_*",
+     "kind": "cache",
+     "why": "TorchInductor's compile cache under $TMPDIR (defaults to /tmp), written by torch on a GPU host and NOT removed afterwards (found by the round-1 cold gate's diff)"
+    }
+   ]
+  },
+  {
+   "step": "D",
+   "name": "the sidecar env file",
+   "when": "always",
+   "writes": [
+    {
+     "path": "${ENV_DIR}",
+     "kind": "dir",
+     "why": "the env file's directory (${HOME}/.voidloom by default; WIZARD_ENV_FILE overrides), created if absent"
+    },
+    {
+     "path": "${ENV_FILE}",
+     "kind": "file",
+     "why": "PATH + WIZARD_LIBRARY_HOME/DB + WIZARD_EMBED_MODEL (+ CUDA pin) between managed markers; mode 0600; user lines outside the markers survive"
+    },
+    {
+     "path": "${ENV_FILE_TARGET}",
+     "kind": "file",
+     "why": "the env file's RESOLVED target (os.path.realpath): when ${ENV_FILE} is a symlink -- the reference host's geometry (R2) -- cp (never cp -f) and chmod write THROUGH it and the link itself is unchanged; equal to ${ENV_FILE} otherwise"
+    },
+    {
+     "path": "${WIZARD_CONFIG}",
+     "kind": "file",
+     "why": "contract C3 (handoff round 1): the reranker RAM gate this install decided -- reranker_enabled + reranker_gate{accelerator, ram_gib, threshold_gib 15.0, decided_at} -- MERGED into wizard-config.json (every other key kept; an unreadable file is never touched). Its path is the organs' own (WIZARD_CONFIG_PATH, else organs/voidloom_env.py env_path); and approvals.mode {mode, set_by, set_at} (STEP E2, the owner's approvals choice, 2026-10-26)"
+    },
+    {
+     "path": "${WIZARD_CONFIG}.bak",
+     "kind": "file",
+     "why": "the copy of wizard-config.json taken BEFORE the gate is merged into it (only when the file already existed)"
+    },
+    {
+     "path": "${WIZARD_CONFIG}.approvals.bak",
+     "kind": "file",
+     "why": "the copy of wizard-config.json taken before the approvals choice is merged into it (only when the file already existed)"
+    },
+    {
+     "path": "${WIZARD_CONFIG_DIR}",
+     "kind": "dir",
+     "why": "wizard-config.json's directory, created (0700) if absent so the gate can be recorded"
+    }
+   ]
+  },
+  {
+   "step": "F",
+   "name": "arm the roster (Linux, systemd user units) -- rendered by install/install_crons.sh, the one unit template",
+   "when": "--with-crons",
+   "platform": "Linux",
+   "writes": [
+    {
+     "path": "${SYSTEMD_USER_DIR}",
+     "kind": "dir",
+     "why": "created if absent"
+    },
+    {
+     "path": "${CONFIG_DIR}",
+     "kind": "dir",
+     "why": "the sidecar config dir, created if absent for the sleep-loop config"
+    },
+    {
+     "path": "${SYSTEMD_USER_DIR}/wizard-library-{unit}.service",
+     "kind": "file",
+     "expand": "armed_units",
+     "why": "one service per armed-by-default roster unit (install/cron_roster.json)"
+    },
+    {
+     "path": "${SYSTEMD_USER_DIR}/wizard-library-{unit}.timer",
+     "kind": "file",
+     "expand": "armed_units",
+     "why": "its timer, Persistent=true"
+    },
+    {
+     "path": "${SYSTEMD_USER_DIR}/timers.target.wants",
+     "kind": "dir",
+     "why": "created by `systemctl --user enable` when the first timer is enabled (install/install_crons.sh, called by install.sh Step F); a recorder shim standing in for the manager does not create it, a real user manager does"
+    },
+    {
+     "path": "${SYSTEMD_USER_DIR}/timers.target.wants/wizard-library-{unit}.timer",
+     "kind": "symlink",
+     "expand": "armed_units",
+     "why": "the enablement symlink `systemctl --user enable --now` writes for each armed timer (-> ../wizard-library-{unit}.timer); a recorder shim does not write it, a real user manager does -- declared here so the diff is green on a host with a real manager"
+    },
+    {
+     "path": "${SLEEP_CFG}",
+     "kind": "file",
+     "why": "the sleep loop's config in the sidecar dir (cron/_config_dir.sh resolves it, legacy location honoured), copied from the package ONLY if absent -- never clobbered"
+    }
+   ]
+  },
+  {
+   "step": "F",
+   "name": "arm the roster (macOS, launchd agents) -- rendered by install/install_crons.sh, the one unit template",
+   "when": "--with-crons",
+   "platform": "Darwin",
+   "writes": [
+    {
+     "path": "${LAUNCHD_DIR}",
+     "kind": "dir",
+     "why": "created if absent"
+    },
+    {
+     "path": "${CONFIG_DIR}",
+     "kind": "dir",
+     "why": "the sidecar config dir, created if absent for the sleep-loop config"
+    },
+    {
+     "path": "${LAUNCHD_DIR}/${LAUNCHD_PREFIX}.{unit}.plist",
+     "kind": "file",
+     "expand": "armed_units",
+     "why": "one LaunchAgent per armed-by-default roster unit (install/install_crons.sh; the label family is cron/_config_dir.sh's LAUNCHD_PREFIX, which install.sh's copy must equal)"
+    },
+    {
+     "path": "${SLEEP_CFG}",
+     "kind": "file",
+     "why": "the sleep loop's config in the sidecar dir (cron/_config_dir.sh resolves it, legacy location honoured), copied from the package ONLY if absent -- never clobbered"
+    }
+   ]
+  },
+  {
+   "step": "R",
+   "name": "the install record",
+   "when": "always",
+   "writes": [
+    {
+     "path": "${INSTALL_RECORD}",
+     "kind": "file",
+     "why": "the CURRENT install shape as key=value (shape, interpreter, the versions executed, model + width, the pin, unvectored/active, steps, probes) -- rewritten on a successful wet run; the ambient shape READS it on the next run (R1)"
+    },
+    {
+     "path": "${INSTALL_LOG}",
+     "kind": "file",
+     "why": "append-only, one line per wet run that reached its proofs or its end, success or not (R1). PACKAGE_ORIGIN is history and is never rewritten"
+    }
+   ]
+  },
+  {
+   "step": "T",
+   "name": "the overnight thinker: the owner's a-e answer PROVEN in the timers' environment, then recorded (before Step A)",
+   "when": "a thinker answer",
+   "writes": [
+    {
+     "path": "${DB_DIR}/THINKER_RECORD",
+     "kind": "file",
+     "why": "who thinks overnight, key=value + record_sha256 -- written ONLY by organs/thinker.py `set`, and only after its probe passed (M8); beside the brain DB, which with --attach-db may be outside the install root. An e) not now answer is recorded too; a recorded answer is re-proven and rewritten on an upgrade"
+    },
+    {
+     "path": "${DB_DIR}/.THINKER_RECORD.tmp.*",
+     "kind": "transient",
+     "why": "the record's write-then-rename temporary (fsync'd, replaced over THINKER_RECORD); never left behind"
+    },
+    {
+     "path": "${DB_DIR}/THINKER_LOG",
+     "kind": "file",
+     "why": "append-only, one line per thinker call outcome (never a prompt, a reply or a credential); `set` itself writes none, the organs do"
+    }
+   ]
+  },
+  {
+   "step": "T",
+   "name": "the overnight thinker's proof: its credential home, the vendor CLI's own state, the per-call scratch",
+   "when": "a thinker to prove",
+   "writes": [
+    {
+     "path": "${THINKER_HOME}",
+     "kind": "dir",
+     "why": "<VOIDLOOM_ENV_DIR or ~/.voidloom>/thinker, mode 0700: the brain's OWN credentials, one per backend (#21993) -- created by `thinker login`, the owner's one step, when the answer has no credential yet"
+    },
+    {
+     "path": "${THINKER_HOME}/**",
+     "kind": "file",
+     "why": "claude.env / kimi.env (0600, pasted twice by the owner, then proven) and codex/ -- the brain's own CODEX_HOME: auth.json from the owner's device sign-in, config.toml (cli_auth_credentials_store = \"file\"), the .thinker.lock that serializes calls, and the VENDOR STATE codex writes there on every call (log/, tmp/, *.sqlite, models_cache.json, skills/, shell_snapshots/) -- never the owner's ~/.codex (untouched, below)"
+    },
+    {
+     "path": "${TMPDIR}/voidloom-thinker-cand-*",
+     "kind": "transient",
+     "why": "`thinker set`: the candidate the systemd-run probe reads (removed after the probe)"
+    },
+    {
+     "path": "${TMPDIR}/voidloom-think-*",
+     "kind": "transient",
+     "why": "every thinker call: a fresh EMPTY working folder + a per-call HOME (the tripwire and the instruction-free home, M4); the vendor CLI's session state (Claude's projects/ under its per-call CLAUDE_CONFIG_DIR, Kimi's KIMI_CODE_HOME) lands inside it and is removed with it"
+    },
+    {
+     "path": "${TMPDIR}/voidloom-login-proof-*",
+     "kind": "transient",
+     "why": "`thinker login`: the sealed throwaway thinker home the pasted key (and the fake-key negative control) is proven in, removed after"
+    },
+    {
+     "path": "${CLAUDE_HOME}/projects/**",
+     "kind": "vendor-state",
+     "why": "the `claude` CLI's session transcripts land under its CONFIG dir; every thinker call gives it a per-call CLAUDE_CONFIG_DIR under TMPDIR (above), so on this path nothing lands here -- declared because a CLI version that ignored CLAUDE_CONFIG_DIR would write here (inside the install root: bound, not graded)"
+    }
+   ]
+  },
+  {
+   "step": "T",
+   "name": "the overnight thinker's PROGRAM, installed at the owner's yes before the guide's Part (Gemini-thinker Round 1, L-I)",
+   "when": "an offered thinker install",
+   "writes": [
+    {
+     "path": "${LOCAL_BIN}/claude",
+     "kind": "file",
+     "backend": "claude",
+     "why": "Anthropic's installer (curl -fsSL https://claude.ai/install.sh | bash, organs/thinkers.json get): the claude program"
+    },
+    {
+     "path": "${HOME}/.local/share/claude/**",
+     "kind": "dir",
+     "backend": "claude",
+     "why": "the claude program's versions (Anthropic's installer keeps them here; ~/.local/bin/claude points into it)"
+    },
+    {
+     "path": "${HOME}/.claude/downloads/**",
+     "kind": "transient",
+     "backend": "claude",
+     "why": "Anthropic's installer downloads into DOWNLOAD_DIR=$HOME/.claude/downloads (read from its script, 2026-10-16)"
+    },
+    {
+     "path": "${HOME}/.bashrc",
+     "kind": "file",
+     "backend": "claude",
+     "why": "Anthropic's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.bash_profile",
+     "kind": "file",
+     "backend": "claude",
+     "why": "Anthropic's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.profile",
+     "kind": "file",
+     "backend": "claude",
+     "why": "Anthropic's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.zshrc",
+     "kind": "file",
+     "backend": "claude",
+     "why": "Anthropic's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.zprofile",
+     "kind": "file",
+     "backend": "claude",
+     "why": "Anthropic's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.config/fish/config.fish",
+     "kind": "file",
+     "backend": "claude",
+     "why": "Anthropic's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.npm/**",
+     "kind": "vendor-state",
+     "backend": "codex",
+     "why": "npm's own cache while `npm install -g @openai/codex` runs (OpenAI's documented command; it needs Node.js, which this installer never installs)"
+    },
+    {
+     "path": "${HOME}/.npm-global/**",
+     "kind": "dir",
+     "backend": "codex",
+     "why": "the codex program, when the owner's npm global prefix is in the home (npm config get prefix); a prefix outside the home (/usr/local) is outside the snapshot and needs no sudo from us -- npm refuses rather than escalate"
+    },
+    {
+     "path": "${HOME}/.kimi-code/bin/**",
+     "kind": "dir",
+     "backend": "kimi",
+     "why": "Moonshot's installer (curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash): KIMI_INSTALL_DIR=$HOME/.kimi-code, the kimi program in bin/"
+    },
+    {
+     "path": "${HOME}/.kimi-code/**",
+     "kind": "dir",
+     "backend": "kimi",
+     "why": "the rest of Kimi Code's install folder, which its installer creates (only when kimi was NOT installed -- the owner's own ~/.kimi-code is then new, so the untouched rule below steps aside for this one run)"
+    },
+    {
+     "path": "${HOME}/.bashrc",
+     "kind": "file",
+     "backend": "kimi",
+     "why": "Moonshot's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.bash_profile",
+     "kind": "file",
+     "backend": "kimi",
+     "why": "Moonshot's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.profile",
+     "kind": "file",
+     "backend": "kimi",
+     "why": "Moonshot's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.zshrc",
+     "kind": "file",
+     "backend": "kimi",
+     "why": "Moonshot's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.zprofile",
+     "kind": "file",
+     "backend": "kimi",
+     "why": "Moonshot's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.config/fish/config.fish",
+     "kind": "file",
+     "backend": "kimi",
+     "why": "Moonshot's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${LOCAL_BIN}/agy",
+     "kind": "file",
+     "backend": "gemini",
+     "why": "Google's installer (curl -fsSL https://antigravity.google/cli/install.sh | bash): TARGET_DIR=$HOME/.local/bin, the agy program (read from its script, 2026-10-16)"
+    },
+    {
+     "path": "${CACHE_HOME}/antigravity/**",
+     "kind": "transient",
+     "backend": "gemini",
+     "why": "the installer's STAGING_DIR=$HOME/.cache/antigravity/staging"
+    },
+    {
+     "path": "${HOME}/.gemini/**",
+     "kind": "vendor-state",
+     "backend": "gemini",
+     "why": "INFERRED: the installer ends with `agy install`, whose writes are not documented; agy keeps its own state under ~/.gemini -- declared so a first run's new ~/.gemini is named (the untouched rule below steps aside for this one run only when agy was not installed)"
+    },
+    {
+     "path": "${HOME}/.bashrc",
+     "kind": "file",
+     "backend": "gemini",
+     "why": "Google's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.bash_profile",
+     "kind": "file",
+     "backend": "gemini",
+     "why": "Google's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.profile",
+     "kind": "file",
+     "backend": "gemini",
+     "why": "Google's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.zshrc",
+     "kind": "file",
+     "backend": "gemini",
+     "why": "Google's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.zprofile",
+     "kind": "file",
+     "backend": "gemini",
+     "why": "Google's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    },
+    {
+     "path": "${HOME}/.config/fish/config.fish",
+     "kind": "file",
+     "backend": "gemini",
+     "why": "Google's installer may add ONE line putting its folder on PATH to the shell's startup file (its own act, shown on screen; nothing of the file is removed)"
+    }
+   ]
+  },
+  {
+   "step": "P",
+   "name": "the Persona Forge (STEP P, after the acceptance gate) -- laid by install/install_persona_forge.sh, never by lay.py",
+   "when": "always",
+   "writes": [
+    {
+     "path": "${CLAUDE_HOME}/skills/persona-forge.voidloom-bak.*/**",
+     "kind": "dir",
+     "why": "a same-named persona-forge skill folder that DIFFERS from the packaged one is moved aside here before the forge is copied (never-clobber); an identical one is left in place and nothing is written. Inside the target root: the forge files themselves are bound by install/lay_manifest.json (component forge); the backup is generated, so it is named here"
+    },
+    {
+     "path": "${CLAUDE_HOME}/commands/persona-forge.md.voidloom-bak.*",
+     "kind": "file",
+     "why": "the same rule for the /persona-forge command file"
+    }
+   ]
+  },
+  {
+   "step": "P",
+   "name": "STEP P's question answered yes: the SessionStart hook, so the first session offers the Persona Forge",
+   "when": "--wire-hooks",
+   "writes": [
+    {
+     "path": "${CLAUDE_HOME}/settings.json",
+     "kind": "file",
+     "why": "ONE hook element added by `voidloom hooks install --platform claude` (organs/voidloom_hooks_status.py: back-up-before, verify-after, refuse-rather-than-clobber; its receipt and pre-image live in the brain, inside the target root). Written ONLY on the owner's yes -- the --wire-hooks flag, or y at the terminal (an interactive answer cannot be known to --print-write-set). Without it install.sh never touches settings.json, and any change there is RED"
+    }
+   ]
+  },
+  {
+   "step": "transient",
+   "name": "temporary files",
+   "when": "always",
+   "writes": [
+    {
+     "path": "${TMPDIR}/tmp.*",
+     "kind": "transient",
+     "why": "mktemp for the env-file block and its rewrite; removed before exit, so a post-run snapshot must not see them"
+    }
+   ]
+  }
+ ],
+ "verbs": [
+  {
+   "step": "F",
+   "when": "--with-crons",
+   "platform": "Linux",
+   "call": "systemctl --user daemon-reload",
+   "effect": "write",
+   "why": "reload the user manager after the unit files are written (install/install_crons.sh)"
+  },
+  {
+   "step": "F",
+   "when": "--with-crons",
+   "platform": "Linux",
+   "call": "systemctl --user enable --now wizard-library-{unit}.timer",
+   "expand": "armed_units",
+   "effect": "write",
+   "why": "arm each armed-by-default timer; the manager answers by writing ${SYSTEMD_USER_DIR}/timers.target.wants/wizard-library-{unit}.timer (declared above) and starting the timer"
+  },
+  {
+   "step": "F",
+   "when": "--with-crons",
+   "platform": "Linux",
+   "call": "systemctl --user list-timers wizard-library-* --no-pager",
+   "effect": "read-only",
+   "why": "lists what was armed; reads the manager and writes nothing -- declared because every call the installer makes to the manager is graded, reads included"
+  },
+  {
+   "step": "F",
+   "when": "--with-crons",
+   "platform": "Darwin",
+   "call": "launchctl unload ${LAUNCHD_DIR}/${LAUNCHD_PREFIX}.{unit}.plist",
+   "expand": "armed_units",
+   "effect": "write",
+   "why": "unload a previously loaded agent of the same label before re-loading it (a failure is tolerated: nothing loaded is the common case)"
+  },
+  {
+   "step": "F",
+   "when": "--with-crons",
+   "platform": "Darwin",
+   "call": "launchctl load ${LAUNCHD_DIR}/${LAUNCHD_PREFIX}.{unit}.plist",
+   "expand": "armed_units",
+   "effect": "write",
+   "why": "load the LaunchAgent; launchd registers it from ~/Library/LaunchAgents and writes no file under $HOME for it"
+  },
+  {
+   "step": "F",
+   "when": "--with-crons",
+   "platform": "Linux",
+   "shape": "ambient",
+   "call": "systemctl --user show -p ExecStart wizard-library-{unit}.service",
+   "expand": "armed_units",
+   "effect": "read-only",
+   "why": "the READ-BACK (R1): the manager's own view of every armed unit's ExecStart; its first token must be the recorded interpreter, or the run fails"
+  },
+  {
+   "step": "T",
+   "when": "a thinker to prove",
+   "platform": "Linux",
+   "match": "glob",
+   "call": "systemd-run --user --wait --pipe --collect --quiet --unit voidloom-thinker-probe-* -p EnvironmentFile=-* -p WorkingDirectory=${DB_DIR} -p Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring -p RuntimeMaxSec=* *",
+   "effect": "write",
+   "why": "the thinker's PROOF in the timers' environment (M9/M10): two tool-free calls (the exact answer to a small sum; a file that must not appear) run BY THE USER MANAGER as a transient unit (EnvironmentFile= the env file this run writes, WorkingDirectory= the brain) -- --collect removes the unit; nothing is enabled or left behind. On a host with no user manager (launchd, a container) the probe runs directly and this verb is not called"
+  }
+ ],
+ "untouched": [
+  {
+   "path": "${HOME}/.codex/**",
+   "why": "the owner's everyday Codex login and state: the brain signs in with its OWN CODEX_HOME (${THINKER_HOME}/codex); nothing the installer runs may read-refresh or rewrite this tree (a copied or shared auth.json refreshes itself and signs the owner out)"
+  },
+  {
+   "path": "${HOME}/.kimi-code/**",
+   "why": "the owner's everyday Kimi login (credentials/kimi-code.json refreshes on an OAuth call): the brain's calls run with an EMPTY per-call KIMI_CODE_HOME and the Console key from ${THINKER_HOME}/kimi.env only",
+   "unless_installing": "kimi"
+  },
+  {
+   "path": "${HOME}/.gemini/**",
+   "unless_installing": "gemini",
+   "why": "the owner's everyday Gemini / Antigravity sign-in (~/.gemini/antigravity-cli/antigravity-oauth-token): the brain signs in with its OWN home (${THINKER_HOME}/gemini-home); nothing the installer runs may read-refresh or rewrite this tree"
+  }
+ ]
+}

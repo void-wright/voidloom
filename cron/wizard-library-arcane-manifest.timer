@@ -1,0 +1,16 @@
+[Unit]
+Description=Wizard Library Arcane Manifest Timer — quarterly on 1st of quarter month, 9:00 AM local time
+
+[Timer]
+# WSL2 HYBRID cron pattern (memory #3674):
+# Quarterly: runs at 9:00 AM local time on the 1st of January, April, July, October.
+# This is AFTER the counterfactual revisit cron (8:00 AM) so the manifest
+# can reference any counterfactual insights from the prior quarter's final check.
+#
+# Persistent=true catches missed runs (laptop lid closed, WSL suspended).
+# If the timer fires and the service finds no new quarter data, it exits cleanly.
+OnCalendar=*-01,04,07,10-01 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

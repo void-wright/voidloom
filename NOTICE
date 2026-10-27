@@ -1,0 +1,77 @@
+Voidloom — a living memory tapestry woven for AI agents
+Copyright 2026 Andrew Grainger d/b/a Voidwright
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this software except in compliance with the License. A copy of the License is
+in the LICENSE file and at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+The copyright holder is a natural person because no Voidwright company exists
+yet; "d/b/a" is the standard construction for an unincorporated trade name.
+
+--------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------
+
+This package does not vendor third-party source. It declares runtime
+dependencies in `install/requirements.txt`, which are installed from PyPI and
+remain under their own licences. The notable ones at recall time:
+
+  * sqlite-vec            — vector search extension for SQLite
+  * sentence-transformers — embedding model runtime
+  * torch                 — tensor runtime (GPU optional)
+
+--------------------------------------------------------------------------
+MODEL WEIGHTS — THE PERMISSIVE FLEET, AND THE ONE EXCEPTION
+--------------------------------------------------------------------------
+
+Embedding and reranking models are downloaded at first use from the Hugging Face
+Hub, cached under `~/.cache/huggingface/hub/`, and are NOT redistributed here.
+They carry their own licences, verified 2026-09-07 from the HuggingFace registry
+API directly rather than from documentation:
+
+  PERMISSIVE — usable in commercial and non-commercial work alike:
+  * nomic-ai/nomic-embed-text-v1.5              apache-2.0   768-dim, the CPU tier
+  * Qwen/Qwen3-Embedding-0.6B                   apache-2.0   1024-dim, the GPU tier
+  * Qwen/Qwen3-Reranker-0.6B                    apache-2.0   the default reranker
+  * BAAI/bge-reranker-v2-m3                     apache-2.0   the fallback reranker
+  * cross-encoder/nli-deberta-v3-base           apache-2.0   belief-engine NLI
+  * urchade/gliner_multi-v2.1                   apache-2.0   entity extraction
+  * MoritzLaurer/deberta-v3-base-zeroshot-v2.0  MIT          zero-shot
+  * SamLowe/roberta-base-go_emotions            MIT          affect
+
+  The fleet is uniformly PERMISSIVE but NOT uniformly Apache: two entries are MIT.
+  Apache-2.0 additionally carries an express patent grant that MIT does not; if
+  that distinction matters to a contract, it is those two that need naming.
+
+  NON-COMMERCIAL — NEVER A DEFAULT, opt-in only:
+  * jinaai/jina-embeddings-v5-text-small        cc-by-nc-4.0
+
+  `jina` is selectable with WIZARD_EMBED_MODEL=jina and the installer warns when
+  it is. It is NOT reachable by the hardware heuristic: a GPU host resolves to
+  `qwen`, a CPU host to `nomic` (install.sh, resolve_embed_model). Under the
+  prevailing reading the VECTORS a cc-by-nc model produces are themselves
+  encumbered, so a brain embedded with jina is not made shippable by swapping the
+  model forward — it would have to be re-embedded.
+
+--------------------------------------------------------------------------
+ON ATTRIBUTION
+--------------------------------------------------------------------------
+
+This package is the personal work of its author and is not affiliated with,
+endorsed by, or the property of any employer or client of the author. No
+organisation's credentials or data appear in it, and no organisation's name is
+used as a default, an identifier, or a fixture in anything that runs.
+`voidloom/tests/test_notice_claim_holds.py` re-derives this paragraph against
+the tree on every run. The brain's *contents* — the memories — are never
+packaged: this repository carries the machinery only, and `claude_memory.db`
+is git-ignored by design.
+
+Some schema fields and built-in labels carry names from the system's first
+installation (for example `drew_approved`, or the brain-tier labels `milamber`
+and `eddie`). They are identifiers, not data: renaming them would need a
+migration on every existing brain, so they are kept and documented instead.

@@ -1,0 +1,67 @@
+# Mac CI, step 1 of 2 -- THE MPS PROBE (handoff round 1, L4; SYNTHESIS §1 "probe first, and expect red").
+#
+# Question: does a GitHub-hosted Apple Silicon runner give torch a usable Metal (MPS) device? GitHub's runner page gives
+# the arm64 macOS standard runner 3 cores and 7 GB and does not mention MPS; community reports say it has no Metal
+# device. This job answers by EXECUTION and uploads probe.json either way.
+#   green -> MPS ran a real op here (the label can move to PROVEN-BY-PROXY once a human reads the artifact)
+#   red   -> expected; pre-registered rule 1: the MPS label comes from the friend's `voidloom preflight` instead, and no
+#            pass is spent improving CI.
+#
+# RUN RULE (2026-10-15): macOS runners are slow and scarce. This job runs
+# ONLY when started by hand (workflow_dispatch) -- on a validation run for Mac enablement, or again when a big change
+# warrants re-checking Mac support. Never on push or pull_request. Short timeout; duplicates cancel each other.
+name: mac-mps-probe
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: mac-mps-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: torch (PyPI, the macOS arm64 build -- the friend's channel)
+        run: python -m pip install --quiet torch numpy
+      - name: probe MPS by execution
+        run: |
+          python - <<'PROBE_PY'
+          import json, platform, subprocess, sys
+          out = {"machine": platform.machine(), "mac_ver": platform.mac_ver()[0], "python": platform.python_version()}
+          try:
+              out["ram_bytes"] = int(subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True).stdout)
+          except Exception as e:
+              out["ram_bytes"] = None
+          import torch
+          out["torch"] = torch.__version__
+          out["mps_built"] = bool(torch.backends.mps.is_built())
+          out["mps_available"] = bool(torch.backends.mps.is_available())
+          out["op_ok"] = False
+          if out["mps_available"]:
+              try:
+                  a = torch.randn(256, 256)
+                  b = (a.to("mps") @ a.to("mps")).cpu()
+                  ref = a @ a
+                  out["max_abs_diff_vs_cpu"] = float((b - ref).abs().max())
+                  out["op_ok"] = bool(out["max_abs_diff_vs_cpu"] < 1e-2)
+              except Exception as e:
+                  out["error"] = "%s: %s" % (type(e).__name__, e)
+          json.dump(out, open("probe.json", "w"), indent=1)
+          print(json.dumps(out, indent=1))
+          sys.exit(0 if out["op_ok"] else 1)
+          PROBE_PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-mps-probe
+          path: probe.json
+          if-no-files-found: warn

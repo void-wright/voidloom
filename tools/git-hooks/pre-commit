@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# pre-commit -- run the leak gate over what is about to be committed (tools/leak_gate.py).
+# Installed by tools/git-hooks/install.sh. Bypassing it (--no-verify) is possible; CI runs the same gate.
+set -u
+ROOT="$(git rev-parse --show-toplevel)" || exit 1
+ARGS=(--staged)
+[ "$(git config --get voidloom.requireDenylist)" = "true" ] && ARGS+=(--require-denylist)
+exec python3 "$ROOT/tools/leak_gate.py" ${ARGS[@]+"${ARGS[@]}"}

@@ -1,0 +1,24 @@
+[Unit]
+Description=Voidloom embedding backfill — a vector for every live memory an organ stored without one
+After=network.target
+
+[Service]
+# Round 1 (lane L5). The health check (2026-10-14) counted 359 active memories with no vector in the active tier
+# (dream pipeline 150, sleep-loop reflections 52, gap research 50, seed pack 81, whisper digest 13): organ write paths
+# that store without an embedding when the encoder is busy or absent. A memory with no vector is keyword-only, so
+# semantic recall cannot find it. This unit is the safety net: organs/embed_backfill.py embeds ONLY the live memories
+# missing a vector in THIS brain's active tier (idempotent; it refuses rather than guessing a tier).
+# The device comes from the env file (the installer's resolved card; the display card is never taken).
+# Exit 0 ok; 1 incomplete (some failed: a real failure); 3 refused = no encoder on this host, the brain is
+# keyword-only (Tier 0 working as designed) -- admitted below, so a Tier-0 machine does not log a failure nightly.
+# --limit bounds one run (a bulk import's remainder waits for the next morning).
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/embed_backfill.py %h/.claude/memory/claude_memory.db --limit 2000 --json
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+Nice=15
+TimeoutStartSec=1800
+SuccessExitStatus=3

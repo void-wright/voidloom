@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the Voidloom organ yield sentinel daily
+Documentation=https://github.com/void-wright/voidloom
+
+[Timer]
+OnCalendar=*-*-* 09:15:00
+# Persistent=true converts a MISSED window into a LATE run. That is correct for a
+# sentinel — a laptop that was asleep should still get its reading — but note the
+# hazard recorded at Council #1: Persistent masks "the timer stopped being
+# scheduled", which is the failure a cadence check cannot see in its own output.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

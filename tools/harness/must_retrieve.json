@@ -1,0 +1,5 @@
+{
+  "_doc": "Cap-floor MUST-RETRIEVE set. For each query, the listed memory id(s) MUST appear in the top-k of every recall (BEFORE and AFTER any change), so a relevance DROP is caught, not just set-churn. Memory ids are PER BRAIN: declare your own by running each query against your brain, picking the top-ranked distinctive hit, and confirming it is stable across repeated recalls. Empty by default -- an empty map checks nothing, and the gate says so.",
+  "top_k": 10,
+  "must_retrieve": {}
+}

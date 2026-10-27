@@ -1,0 +1,13 @@
+[Unit]
+Description=Wizard Library Gap Mapping — weekly knowledge gap inventory
+After=network.target
+
+[Service]
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/gap_mapping.py --run %h/.claude/memory/claude_memory.db
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=600

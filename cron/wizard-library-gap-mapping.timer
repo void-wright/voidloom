@@ -1,0 +1,12 @@
+[Unit]
+Description=Wizard Library Gap Mapping Timer — weekly Monday 8 AM local time
+
+[Timer]
+# WSL2 HYBRID cron pattern (memory #3674):
+# Primary: Monday 8:00 AM local time weekly. Windows Task Scheduler wakes WSL at 7:59.
+# Persistent=true catches missed runs (laptop lid closed, WSL suspended).
+OnCalendar=Mon *-*-* 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

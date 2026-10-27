@@ -1,0 +1,47 @@
+name: Bug report
+description: Something did not work the way the docs say it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **Security problems:** please use the Security tab
+        (Report a vulnerability) instead of a public issue.
+        Never paste memory contents, tokens or the contents of `~/.voidloom/wizard-library-env`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `voidloom doctor`
+      description: It reports paths, versions and states, never memory contents. Your username appears in its paths; edit out anything you consider private before pasting.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Voidloom version
+      description: "`voidloom --version`, and `git rev-parse --short HEAD` if you installed from a clone."
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Linux, WSL2, macOS (Apple Silicon), macOS (Intel), Windows (native), Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: compute
+    attributes:
+      label: Compute
+      options: [CPU only, NVIDIA GPU, AMD GPU, Apple MPS, Intel GPU, Not sure]
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Python version, install flags you used, the last lines of `~/.claude/memory/INSTALL_LOG`.

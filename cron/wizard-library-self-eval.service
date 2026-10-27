@@ -1,0 +1,14 @@
+[Unit]
+Description=Wizard Library Monthly Self-Eval — brain self-evaluation report
+After=network.target
+
+[Service]
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/monthly_self_eval.py --run %h/.claude/memory/claude_memory.db
+ExecStartPost=/usr/bin/env python3 -u %h/.claude/memory/organs/monthly_self_eval.py --surface %h/.claude/memory/claude_memory.db
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300

@@ -1,0 +1,16 @@
+[Unit]
+Description=Wizard Library Whisper Digest — weekly self-observation synthesis
+After=network.target
+
+[Service]
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+# CUDA_VISIBLE_DEVICES is resolved by voidloom_device
+# (WIZARD_CUDA_DEVICE, else the declaring env file, else 0).
+# Set WIZARD_CUDA_DEVICE here only to override for this unit.
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/whisper_network.py --digest %h/.claude/memory/claude_memory.db --mode llm
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300

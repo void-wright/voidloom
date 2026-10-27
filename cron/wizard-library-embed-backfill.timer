@@ -1,0 +1,14 @@
+[Unit]
+Description=Voidloom embedding backfill timer — daily 09:40 local time
+
+[Timer]
+# 09:40: the host is reliably awake (the evening block's host-asleep nights are why belief-scan moved, 2026-09-17),
+# after the 09:15 organ-yield sentinel and the Monday 08:30 gap research, and clear of the 22:00-23:00 block whose
+# dream, sleep-loop and belief organs each load a model: one model per process, never stacked here.
+# Persistent=true: a missed morning runs at the next wake.
+OnCalendar=*-*-* 09:40:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Voidloom organ ledger — hourly observation of the declared unit set
+
+[Timer]
+# HOURLY, and this is a SAMPLER not a log. It reads each unit's LAST trigger
+# stamp, so a unit that fires more than once between two observations loses the
+# earlier fire silently -- UNIQUE(unit_name, run_started_at) dedupes, it does not
+# recover. Every wizard-library unit is daily or slower, so hourly over-samples
+# by design; if a sub-hourly unit is ever added, this bound must be revisited
+# rather than assumed. Stated here because an undeclared sampling bound is how a
+# monitoring organ starts lying.
+OnCalendar=*-*-* *:05:00
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

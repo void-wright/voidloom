@@ -1,0 +1,128 @@
+<!-- BEGIN WIZARD-LIBRARY MEMORY (managed; safe to leave in place) -->
+## Wizard-Library Memory System (you have a brain)
+
+You have a **persistent memory brain** — a local database of durable memories you
+write across sessions and recall later. It is what lets you carry knowledge,
+preferences, decisions, and lessons forward instead of starting every
+conversation cold. Two disciplines govern it: **store liberally**, and **recall
+before deciding**.
+
+> This block is installed and maintained by the wizard-library installer. It is
+> delimited by markers so updates never touch the rest of your CLAUDE.md. Your own
+> identity, voice, and project rules live OUTSIDE these markers and are never
+> modified here.
+
+### Where it lives
+- **Brain home:** `~/.claude/memory/` (resolved by the `$WIZARD_LIBRARY_HOME` env var when set)
+- **Database:** `~/.claude/memory/claude_memory.db`
+- **Lite CLI (Tier 0):** `~/.claude/memory/organs/claude_memory_lite.py` — stdlib-only, always works
+- **Full CLI (Tier 1, if installed):** `~/.claude/memory/organs/claude_memory.py` — adds semantic recall
+- A **SessionStart hook** primes you automatically at the start of each session.
+
+### FIRST MOVE — at session start
+If the auto-injected preamble did NOT appear above (some environments do not pipe
+hook output into context), make this your **literal first action before
+responding** — it wakes you up aware of what you already know:
+
+```
+python3 ~/.claude/memory/organs/claude_memory_lite.py prime
+```
+
+For meatier work, follow it with a **batch recall sweep** (8-15 queries in one
+shell call) over the domains you expect to touch, then drill into the high-signal
+`#IDs`. This is ~10x faster than recalling one-at-a-time, with no loss of quality.
+
+### MANDATORY session-start recall
+Before substantive work, prime context from the brain. Use whichever tier you
+have:
+
+```
+# Tier 1 (semantic — if a venv was built):
+python3 ~/.claude/memory/organs/claude_memory.py context --project "<your-current-focus>" --limit 10
+
+# Tier 0 (keyword — always available):
+python3 ~/.claude/memory/organs/claude_memory_lite.py prime
+```
+
+### Store liberally; recall before deciding
+- **Store liberally.** The cost of storing is near-zero; the cost of forgetting is
+  high. When in doubt, store it. Capture **during** work, not only at the end —
+  insights as they arise, errors **and their fixes**, decisions and *why*,
+  calibration data (predicted vs actual), patterns you notice. The journey is the
+  artifact.
+- **Recall before deciding,** starting a task, or generating content. A recall
+  takes under a second and sharply improves output quality.
+- **Write for a stranger:** the future reader is you-without-this-conversation.
+  Spell out the *why*; make each memory stand on its own.
+
+### Exact CLI invocations (generic — resolve via the installed path)
+```
+# RECALL (retrieve by relevance):
+python3 ~/.claude/memory/organs/claude_memory_lite.py recall --query "describe the concept you want" --top_k 10
+
+# STORE (write a memory):
+python3 ~/.claude/memory/organs/claude_memory_lite.py store \
+  --content "the full knowledge, written so a future reader understands it" \
+  --summary "one scannable line: what + when + why" \
+  --category workflow_pattern \
+  --kind procedural \
+  --tags "comma,separated,liberal" \
+  --importance 0.8
+
+# LIST (filter/browse):
+python3 ~/.claude/memory/organs/claude_memory_lite.py list --category technical_decision --limit 10
+python3 ~/.claude/memory/organs/claude_memory_lite.py list --tag "some-tag" --limit 10
+
+# STATS (health check):
+python3 ~/.claude/memory/organs/claude_memory_lite.py stats
+```
+
+If a full-stack venv is installed, prefer `claude_memory.py` (same verbs) for
+**semantic** recall (matches by meaning, not just keywords). If `recall` is
+finding things by exact words, you are on Tier 0; if it finds conceptually-related
+things you did not word-match, Tier 1 is active.
+
+### Field reference (every store carries these)
+- `--category` (one of 12, fixed): `user_preference`, `technical_decision`,
+  `project_knowledge`, `error_pattern`, `skill_lesson`, `workflow_pattern`,
+  `people_context`, `tool_optimization`, `domain_knowledge`, `campaign_state`,
+  `correction`, `insight`.
+- `--kind` (one of 4, fixed): `episodic` (default — an event/observation),
+  `semantic` (a durable fact), `procedural` (a how-to), `reflection` (a meta/self
+  observation). NOTE: `insight` is a *category*, not a kind — don't mix them.
+- `--importance` 0.0-1.0: `0.9+` critical, `0.7-0.8` important, `0.5-0.6` useful.
+- `--tags` comma-separated; be liberal — tags are how you find clusters later.
+
+### Tier 0 vs Tier 1
+- **Tier 0** (the lite CLI): stdlib-only, **keyword (FTS5)** recall, works on any
+  python3, always available. This is the guaranteed baseline.
+- **Tier 1** (the full CLI + venv): adds **semantic** recall (match by meaning) and
+  the higher-layer machinery. Optional; the brain is fully functional without it.
+- Both share the **same database** and the **same verbs**, so your habits transfer.
+
+### The Voidloom surface (the brain's own face — not a persona)
+The session-start banner and the verbs below are **Voidloom** — *a living memory
+tapestry woven for AI agents*. Voidloom is the agnostic name of the **system**, not
+a persona; your identity is still yours (above).
+- **The banner** appears after this preamble at session start (sigil `◇◆✦` +
+  wordmark + an "anticipated/forgotten" line + any pending self-eval approvals). It
+  reads only a small cache + two cheap queries — it never loads a model.
+- **`approvals` (owner-gated).** The brain runs a monthly self-eval and *proposes*
+  changes but never self-enacts — you approve each by name:
+  `python3 ~/.claude/memory/organs/claude_memory.py approvals` (then `--report-id N`,
+  `--approve N --title "…"`, or `--reject N --title "…" --reason "…"`). No
+  approve-all exists by design.
+- **`recall` re-rank organs** (cross-tier / persona-lens / foundation-boost) and
+  procedural usage-logging are default-on but each a no-op until its optional
+  module is present; disable any with `--no-cross-tier` / `--no-lens` / `--no-boost`
+  / `--no-log-usage` (or the matching `VOIDLOOM_NO_*` env vars).
+
+### Two things to remember
+- **The brain is a knowledge store, not a secret vault.** Never store OAuth
+  tokens, API keys, or passwords as memories — store the *knowledge*, not the
+  credential.
+- **Your identity is yours to craft.** This block teaches the memory *mechanism*
+  only (Voidloom is the system, not a persona). The persona is designed by the human
+  in the Persona Forge (`/persona-forge`, Claude fills in the details) or written by
+  hand (treat any shared persona material as an outline, not a prescription).
+<!-- END WIZARD-LIBRARY MEMORY -->

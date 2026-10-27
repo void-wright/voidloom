@@ -1,0 +1,38 @@
+# Voidloom eval_queries.txt
+# One query per line. Blank lines and lines starting with '#' are ignored.
+# EVERY query in this file MUST classify as SCOREABLE under corpus_presence.py
+# (>=1 distinctive term, df <= 60% of corpus). A VACUOUS or BROAD query re-commits
+# #3952 (silent dilution) and must not be added.
+#
+# These queries are about Voidloom itself, so any brain that has loaded the seed
+# pack (seed/seed_pack.json) can score them. A maintainer evaluating their OWN
+# brain should add queries about their own corpus below, and confirm each one is
+# SCOREABLE with corpus_presence.py before relying on it.
+#
+# Section 1 -- the system and its operation.
+Voidloom system naming and tagline
+store discipline liberally capture knowledge
+session start protocol prime context
+batch parallel recall single model load
+valid categories fixed enum
+schema gotcha tags join table
+two tier embedding keyword fallback
+dim lock re-embed law
+smoke test is my brain alive
+nightly consolidation sleep loop
+approval surface proposals decide
+governance propose not police
+recovery troubleshooting restore drill
+overnight thinker asked never assumed
+secret paste twice fingerprint
+persona forge calm baseline
+#
+# Section 2 -- lexical probes for the organ vocabulary (all SCOREABLE on a seeded brain).
+trust tier authorship corroboration foundation lift
+FTS5 porter tokenization corpus presence
+whisper network observations digest
+counterfactual decision council weighted
+#
+# Section 3 -- MUST-RETRIEVE probes: pair each with the memory id(s) it must
+# surface in must_retrieve.json (ids are per-brain; see that file's _doc).
+smoke test is my brain alive

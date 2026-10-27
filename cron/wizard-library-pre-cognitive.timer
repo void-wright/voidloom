@@ -1,0 +1,19 @@
+[Unit]
+Description=Wizard Library Pre-Cognitive Timer — every 30 min during waking hours (08:00-21:45 local time)
+
+[Timer]
+# WSL2 HYBRID cron pattern (memory #3674): Persistent=true catches missed runs
+# (laptop lid closed, WSL suspended) and refreshes the cache on next wake.
+#
+# Cadence rationale: the anticipation signals (recent edits, recent stores,
+# time-of-day) drift over HOURS, not minutes, so a 30-min cache keeps the
+# session-start "anticipated" line current without wasting the GPU. The :15/:45
+# offset deliberately avoids the top-of-hour cluster used by the nightly jobs
+# (22:00 dreaming / 22:30 sleep / 23:00 backup) and the weekly 08:00 jobs.
+# The 08:00-21:45 window means the model only loads while Drew is plausibly
+# working — never overnight, when no session-start would read the cache anyway.
+OnCalendar=*-*-* 08..21:15,45:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

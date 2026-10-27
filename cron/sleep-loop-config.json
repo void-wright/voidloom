@@ -1,0 +1,17 @@
+{
+    "lookback_days": 7,
+    "min_cluster_size": 3,
+    "similarity_threshold": 0.7,
+    "consolidation_mode": "heuristic",
+    "decay_factor": 0.995,
+    "prune_threshold": 0.15,
+    "max_age_days": 45,
+    "min_unreflected_for_reflection": 25,
+    "importance_boost_cap": 0.05,
+    "importance_decay_rate": 0.01,
+    "min_importance": 0.3,
+    "budget_seconds": 540,
+    "stage2_reserve_seconds": 120,
+    "edge_batch_size": 50,
+    "progress_every_seconds": 30
+}

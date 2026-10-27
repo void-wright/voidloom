@@ -1,0 +1,20 @@
+# {{NAME}} — Adaptive Recall Map
+
+Run at session start as ONE batch (the model loads once):
+
+```bash
+voidloom batch-recall --items '[{{RECALL_QUERIES_JSON}}]' --top-k 8 --json
+```
+
+## Why these queries
+
+{{RECALL_RATIONALE}}
+
+## Clusters to keep warm
+
+{{RECALL_CLUSTERS}}
+
+## Adapting the map
+
+When a query keeps returning nothing useful, or a new kind of work becomes
+regular, propose a change to this map and record it in `growth_log.md`.

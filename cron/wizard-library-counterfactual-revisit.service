@@ -1,0 +1,14 @@
+[Unit]
+Description=Wizard Library Counterfactual Revisit — quarterly decision path review
+After=network.target
+
+[Service]
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/counterfactual_memory.py --revisit %h/.claude/memory/claude_memory.db
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+# LLM revisit can take a while per decision (up to 120s each)
+TimeoutStartSec=1800

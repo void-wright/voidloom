@@ -1,0 +1,19 @@
+[Unit]
+Description=Wizard Library Counterfactual Revisit Timer — quarterly (1st of Jan/Apr/Jul/Oct) 8 AM local time
+
+[Timer]
+# WSL2 HYBRID cron pattern (memory #3674):
+# Quarterly cadence: 1st of January, April, July, October at 8:00 AM local time.
+# Windows Task Scheduler wakes WSL at 7:59 AM on those days.
+# Persistent=true catches missed runs (laptop lid closed, WSL suspended).
+#
+# OnCalendar does not support "quarterly" directly. We use four monthly
+# entries to cover Jan/Apr/Jul/Oct.
+OnCalendar=*-01-01 08:00:00
+OnCalendar=*-04-01 08:00:00
+OnCalendar=*-07-01 08:00:00
+OnCalendar=*-10-01 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

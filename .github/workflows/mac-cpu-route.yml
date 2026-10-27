@@ -1,0 +1,113 @@
+# Mac CI, step 2 of 2 -- THE macOS-ON-CPU ROUTE (handoff round 1, L4; SYNTHESIS §1 point 3).
+#
+# Whatever the MPS probe says, this job proves the friend's INSTALL ROUTE on a Mac, on the CPU: Miniforge (Apple's
+# system python cannot load SQLite extensions, so sqlite-vec needs another python), the checksum resolved through the
+# GitHub API (the unversioned "latest" .sha256 does not exist: memory #28097), sqlite-vec loading, capability/detect.py,
+# the accelerator plan, a real install.sh (--force-cpu: the seed pack loaded and embedded, Tier 1 verified), the launchd
+# agents rendered and loaded, doctor, and one sleep run. Green = "Mac route on CPU" PROVEN-BY-PROXY once a human has
+# read the artifacts.
+#
+# RUN RULE (2026-10-15): started ONLY by hand
+# (workflow_dispatch): on a validation run for Mac enablement, or again when a big change warrants re-checking Mac
+# support. Never on push or pull_request. timeout-minutes <= 15; duplicates cancel each other.
+name: mac-cpu-route
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: mac-cpu-route-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      CUDA_VISIBLE_DEVICES: ""
+      OUT: ${{ github.workspace }}/route-artifacts
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Miniforge -- the release tag from the GitHub API, the installer checked against its own .sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"
+          TAG="$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" https://api.github.com/repos/conda-forge/miniforge/releases/latest \
+                 | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+          F="Miniforge3-${TAG}-MacOSX-$(uname -m).sh"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://github.com/conda-forge/miniforge/releases/download/${TAG}/${F}"
+          curl -fsSLO "https://github.com/conda-forge/miniforge/releases/download/${TAG}/${F}.sha256"
+          shasum -a 256 -c "${F}.sha256"
+          bash "$F" -b -p "$RUNNER_TEMP/miniforge"
+          "$RUNNER_TEMP/miniforge/bin/conda" create -y -q -p "$RUNNER_TEMP/vlpy" python=3.12
+          echo "VLPY=$RUNNER_TEMP/vlpy/bin/python3" >> "$GITHUB_ENV"
+          echo "miniforge ${TAG} ($F), sha256 verified" | tee "$OUT/miniforge.txt"
+
+      - name: sqlite extensions -- Miniforge's python loads them (Apple's system python cannot)
+        run: |
+          set -uo pipefail
+          "$VLPY" -c 'import sqlite3; c = sqlite3.connect(":memory:"); c.enable_load_extension(True); print("miniforge python: enable_load_extension OK")' | tee "$OUT/sqlite_ext.txt"
+          /usr/bin/python3 -c 'import sqlite3; sqlite3.connect(":memory:").enable_load_extension(True)' >> "$OUT/sqlite_ext.txt" 2>&1 \
+            && echo "Apple system python: CAN load extensions here" >> "$OUT/sqlite_ext.txt" \
+            || echo "Apple system python: cannot load extensions (as documented)" >> "$OUT/sqlite_ext.txt"
+          cat "$OUT/sqlite_ext.txt"
+
+      - name: detect.py and the accelerator plan
+        run: |
+          set -euo pipefail
+          "$VLPY" capability/detect.py --json > "$OUT/detect.json" || true
+          "$VLPY" -B install/accelerator_plan.py plan --organs organs --request auto --python 3.12 > "$OUT/plan_auto.json" || true
+          "$VLPY" -B install/accelerator_plan.py plan --organs organs --request cpu --python 3.12 | tee "$OUT/plan_cpu.json"
+
+      # /bin/bash, never PATH's bash: a hosted runner may put a Homebrew bash 5 ahead of the 3.2.57 a stock Mac ships, and
+      # a job that ran bash 5 would go green while the friend's Mac failed (round 2, m7; B1 and B2 were exactly that).
+      - name: install.sh on the CPU under the Mac's own /bin/bash (fresh brain, seed pack, Tier 1 verified, launchd agents)
+        run: |
+          set -uo pipefail
+          /bin/bash --version | head -1 | tee "$OUT/bash.txt"
+          for f in install.sh install/*.sh cron/*.sh voidloom/voidloom; do /bin/bash -n "$f" || echo "PARSE FAIL $f"; done | tee "$OUT/bash_parse.txt"
+          test ! -s "$OUT/bash_parse.txt"
+          WIZARD_PYTHON_BIN="$VLPY" PATH="$(dirname "$VLPY"):$PATH" \
+            /bin/bash install.sh --force-cpu --init-blank --thinker off --with-crons --no-wire-hooks > "$OUT/install.log" 2>&1
+          echo "$?" > "$OUT/install.rc"
+          tail -60 "$OUT/install.log"
+          test "$(cat "$OUT/install.rc")" = 0
+          grep -q "Tier 1 VERIFIED" "$OUT/install.log"
+
+      - name: launchd agents lint and load
+        run: |
+          set -uo pipefail
+          ls ~/Library/LaunchAgents/ | tee "$OUT/agents.txt"
+          for p in ~/Library/LaunchAgents/*.plist; do plutil -lint "$p"; done | tee "$OUT/plutil.txt"
+          launchctl list > "$OUT/launchctl_all.txt"
+          grep -i 'voidloom\.' "$OUT/launchctl_all.txt" | tee "$OUT/launchctl.txt" || true
+          # every unit the roster arms must be LOADED under its exact label (the installer labels them voidloom.<name>)
+          awk 'NR>1 {print $3}' "$OUT/launchctl_all.txt" > "$OUT/launchctl_labels.txt"
+          for n in $(python3 -c "import json;u=json.load(open('install/cron_roster.json'))['units'];print(' '.join(sorted(k for k,v in u.items() if v['arm']=='armed-by-default')))"); do
+            if grep -qx "voidloom\.$n" "$OUT/launchctl_labels.txt"; then echo "loaded: voidloom.$n"; else echo "NOT LOADED: voidloom.$n"; fi
+          done | tee "$OUT/launchctl_expected.txt"
+          ! grep -q '^NOT LOADED' "$OUT/launchctl_expected.txt"
+
+      - name: doctor and one sleep run
+        run: |
+          set -uo pipefail
+          B="$HOME/.claude/memory"
+          cp "$B/INSTALL_RECORD" "$OUT/INSTALL_RECORD" || true
+          /bin/bash "$B/voidloom/voidloom" doctor --json > "$OUT/doctor.json" 2>&1; echo "doctor rc $?"
+          "$B/venv/bin/python3" "$B/organs/sleep_loop.py" "$B/claude_memory.db" --run --mode heuristic > "$OUT/sleep.log" 2>&1
+          echo "$?" > "$OUT/sleep.rc"; tail -30 "$OUT/sleep.log"
+          test "$(cat "$OUT/sleep.rc")" = 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-cpu-route
+          path: route-artifacts/
+          if-no-files-found: warn

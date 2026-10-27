@@ -1,0 +1,18 @@
+[Unit]
+Description=Voidloom belief engine — drain the scan queue and propose contradiction edges
+Documentation=file:%h/.claude/memory/organs/belief_cli.py
+After=default.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# The NLI cross-encoder is a LOCAL model — no LLM API call, no network. It runs
+# on GPU when one is present; CUDA_VISIBLE_DEVICES is inherited from the env file
+# so the display card is never taken.
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/belief_cli.py scan --limit 200 --json
+Nice=15
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=default.target

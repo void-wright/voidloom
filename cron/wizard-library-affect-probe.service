@@ -1,0 +1,19 @@
+[Unit]
+Description=Wizard Library Affect Probe — daily forward-only sycophancy smoke scan (L5-M2 Affect Lighthouse trial)
+After=network.target
+
+[Service]
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+# Off-by-construction: this runs daily, but affect_probe_scan.py honours
+# probe_enabled() -- with VOIDLOOM_AFFECT_PROBE unset (or past its window) the
+# scan writes ZERO quarantine rows and exits 0. The probe flags, when Drew sets
+# them, live in the wizard-library-env file inherited above, so the cron sees
+# them automatically. The driver imports ONLY the affect_lighthouse public API +
+# stdlib -- it cannot reach the salience / memory-write path.
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/affect_probe_scan.py
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=300

@@ -1,0 +1,10 @@
+[Unit]
+Description=Voidloom Dream Pipeline daytime heavy phases — fires in the GPU-burst window (14:00, the author's quiet window)
+
+[Timer]
+OnCalendar=*-*-* 14:00:00
+# Persistent=true catches missed runs (laptop lid closed, WSL suspended).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,147 @@
+# Wizard-Library Memory — Tier 1 (optional semantic) dependencies.
+#
+# Tier 0 (the engine CLI: store/recall/list/stats via FTS5) needs NOTHING here —
+# it is standard-library only and always works. These packages are ONLY for the
+# optional Tier 1 semantic upgrade (match-by-meaning recall).
+#
+# install.sh installs these into a dedicated venv at ~/.claude/memory/venv and
+# falls back to Tier 0 if any of it fails. You can also install them by hand:
+#     python3 -m venv ~/.claude/memory/venv
+#     ~/.claude/memory/venv/bin/python3 -m pip install -r requirements.txt
+#
+# (CRUCIBLE-3 D7-F4: this line carried `--require-hashes`, and the MODE A note
+#  ~55 lines below explains that pip turns that flag on for the ENTIRE transitive
+#  tree the moment any requirement is hashed -- which is why the hashes were moved
+#  out to requirements.hashes.txt in the first place. The flag was removed there
+#  and left standing here, so the file contradicted itself and THIS command failed
+#  on every machine. Verified again at HEAD before the fix:
+#      ERROR: Hashes are required in --require-hashes mode, but they are missing
+#  It bit the reader doing the MORE careful thing -- a manual venv, a CI author,
+#  an air-gapped rebuild -- while the installer's own hint printed the right form.
+#  For the fully hash-locked route see MODE B below.)
+#
+# EMBEDDER IS BRAIN-DICTATED. install.sh reads the brain DB's
+# active_embedding_table and pre-downloads the embedder that matches:
+#   * GPU brain  -> jinaai/jina-embeddings-v5-text-small  (1024-dim, table memory_embeddings_v2)
+#   * CPU brain  -> nomic-ai/nomic-embed-text-v1.5        ( 768-dim, table memory_embeddings)
+# ⚠ CPU-ONLY INSTALLS: NOT PINNING CUDA IS NOT THE SAME AS NOT GETTING IT.
+#
+# This file used to say: "A CPU-only install (laptop/teammate) MUST NOT pin a CUDA
+# torch build here; torch arrives implicitly via sentence-transformers as the
+# default wheel for the host." The first clause is a correct instruction and the
+# second is a false claim about its effect. CRUCIBLE-3 D7-F8, re-measured at HEAD
+# on 2026-09-16 with
+#     python3 -m pip install --dry-run --ignore-installed --report - -r requirements.txt
+#
+#     53 distributions resolved
+#     15 nvidia-* wheels  (cublas 13.1.1.3, cudnn-cu13 9.24, cusparselt-cu13 0.8.1,
+#                          cuda-runtime 13.0.96, cufft, cufile, curand, cusolver,
+#                          cusparse, nvjitlink, nvrtc, nvtx, cupti, nccl, nvshmem)
+#     torch 2.14.0 + triton 3.8.0
+#
+# On Linux the DEFAULT PyPI torch wheel IS the CUDA build, so the laptop the
+# sentence was written to protect receives the entire CUDA-13 runtime anyway --
+# several GB of it. The pins are not the defect; the sentence's claim about what
+# they produce was.
+#
+# The CPU-only recipe that actually holds, and it has to be explicit:
+#     pip install --index-url https://download.pytorch.org/whl/cpu torch
+#     pip install -r requirements.txt          # torch is already satisfied
+# install.sh's --force-cpu selects the CPU EMBEDDER (nomic-768) AND, since handoff round 1, runs exactly that
+# recipe: torch is installed FIRST from the channel install/accelerator_plan.py names for this machine, then this
+# file (torch already satisfied). The channels (resolved 2026-10-15; docs/ONBOARDING_GUIDE.md, "Which torch"):
+#     cuda (Linux)        PyPI's default torch
+#     cpu  (Linux)        --index-url https://download.pytorch.org/whl/cpu
+#     rocm (Linux, AMD)   --index-url https://download.pytorch.org/whl/rocm7.2      (VOIDLOOM_TORCH_ROCM_INDEX)
+#     xpu  (Linux, Intel) --index-url https://download.pytorch.org/whl/xpu          (VOIDLOOM_TORCH_XPU_INDEX)
+#     mps / cpu (Apple Silicon)  PyPI's macOS arm64 torch
+#     cpu (Intel Mac)     torch==2.2.2 "numpy<2"  -- the last x86_64 macOS torch; none for Python >= 3.13
+#
+# The numbers above are a RESOLUTION on one day against a moving index. Re-run the
+# dry-run before quoting them -- that is the whole lesson of the figure they replace.
+#
+# MODELS the installer PRE-DOWNLOADS (to ~/.cache/huggingface, the default HF hub):
+#   These are model WEIGHTS, not pip packages — `sentence-transformers` (below)
+#   provides the loader classes (SentenceTransformer + CrossEncoder); install.sh
+#   instantiates each once so the weights cache up front and nothing lazy-downloads
+#   on the first recall. The recall path uses exactly two local models:
+#     1. the EMBEDDER (jina-1024 on GPU OR nomic-768 on CPU; brain-dictated)
+#        -> SentenceTransformer(..., trust_remote_code=True)
+#     2. the RERANKER the runtime will load, fetched by snapshot_download(). NOT
+#        CrossEncoder(): the default backend is a Qwen3ForCausalLM and CrossEncoder
+#        cannot instantiate it.
+#   NOTE ON THE RERANKER: the runtime DEFAULT backend is Qwen/Qwen3-Reranker-0.6B
+#   (a causal-LM adapter in the sibling qwen_reranker module). bge-reranker-v2-m3
+#   is the GUARANTEED Apache-2.0 fallback every backend degrades to. Select the
+#   default with VOIDLOOM_RERANKER=bge|qwen.
+#
+#   THIS PARAGRAPH WAS THE ONLY SURFACE IN THE PACKAGE THAT HAD THE DEFAULT RIGHT,
+#   and nothing propagated it: the guide, install.sh, install.ps1 and self_check.py
+#   all called bge "the reranker your DEFAULT hybrid recall uses", and the installer
+#   pre-cached bge accordingly. CRUCIBLE-3 D9-F2. Since 2026-09-16 all four resolve
+#   the backend the same way and pre-cache the model that will actually load.
+#
+#   Measured bytes on disk (derived, not typed — install.sh prints the same figures
+#   from the cache it just warmed):
+#       nomic-embed-text-v1.5   548,032,350 B   (+ 105,561 B nomic-bert-2048)
+#       Qwen3-Reranker-0.6B   1,207,488,384 B   <- DEFAULT, pre-cached
+#       bge-reranker-v2-m3    2,293,259,377 B   <- fallback, pre-cached only with
+#                                                  VOIDLOOM_PRECACHE_FALLBACK=1
+#   Total one-time download on a successful default Tier-1 install: 1,755,626,295 B
+#   (~1.76 GB). The previous arrangement fetched 2.84 GB and then lazily pulled a
+#   further 1.21 GB on the first recall — 4.05 GB, against a documented "~1.4GB".
+#
+# ============================================================================
+# SUPPLY-CHAIN HARDENING — pinned == versions + SHA256.
+# ============================================================================
+# The three DIRECT dependencies below are pinned to EXACT versions and carry the
+# upstream PyPI SHA256 hashes for every relevant artifact (sdist + the
+# macOS x86_64 / macOS arm64 / manylinux / win wheels), so a tampered or
+# substituted package on the wire is REJECTED at install time. einops and
+# sqlite-vec are pure-data / prebuilt-binary wheels with no further runtime
+# deps; sentence-transformers pulls a transitive tree (torch, transformers,
+# huggingface-hub, …) that is platform-resolved.
+#
+#   pip's --require-hashes is ALL-OR-NOTHING: once ANY requirement is hashed,
+#   EVERY install candidate (including transitive deps) must also be hashed.
+#   Because the transitive set (esp. the torch wheel) differs per OS/arch, the
+#   fully-hashed transitive lock MUST be generated on (or for) the target
+#   platform. Two supported install modes:
+#
+#   MODE A — direct-pin only (this file, portable, THE DEFAULT):
+#     The SHA256 hashes that used to live in this file have moved to
+#     requirements.hashes.txt. They had to: pip turns on --require-hashes
+#     the moment ANY requirement is hashed, which then demands == pins for
+#     the entire transitive tree and made this documented default fail on
+#     every machine. Measured on a cold install.
+#       pip install -r requirements.txt
+#     Installs the three pinned == versions; transitive deps resolve from PyPI
+#     at their own latest-compatible versions. The top-level supply chain (the
+#     packages a human chose) is version-locked; transitive integrity relies on
+#     PyPI's TLS + the pinned roots. Good for the common case. (install.sh uses
+#     MODE A by default.)
+#
+#   MODE B — fully hash-locked (strongest, per-platform, for --require-hashes):
+#     On the TARGET machine/arch, regenerate a complete transitive lock:
+#         uv pip compile requirements.txt --generate-hashes \
+#             --python-version 3.10 -o requirements.lock.txt
+#       (or:  pip-compile --generate-hashes --output-file requirements.lock.txt requirements.txt )
+#     Then install with full verification:
+#         pip install --require-hashes -r requirements.lock.txt
+#     This locks the ENTIRE dependency tree (every transitive wheel hashed) for
+#     that platform. Commit requirements.lock.txt per OS/arch you support
+#     (e.g. requirements.lock.linux-x86_64.txt).
+#
+# Re-pin procedure when bumping a version: change the == below, refresh the
+# hashes from https://pypi.org/pypi/<pkg>/<version>/json (the `digests.sha256`
+# of each file), and regenerate the MODE B lock(s).
+# ============================================================================
+
+# --- loaders for BOTH the embedder AND the bge cross-encoder reranker fallback ---
+sentence-transformers==5.1.2
+
+# --- the vec0 virtual-table extension for vector search (prebuilt wheels) ---
+sqlite-vec==0.1.6
+
+# --- required by the nomic/jina model implementations (pure-python) ---
+einops==0.8.2

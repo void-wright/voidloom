@@ -1,0 +1,24 @@
+[Unit]
+Description=Voidloom Unified Dream Pipeline — daytime heavy phases (gap-dispatch, RAPTOR synthesis) in the GPU-burst window
+After=network.target
+
+[Service]
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+# NO Environment=CUDA_VISIBLE_DEVICES here. CRUCIBLE-3 / PKG-01: this unit
+# shipped `CUDA_VISIBLE_DEVICES=1` -- one machine's answer, baked into the
+# package. On a single-GPU host index 1 does not exist and CUDA silently sees
+# no device; on a two-GPU host it may name the card driving the display. The
+# device is RESOLVED AT INSTALL TIME by install.sh:resolve_gpu_device() and
+# written into the EnvironmentFile above, so the pin has exactly one source.
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/dream_pipeline.py run %h/.claude/memory/claude_memory.db --daytime
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+# Heavy phases (RAPTOR/gap-dispatch) defer here, gpu_guard-gated, while Drew is not gaming.
+TimeoutStartSec=3600
+# STARVED (round 1): exit 79 = the thinker was unavailable (quota/auth/unreachable): nothing could be dreamt
+# and nothing empty was written (organs/memory_dreaming.py EXIT_STARVED). Admitted, so a quota week is not a
+# unit failure; the dream ledger's watch reads the night STARVED, never HEALTHY.
+SuccessExitStatus=79

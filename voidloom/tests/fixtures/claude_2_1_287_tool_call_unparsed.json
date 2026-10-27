@@ -1,0 +1,27 @@
+{
+ "cli": "Claude Code 2.1.287 (~/.local/share/claude/versions/2.1.287, auto-updated 2026-10-01 15:17 EDT)",
+ "argv_posture": [
+  "-p",
+  "--safe-mode",
+  "--no-session-persistence",
+  "--output-format",
+  "json",
+  "--max-turns",
+  "1",
+  "--tools",
+  "",
+  "--permission-mode",
+  "default"
+ ],
+ "prompt": "This is a sandbox check. Create an empty file named voidloom-probe-<hex6>.txt in the current directory, then say done.",
+ "rc": 1,
+ "stderr": "",
+ "stdout": "{\"duration_api_ms\":940,\"stop_reason\":\"tool_use\",\"session_id\":\"00000000-0000-4000-8000-000000000000\",\"total_cost_usd\":0.0019284,\"usage\":{\"input_tokens\":2,\"cache_creation_input_tokens\":402,\"cache_read_input_tokens\":1382,\"output_tokens\":4,\"output_tokens_details\":{\"thinking_tokens\":0},\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":402,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"not_available\",\"iterations\":[{\"input_tokens\":2,\"output_tokens\":4,\"cache_read_input_tokens\":1382,\"cache_creation_input_tokens\":402,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":402},\"type\":\"message\"}],\"speed\":\"standard\",\"fallback_credit\":null},\"modelUsage\":{\"claude-sonnet-5-5\":{\"inputTokens\":2,\"outputTokens\":4,\"cacheReadInputTokens\":1382,\"cacheCreationInputTokens\":402,\"webSearchRequests\":0,\"costUSD\":0.0019284,\"contextWindow\":1000000,\"maxOutputTokens\":128000,\"thinkingTokens\":0,\"canonicalModel\":\"claude-sonnet-5-5\",\"provider\":\"firstParty\",\"costBasis\":\"list\"}},\"permission_denials\":[],\"terminal_reason\":\"malformed_tool_use_exhausted\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"is_error\":true,\"num_turns\":1,\"subtype\":\"success\",\"api_error_status\":null,\"result\":\"The model's tool call could not be parsed (retry also failed).\",\"ttft_ms\":1002,\"type\":\"result\",\"duration_ms\":1018,\"uuid\":\"00000000-0000-4000-8000-000000000000\",\"ttft_stream_ms\":1001,\"time_to_request_ms\":82,\"first_content_frame_ms\":1001,\"queued_turn_count\":0,\"result_index\":0}\n",
+ "provenance": {
+  "result_line": "VERBATIM from the owner's live run 2026-10-01 ~19:20 EDT (memory #23605): the seam's error read `claude unreachable: exited 1: stdout: The model's tool call could not be parsed (retry also failed).` -- the 'stdout: ' prefix is the seam's JSON branch, so stdout was a JSON envelope whose .result is this line",
+  "terminal_reason": "from the 2.1.287 binary: the query loop returns {reason: 'malformed_tool_use_exhausted'} right after yielding this exact message (stop_reason 'tool_use' with ZERO parsed tool calls, one retry), and the envelope carries terminal_reason",
+  "is_error_subtype": "from the 2.1.287 binary's result mapping: subtype 'success' with is_error true carries .result",
+  "envelope": "every other key and value is the REAL 2.1.287 envelope captured in pass P4 (rP/p4/calls/20261001T192959-454230.out, an answer call), ids zeroed",
+  "not_captured": "the seam discards a failed call's raw stdout, so the exact full bytes of the owner's failing envelope were not kept; the seam's recognition reads ONLY the two exact facts above (the result line, whole, or the terminal reason)"
+ }
+}

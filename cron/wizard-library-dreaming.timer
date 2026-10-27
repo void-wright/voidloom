@@ -1,0 +1,13 @@
+[Unit]
+Description=Wizard Library Memory Dreaming Timer — nightly at 10:00 PM local time
+
+[Timer]
+# WSL2 HYBRID cron pattern (memory #3674):
+# Primary: 10:00 PM local time nightly. Runs 30 min BEFORE sleep loop (10:30 PM).
+# Windows Task Scheduler wakes WSL at 9:59 PM.
+# Persistent=true catches missed runs (laptop lid closed, WSL suspended).
+OnCalendar=*-*-* 22:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

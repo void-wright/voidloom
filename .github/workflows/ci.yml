@@ -1,0 +1,58 @@
+# The test suite, on a machine that has never seen Voidloom: no brain, no GPU, no model cache, offline
+# for models (tests that need a downloaded model skip with the reason). The same invocation a
+# contributor runs: `python3 -m pytest voidloom/tests/ -q` from the repository root.
+#
+# Measured before release (2026-10-27) on a fresh clone with an empty HOME, CPU only, models offline
+# (a local interpreter carrying the same pinned stack): 2056 passed, 29 skipped, 8 xfailed, 0 failed,
+# ~17 minutes. This workflow is the first proof of the same on a hosted runner.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CUDA_VISIBLE_DEVICES: ""
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      VOIDLOOM_TESTS_QUIET: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: install/requirements.txt
+
+      - name: dependencies (the CPU build of torch, then the pinned semantic stack)
+        run: |
+          set -euo pipefail
+          # bubblewrap: the Gemini backend's sandbox; the tests that make a real sandboxed call skip without it
+          sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap || echo "bubblewrap not installed; those cases will skip"
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r install/requirements.txt pytest
+          python -c 'import sqlite3; c = sqlite3.connect(":memory:"); c.enable_load_extension(True); print("sqlite extensions: OK")'
+
+      - name: the suite
+        run: python -m pytest voidloom/tests/ -q -p no:cacheprovider -rfE
+
+      - name: the release gates (manifest agrees with the tree; the leak gate's own checks)
+        run: |
+          set -euo pipefail
+          python tools/build_manifest.py --lay --check
+          python tools/leak_gate.py --tree --no-gitleaks

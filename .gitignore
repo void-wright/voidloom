@@ -1,0 +1,141 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Voidloom — CODE IN, DATA AND MODELS OUT.
+# Written BEFORE `git init`: git must never see the brain's contents, only its
+# machinery. A nightly DB snapshot preserves the MEMORIES; this repo preserves
+# the MACHINERY. They are different jobs and they stay separate. (#13479)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── THE BRAIN ITSELF — never, under any circumstance ──
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+seed-dbs/
+
+# ── DERIVED / BULK — local history and workspaces ──
+archives/
+ACE_Workspaces/
+
+# ── RUNTIME STATE + CACHES (regenerated; some are 0600 by design) ──
+THINKER_RECORD
+THINKER_LOG
+.THINKER_RECORD.tmp.*
+pre_cognitive_cache.json
+.voidloom_notify_state.json
+.affect_scan_state.json
+cognitive_map.html
+eval/ab_comparison_results.json
+
+# ── THE OLD VERSION CONTROL SYSTEM ──
+# Hand-named .bak copies from before version control. Git is the history now;
+# these stay on disk and out of the repo.
+*.bak
+*.bak-*
+*.orig
+*.pre-*
+# ...and the UNDERSCORE spelling. `*.pre-*` (hyphen) correctly ignored 30+ files
+# and silently admitted `session_start_inject.py.pre_voidloom`, which then reached
+# the delivered package. A pattern written from the examples in front of you
+# matches the examples; write it from the DEFINITION of the set instead.
+*.pre_*
+
+# ── PYTHON / TOOLING NOISE ──
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# ── SECRETS — belt and braces; nothing here today and it stays that way ──
+*.env
+.env*
+*.key
+*.pem
+*credentials*
+*token*.json
+rclone.conf
+
+# ── EDITOR / OS ──
+.DS_Store
+*.swp
+*~
+
+# ── PACKAGE ARTIFACTS — admitted BY EXPLICIT NAME, never by relaxing *.db ──
+# claude_memory_blank.db is SCHEMA-ONLY (36 tables, 0 memories, 573 KB): it is
+# machinery, not a brain. seed_pack.json is the memories a fresh install loads
+# and embeds with the model its hardware sweep chose — ONE text file we can
+# diff and review, never two pre-built binary DBs that drift from it. (#6387)
+!seed/claude_memory_blank.db
+!seed_pack.json
+
+# ── THE SIDECAR HAZARD — read before building a tarball ─────────────────────
+# `*.db-wal` / `*.db-shm` above keep git clean, and that is exactly why they are
+# dangerous at PACKAGING time: git cannot see them, so nothing warns you.
+# MEASURED — opening the shipped schema-only DB READ-ONLY creates both:
+#     sqlite3.connect("file:claude_memory_blank.db?mode=ro", uri=True)   -> creates
+#     sqlite3.connect("file:claude_memory_blank.db?immutable=1", uri=True) -> does NOT
+# So any inspection of the blank DB before `tar` leaves two stray files in the
+# package, invisible to `git status`. Two rules follow:
+#   1. Read a packaged DB with `immutable=1`, never `mode=ro`.
+#   2. Sweep before tarring:  find . -name '*.db-wal' -o -name '*.db-shm' -delete
+# The package gates walk the FILESYSTEM, not the index, so they DO see these —
+# which is the whole reason a gate's population must come from the mechanism
+# that lays the artifact rather than from `git ls-files`.
+
+# ── THIS MACHINE, NOT THE PACKAGE ───────────────────────────────────────────
+# This repository is the package, not a mirror of any one machine. Anything that
+# describes THIS host, or wires it to a second brain, stays on disk and out of the
+# index. The installer's hardware sweep writes a manifest for whatever machine it
+# lands on; shipping one would assert someone else's GPU.
+voidloom_manifest.json
+
+# PROVISIONAL, not abandoned. Cross-brain bridges link TWO brains; voidloom ships
+# with one. So the module stays out of what a recipient gets until it is proven
+# worth supporting; a maintainer's local copy is ignored here so it cannot be
+# committed by accident. Excision is safe by construction: claude_memory.py:429-434 already wraps the
+# import and sets the module to None with "graceful: cross-tier enrichment
+# silently skipped", its one consumer at :1632 is gated on `is not None`, and the
+# three test classes are @unittest.skipUnless. The migrations STAY tracked, so a
+# future re-enable finds its tables already built.
+organs/cross_tier_bridges.py
+
+# ── LOCAL OPERATIONAL ARTIFACTS — never in a distributable package ──────────
+# _preimages/ holds database snapshots taken before a destructive landing on THIS
+# machine, plus the merged_ids sidecar naming which rows that landing promoted.
+# Both are facts about one apply on one brain. The .db was already excluded by
+# *.db; the sidecar was not, and reached the index through a `git add -A` --
+# which is the glob #7976 forbids for exactly this reason.
+_preimages/
+
+# host-bound install state written by the shipped verbs (per machine, never shared)
+voidloom_canary_ledger.json
+voidloom_install_receipt.json
+voidloom_preimages/
+
+# the self-check fixture root when $VOIDLOOM_SELFCHECK_FIXTURE_DIR is unset;
+# a crashed run leaves its probes behind and they are scratch, never source.
+organs/.vl_selfcheck_fixtures/
+
+# hermetic pytest boxes (ext4 under $HOME, never /tmp — several assertions read st_dev)
+voidloom/.pytest_boxes/
+.pytest_boxes/
+
+# THE OPERATOR'S PERSONA DECLARATION — the file that makes this brain somebody.
+# The package ships the MECHANISM and never a persona (ONBOARDING_GUIDE.md's
+# central promise); this file is the prescription, and it is one machine's.
+# Excluded BY NAME, never by a glob: a name encodes a decision, and only the
+# decision survives someone adding a file six months from now.
+persona.json
+
+# ── THE PERSONA FORGE'S RUNTIME MARKER (written by `voidloom persona decline`) ──
+persona_forge.declined
+
+# Machine-specific files (personal backups, second-brain sync, private hooks) belong
+# in your clone's own .git/info/exclude, not here: that file is never published.

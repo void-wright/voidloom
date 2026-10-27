@@ -1,0 +1,31 @@
+# requirements.hashes.txt — the SHA256 material for MODE B.
+#
+# These hashes were in requirements.txt, where they silently made the
+# documented default install IMPOSSIBLE: pip enables --require-hashes
+# automatically as soon as ANY requirement carries a hash, and then
+# demands == pins for the whole transitive closure (torch, transformers,
+# huggingface-hub, ...). Measured on a cold install: pip dies on
+#     transformers<5.0.0,>=4.41.0
+# every time, and Tier 1 can never be installed.
+#
+# They are preserved here verbatim so a MODE B full-tree lock can still
+# be generated on the target platform:
+#     uv pip compile requirements.txt --generate-hashes \
+#         --python-version 3.10 -o requirements.lock.txt
+#     pip install --require-hashes -r requirements.lock.txt
+#
+# A lock generated that way supersedes this file; this exists so the
+# hand-verified digests of the three DIRECT pins are not lost.
+
+# sentence-transformers==5.1.2
+    --hash=sha256:724ce0ea62200f413f1a5059712aff66495bc4e815a1493f7f9bca242414c333 \
+    --hash=sha256:0f6c8bd916a78dc65b366feb8d22fd885efdb37432e7630020d113233af2b856
+# sqlite-vec==0.1.6
+    --hash=sha256:fdca35f7ee3243668a055255d4dee4dea7eed5a06da8cad409f89facf4595361 \
+    --hash=sha256:77491bcaa6d496f2acb5cc0d0ff0b8964434f141523c121e313f9a7d8088dee3 \
+    --hash=sha256:7b0519d9cd96164cd2e08e8eed225197f9cd2f0be82cb04567692a0a4be02da3 \
+    --hash=sha256:823b0493add80d7fe82ab0fe25df7c0703f4752941aee1c7b2b02cec9656cb24 \
+    --hash=sha256:c65bcfd90fa2f41f9000052bcb8bb75d38240b2dae49225389eca6c3136d3f0c
+# einops==0.8.2
+    --hash=sha256:54058201ac7087911181bfec4af6091bb59380360f069276601256a76af08193 \
+    --hash=sha256:609da665570e5e265e27283aab09e7f279ade90c4f01bcfca111f3d3e13f2827

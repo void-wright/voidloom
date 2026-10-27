@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# voidloom — shell shim for the LLM's memory toolkit.
+#
+# Runs the package in place (no pip install). It locates the package directory
+# (the parent of this script's `voidloom/` dir) and invokes `python3 -m voidloom`
+# with the package on PYTHONPATH, so the toolkit runs straight from the source
+# tree alongside the brain.
+#
+# Install: symlink this onto PATH, e.g.
+#   ln -s /abs/path/to/voidloom/voidloom ~/.local/bin/voidloom
+# or just call `python3 -m voidloom ...` with this package dir on PYTHONPATH.
+set -euo pipefail
+
+# Resolve this script's real directory (following symlinks).
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+PKG_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"   # .../voidloom
+PARENT_DIR="$(dirname "$PKG_DIR")"                                  # the dir that *contains* voidloom/
+
+export PYTHONPATH="${PARENT_DIR}:${PYTHONPATH:-}"
+# N5 (Crucible D03-F2).  `python3 -m voidloom` puts the CURRENT DIRECTORY at
+# sys.path[0], AHEAD of the PYTHONPATH this launcher just set.  So from inside
+# any directory that contains a `voidloom/` package -- a git archive, the laptop
+# zip, the seed zip, ~/.claude/memory itself -- every verb silently executed THAT
+# copy and reported on ITS database. Measured by the seat: the same launcher, the
+# same PATH, the same env, from two cwds, answering about two different brains,
+# one of them reporting `db_present: False` about a brain that is fine.
+#
+# `-c` also puts '' (cwd) at sys.path[0], but it does so BEFORE our code runs, so
+# we can pop it -- leaving the launcher's PYTHONPATH entry first. On Python >= 3.11
+# `-P` / PYTHONSAFEPATH=1 does the same declaratively; use it when the floor rises.
+# Do NOT `cd "$PARENT_DIR"`: doctor and `hooks status` read the project-level
+# settings chain from the INVOKER's cwd, and moving would silently change what
+# they resolve.
+#
+# B2 (stranger test, 2026-10-13): THE INTERPRETER IS THE ONE THE INSTALL PROVED, not the
+# first python3 on PATH. This line used to exec `python3` from PATH, and neither a login
+# shell's PATH nor the env file's carries <brain>/venv/bin -- so on an install whose Tier 1
+# lives in the venv, every verb ran the system python and answered at Tier 0
+# (tier1_error: "No module named 'sqlite_vec'") while the installer had just printed
+# "Tier 1 ACTIVE". install.sh writes the interpreter it proved into <brain>/INSTALL_RECORD
+# (`interpreter=`: the venv's python only when Tier 1 VERIFIED there, else the python it ran
+# with -- the ambient shape's recorded interpreter on the author's host). This launcher sits
+# at <brain>/voidloom/voidloom, so PARENT_DIR is <brain>. A record naming no executable file
+# (moved, deleted, a checkout with no record) falls back to python3 on PATH, as before.
+PY="python3"
+if [ -f "${PARENT_DIR}/INSTALL_RECORD" ]; then
+  _rec_py="$(awk 'index($0, "interpreter=") == 1 { v = substr($0, 13) } END { print v }' "${PARENT_DIR}/INSTALL_RECORD" 2>/dev/null || true)"
+  case "$_rec_py" in
+    /*) if [ -f "$_rec_py" ] && [ -x "$_rec_py" ]; then PY="$_rec_py"; fi ;;
+  esac
+fi
+exec "$PY" -c 'import sys, runpy; sys.path.pop(0); runpy.run_module("voidloom", run_name="__main__", alter_sys=True)' "$@"

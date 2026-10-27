@@ -1,0 +1,16 @@
+[Unit]
+Description=Wizard Library Cognitive Map — weekly memory-constellation HTML regen
+After=network.target
+
+[Service]
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/cognitive_map.py \
+    %h/.claude/memory/claude_memory.db \
+    %h/.claude/memory/cognitive_map.html \
+    --trigger cron
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=120

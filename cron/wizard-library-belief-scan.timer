@@ -1,0 +1,20 @@
+[Unit]
+Description=Voidloom belief engine — nightly contradiction sweep
+
+[Timer]
+# AFTER the sleep loop (22:30) and the dream pipeline, because both ENQUEUE:
+# every stored memory marks itself dirty, so sweeping before them would leave
+# the night's own writes for the following day. The queue is a dirty-SET stamped
+# with processed_at, not a delete-queue, so a re-run is idempotent and a missed
+# night is caught up rather than lost.
+# 22:45 — after the 22:30 sleep loop (~97 s) and before any late-night jobs of your own.
+# Moved from 23:30 on 2026-09-17: the 8-night ledger showed this fired on time
+# 4 of 8 nights and ~10 h late the rest, because the host sleeps between 22:30
+# and 23:30 about half the nights. The block's real work is ~3 min; keep it
+# inside the window the host is reliably awake. Recall: vl_evening_block_swap.
+OnCalendar=*-*-* 22:45:00
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,88 @@
+# THE CLEAN ROOM: a stranger's first install, on a machine that has never seen Voidloom.
+#
+# A fresh GitHub runner: no brain, no model cache, no GPU, no terminal (the way an AI agent runs the
+# installer). It follows the README's install path with the answers a person would give (including yes to wiring the session hook), then proves
+# the brain is alive, stores and recalls a memory by meaning, previews and runs the uninstaller, and
+# checks the memories survived it. Every step is timed. Run by hand, and on every release tag.
+name: clean-room
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clean-room-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stranger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CUDA_VISIBLE_DEVICES: ""
+      OUT: ${{ github.workspace }}/clean-room
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install (no terminal; the answers passed as flags; CPU)
+        run: |
+          set -uo pipefail
+          mkdir -p "$OUT"
+          start=$(date +%s)
+          bash install.sh --force-cpu --thinker off --approvals auto --wire-hooks 2>&1 | tee "$OUT/install.log"
+          rc=${PIPESTATUS[0]}
+          echo "install rc=$rc wall_s=$(( $(date +%s) - start ))" | tee "$OUT/install.rc"
+          exit $rc
+
+      - name: validate -- the self-check
+        run: |
+          set -uo pipefail
+          PY="$(sed -n 's/^interpreter=//p' ~/.claude/memory/INSTALL_RECORD)"; PY="${PY:-python3}"
+          "$PY" ~/.claude/memory/install/self_check.py 2>&1 | tee "$OUT/self_check.log"
+          test "${PIPESTATUS[0]}" -eq 0
+          grep -q "YOUR BRAIN IS ALIVE" "$OUT/self_check.log"
+
+      - name: validate -- doctor, then store and recall by meaning
+        run: |
+          set -uo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          voidloom doctor 2>&1 | tee "$OUT/doctor.log" || true
+          start=$(date +%s)
+          voidloom store --content "The deployment checklist lives in the ops runbook; always run the smoke test before tagging a release." \
+              --category workflow_pattern --tags "clean-room" --importance 0.8 --json | tee "$OUT/store.json"
+          voidloom recall --query "what should I do before I cut a release?" --top-k 5 --json | tee "$OUT/recall.json"
+          echo "store+recall wall_s=$(( $(date +%s) - start ))" | tee -a "$OUT/install.rc"
+          python3 - "$OUT/recall.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          txt = json.dumps(d)
+          assert "smoke test before tagging" in txt, "the stored memory was not recalled"
+          print("recall by meaning: OK")
+          PY
+
+      - name: uninstall -- preview, then remove, then check the memories survived
+        run: |
+          set -uo pipefail
+          grep -q session_start_inject "$HOME/.claude/settings.json" || { echo "premise: the install should have wired the session hook"; exit 1; }
+          bash uninstall.sh | tee "$OUT/uninstall_preview.log"
+          test -x "$HOME/.local/bin/voidloom" || test -L "$HOME/.local/bin/voidloom"
+          bash uninstall.sh --yes | tee "$OUT/uninstall.log"
+          test ! -e "$HOME/.local/bin/voidloom"
+          grep -q session_start_inject "$HOME/.claude/settings.json" 2>/dev/null && { echo "the session hook is still wired"; exit 1; }
+          test -f "$HOME/.claude/memory/claude_memory.db"
+          test ! -d "$HOME/.claude/memory/organs" || [ -z "$(ls -A "$HOME/.claude/memory/organs")" ]
+          echo "uninstall kept the brain and removed the code: OK"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clean-room
+          path: clean-room/

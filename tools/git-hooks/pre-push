@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# pre-push -- before anything leaves this machine:
+#   1. to the PUBLIC repository, only main and v* tags may be pushed (a stray branch from a
+#      clone that once held private history would otherwise publish it);
+#   2. every commit being pushed passes the leak gate (added lines, messages, identities).
+# Installed by tools/git-hooks/install.sh. CI runs the same gate on the server side.
+set -u
+REMOTE="$1"; URL="$2"
+ROOT="$(git rev-parse --show-toplevel)" || exit 1
+ZERO=0000000000000000000000000000000000000000
+PUBLIC_RE="${VOIDLOOM_PUBLIC_REMOTE_RE:-void-wright/voidloom(\.git)?$}"
+ARGS=()
+[ "$(git config --get voidloom.requireDenylist)" = "true" ] && ARGS+=(--require-denylist)
+rc=0
+while read -r LREF LSHA RREF RSHA; do
+    [ -z "${LREF:-}" ] && continue
+    if [[ "$URL" =~ $PUBLIC_RE ]]; then
+        case "$RREF" in
+            refs/heads/main|refs/tags/v*) ;;
+            *) echo "pre-push: REFUSED -- only main and v* tags go to the public repository, not '$RREF'" >&2; rc=1; continue ;;
+        esac
+    fi
+    [ "$LSHA" = "$ZERO" ] && continue                      # a deletion carries no content
+    if [ "$RSHA" = "$ZERO" ]; then
+        RANGE="$LSHA --not --remotes=$REMOTE"          # a new ref: every commit the remote does not have
+    else
+        RANGE="$RSHA..$LSHA"
+    fi
+    [ -z "$(git rev-list $RANGE | head -1)" ] && continue
+    python3 "$ROOT/tools/leak_gate.py" --range "$RANGE" ${ARGS[@]+"${ARGS[@]}"} || rc=1
+done
+exit $rc

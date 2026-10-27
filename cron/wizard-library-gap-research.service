@@ -1,0 +1,14 @@
+[Unit]
+Description=Wizard Library Gap Research — dispatch auto-research for top knowledge gaps
+After=network.target
+
+[Service]
+EnvironmentFile=-%h/.voidloom/wizard-library-env
+Type=oneshot
+Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/gap_mapping.py --research --method claude_cli --max-gaps 5 %h/.claude/memory/claude_memory.db
+WorkingDirectory=%h/.claude/memory
+StandardOutput=journal
+StandardError=journal
+# Budget: 5 gaps x 300s max each = 1500s ceiling, plus overhead.
+TimeoutStartSec=1800

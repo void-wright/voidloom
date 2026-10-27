@@ -1,0 +1,19 @@
+[Unit]
+Description=Wizard Library Affect Probe Timer — daily 9 AM local time (L5-M2 Affect Lighthouse trial)
+
+[Timer]
+# WSL2 HYBRID cron pattern (memory #3674):
+# Daily at 9:00 AM local time. Windows Task Scheduler wakes WSL at 8:59 AM.
+# Persistent=true catches missed runs (laptop lid closed, WSL suspended).
+# 9 AM chosen to offset from the nightly sleep-loop (10:30 PM) and dreaming
+# (also nightly), and to run AFTER the previous day's work is on disk so the
+# forward-only scan has a full day of new assistant text to walk.
+#
+# Off-by-construction: this timer may run every day, but the scan writes ZERO
+# quarantine rows unless VOIDLOOM_AFFECT_PROBE is set AND the 28-day trial
+# window is still open (both checked by the module's probe_enabled()).
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

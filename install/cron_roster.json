@@ -1,0 +1,322 @@
+{
+ "_doc": [
+  "THE CRON ROSTER -- the ONE declaration of which packaged timers an installer arms.",
+  "Council #12 (2026-09-18): install.sh's CRON_DEFS armed 6, install/install_crons.sh armed 4,",
+  "the package ships 17 timers, and sleep-loop -- the only organ that writes consolidation_sources --",
+  "was in neither table. A stranger who installed with crons got a brain that never consolidated.",
+  "",
+  "Every packaged cron/wizard-library-*.timer MUST appear here with arm = armed-by-default or",
+  "ships-as-template, explicitly and with a reason. Both installers read this file through",
+  "install/cron_roster.py; neither carries a table of its own. voidloom/tests/test_cron_roster.py",
+  "binds this file to cron/*.timer and cron/*.service in both directions.",
+  "",
+  "exec is relative to the brain directory and MUST equal the packaged service's ExecStart after",
+  "%h/.claude/memory/ -> '', the brain DB -> {DB}, the sidecar sleep config -> {CFG},",
+  "%h/.claude/memory/<x> -> {BRAIN}/<x>. systemd is the packaged OnCalendar BYTE FOR BYTE: the package",
+  "ships no time zone, so every timer fires in the host's local time (R3). timeout is the packaged",
+  "TimeoutStartSec, or null when the packaged unit carries none (a oneshot then has no start",
+  "timeout, exactly as packaged). Placeholders are substituted by the installer, never here.",
+  "",
+  "The ONE template (install/install_crons.sh install_linux) renders the majority shape: After=",
+  "network.target, Type=oneshot, Environment=PYTHON_KEYRING_BACKEND, EnvironmentFile=-<env file>,",
+  "ExecStart, WorkingDirectory, journal stdout/stderr, TimeoutStartSec; the timer: OnCalendar,",
+  "Persistent=true, WantedBy=timers.target. What a packaged unit carries BEYOND that shape is",
+  "declared per unit here, so the rendered body equals the packaged body (round-1 iteration-2",
+  "reflection, item 2 -- the template used to render After=network-online.target, matched by 0 of",
+  "17 packaged units, and lost organ-run-log's Nice=/Environment=PATH=/Documentation=):",
+  "  service_extra: Key=Value lines added to the service (routed to [Unit]/[Service]/[Install] by",
+  "                 key; an After= here replaces the template's After=);",
+  "  timer_extra:   Key=Value lines added to the timer (same routing; extra OnCalendar= lines allowed);",
+  "  service_omit:  template lines the packaged unit does NOT carry, matched by prefix.",
+  "{HOME_LOCAL_BIN} -> $HOME/.local/bin. voidloom/tests/test_cron_roster.py renders every unit through",
+  "install_crons.sh --dry-run and proves the directive set equals the packaged unit's, all 17.",
+  "",
+  "Interpreter: the installers run these units with the Tier-1 venv python when it exists",
+  "(organs that need sqlite_vec or torch), else the system python3.",
+  "",
+  "thinks (model-choice unit, Round 1): true when the unit's PACKAGED invocation reaches organs/thinker.py on a",
+  "normal run -- it asks the owner's recorded overnight thinker (<brain>/THINKER_RECORD), or takes its simple",
+  "path when the owner answered e) not now. `cron_roster.py thinks` lists them: the units an installer may not arm",
+  "until the thinker question has an answer. sleep-loop is false because its packaged config (cron/",
+  "sleep-loop-config.json) is consolidation_mode heuristic; an owner config naming llm makes it think too.",
+  "The units' environment stays minimal: no thinker credential belongs in the env file -- the thinker reads",
+  "~/.voidloom/thinker/ and hands each backend only its own credential.",
+  "",
+  "claude_credential (Round 2 wave 1, M13 with the owner's condition): how the unit's packaged invocation gets a",
+  "Claude credential -- thinker (through organs/thinker.py, which reads ~/.voidloom/thinker/claude.env before any",
+  "legacy home), env-file (it reads CLAUDE_CODE_OAUTH_TOKEN or an API key from its OWN environment, or launches",
+  "claude itself), none. DERIVED from the code (`cron_roster.py claude-callers --derive`: the entry points' import",
+  "closure over organs/, a static over-approximation) and pinned to it by voidloom/tests/test_cron_roster.py. `voidloom",
+  "thinker status`, the installer's DONE and the doctor say the owner's env-file token line can go ONLY when no armed",
+  "unit is env-file; otherwise they say it is STILL NEEDED and name the units."
+ ],
+ "arm_values": [
+  "armed-by-default",
+  "ships-as-template"
+ ],
+ "units": {
+  "sleep-loop": {
+   "arm": "armed-by-default",
+   "thinks": false,
+   "claude_credential": "thinker",
+   "why": "the only organ that writes consolidation_sources; without it a brain never consolidates (the 93-day defect, #20151: first run 9 clusters, second run idempotent)",
+   "exec": "organs/claude_memory.py sleep --config {CFG}",
+   "systemd": "*-*-* 22:30:00",
+   "launchd": "daily:22:30",
+   "timeout": 600,
+   "desc": "Sleep Loop — nightly memory consolidation cycle"
+  },
+  "dreaming": {
+   "arm": "armed-by-default",
+   "thinks": true,
+   "claude_credential": "thinker",
+   "why": "nightly phase sequencer; LLM-billed only when a token exists, otherwise heuristic; After= also names the daytime unit so a same-second Persistent catch-up waits for the shared dream lock instead of losing the night (#20269)",
+   "exec": "organs/dream_pipeline.py run {DB}",
+   "systemd": "*-*-* 22:00:00",
+   "launchd": "daily:22:00",
+   "timeout": 1800,
+   "desc": "Memory Dreaming — unified phase sequencer",
+   "service_extra": [
+    "After=network.target wizard-library-dream-daytime.service",
+    "SuccessExitStatus=79"
+   ]
+  },
+  "anti-recency": {
+   "arm": "armed-by-default",
+   "thinks": false,
+   "claude_credential": "thinker",
+   "why": "weekly, local, no LLM; keeps foundation memories reachable",
+   "exec": "organs/anti_recency.py --weekly {DB}",
+   "systemd": "Wed *-*-* 08:00:00",
+   "launchd": "weekly:3:08:00",
+   "timeout": 120,
+   "desc": "Anti-Recency Resurfacing"
+  },
+  "whisper-digest": {
+   "arm": "armed-by-default",
+   "thinks": true,
+   "claude_credential": "thinker",
+   "why": "weekly digest of the whisper network; LLM mode degrades to heuristic without a token",
+   "exec": "organs/whisper_network.py --digest {DB} --mode llm",
+   "systemd": "Fri *-*-* 08:00:00",
+   "launchd": "weekly:5:08:00",
+   "timeout": 300,
+   "desc": "Whisper Digest"
+  },
+  "skill-graduation": {
+   "arm": "armed-by-default",
+   "thinks": false,
+   "claude_credential": "none",
+   "why": "weekly, local, no LLM; promotes provisional skills",
+   "exec": "organs/skill_graduation.py {DB} --run --graduated-by cron",
+   "systemd": "Fri *-*-* 08:30:00",
+   "launchd": "weekly:5:08:30",
+   "timeout": 120,
+   "desc": "Skill Graduation"
+  },
+  "gap-mapping": {
+   "arm": "armed-by-default",
+   "thinks": false,
+   "claude_credential": "thinker",
+   "why": "weekly inventory, local, no LLM (the research half is a template, see gap-research)",
+   "exec": "organs/gap_mapping.py --run {DB}",
+   "systemd": "Mon *-*-* 08:00:00",
+   "launchd": "weekly:1:08:00",
+   "timeout": 600,
+   "desc": "Gap Mapping inventory"
+  },
+  "self-eval": {
+   "arm": "armed-by-default",
+   "thinks": true,
+   "claude_credential": "thinker",
+   "why": "monthly; LLM-billed only with a token",
+   "exec": "organs/monthly_self_eval.py --run {DB}",
+   "exec_post": "organs/monthly_self_eval.py --surface {DB}",
+   "systemd": "*-*-01 08:00:00",
+   "launchd": "monthly:01:08:00",
+   "timeout": 300,
+   "desc": "Monthly Brain Self-Eval"
+  },
+  "organ-run-log": {
+   "arm": "armed-by-default",
+   "thinks": false,
+   "claude_credential": "none",
+   "why": "the SENSOR for this roster (#17678, the pairing rule): hourly, local, no LLM; it records every armed unit's runs so silence is a row, not a guess",
+   "exec": "organs/organ_run_log.py observe --db {DB}",
+   "systemd": "*-*-* *:05:00",
+   "launchd": "hourly:05",
+   "timeout": null,
+   "desc": "Organ run ledger — observes the armed units",
+   "service_extra": [
+    "Documentation=file:{BRAIN}/organs/organ_run_log.py",
+    "After=default.target",
+    "Environment=PATH={HOME_LOCAL_BIN}:/usr/local/bin:/usr/bin:/bin",
+    "Nice=10"
+   ],
+   "timer_extra": [
+    "RandomizedDelaySec=30"
+   ],
+   "service_omit": [
+    "Environment=PYTHON_KEYRING_BACKEND",
+    "EnvironmentFile=",
+    "WorkingDirectory=",
+    "StandardOutput=",
+    "StandardError="
+   ]
+  },
+  "gap-research": {
+   "arm": "ships-as-template",
+   "thinks": true,
+   "claude_credential": "thinker",
+   "why": "calls `claude -p` on every fire and bills the operator's token; arm it deliberately once the token exists (WIZARD_CRON_ONLY=gap-research with install_crons.sh)",
+   "exec": "organs/gap_mapping.py --research --method claude_cli --max-gaps 5 {DB}",
+   "systemd": "Mon *-*-* 08:30:00",
+   "launchd": "weekly:1:08:30",
+   "timeout": 1800,
+   "desc": "Gap Research — dispatch auto-research for top knowledge gaps"
+  },
+  "cognitive-map": {
+   "arm": "ships-as-template",
+   "thinks": false,
+   "claude_credential": "none",
+   "why": "renders an HTML constellation nobody opens by default; opt in when you read it",
+   "exec": "organs/cognitive_map.py {DB} {BRAIN}/cognitive_map.html --trigger cron",
+   "systemd": "Sun *-*-* 18:00:00",
+   "launchd": "weekly:0:18:00",
+   "timeout": 120,
+   "desc": "Cognitive Map — weekly memory-constellation HTML regen"
+  },
+  "pre-cognitive": {
+   "arm": "ships-as-template",
+   "thinks": false,
+   "claude_credential": "thinker",
+   "why": "loads the embedding model every 30 minutes, 08:00-21:45 -- 28 model loads a day; on a CPU host that is the whole afternoon. Opt in on a GPU host that wants the pre-warmed banner",
+   "exec": "organs/precognitive_cache_refresh.py {DB} --top-k 15 --ttl-hours 24",
+   "systemd": "*-*-* 08..21:15,45:00",
+   "launchd": "halfhourly:08-21:15,45",
+   "timeout": 300,
+   "desc": "Pre-Cognitive Recall — refresh anticipation cache + banner"
+  },
+  "affect-probe": {
+   "arm": "ships-as-template",
+   "thinks": false,
+   "claude_credential": "none",
+   "why": "L5-M2 Affect Lighthouse TRIAL instrument, not a product organ; its verdicts are still being calibrated (#20006)",
+   "exec": "organs/affect_probe_scan.py",
+   "systemd": "*-*-* 09:00:00",
+   "launchd": "daily:09:00",
+   "timeout": 300,
+   "desc": "Affect Probe — daily forward-only sycophancy smoke scan"
+  },
+  "arcane-manifest": {
+   "arm": "ships-as-template",
+   "thinks": true,
+   "claude_credential": "thinker",
+   "why": "quarterly council-authored prose with haiku members and an opus synthesis: LLM-billed, and it shells out to `claude -p`",
+   "exec": "organs/arcane_manifest.py {DB} --run --model-members haiku --model-synthesis opus --timeout 180",
+   "systemd": "*-01,04,07,10-01 09:00:00",
+   "launchd": null,
+   "timeout": 1200,
+   "desc": "Arcane Manifest — quarterly council co-authored prose narrative"
+  },
+  "belief-scan": {
+   "arm": "ships-as-template",
+   "thinks": false,
+   "claude_credential": "thinker",
+   "why": "proposes contradiction edges into the approvals queue; arm it once there is a reader of that queue on this machine",
+   "exec": "organs/belief_cli.py scan --limit 200 --json",
+   "systemd": "*-*-* 22:45:00",
+   "launchd": "daily:22:45",
+   "timeout": 1800,
+   "desc": "Belief engine — drain the scan queue and propose contradiction edges",
+   "service_extra": [
+    "Documentation=file:{BRAIN}/organs/belief_cli.py",
+    "After=default.target",
+    "Environment=PATH={HOME_LOCAL_BIN}:/usr/local/bin:/usr/bin:/bin",
+    "Nice=15",
+    "WantedBy=default.target"
+   ],
+   "timer_extra": [
+    "RandomizedDelaySec=120"
+   ],
+   "service_omit": [
+    "Environment=PYTHON_KEYRING_BACKEND",
+    "WorkingDirectory=",
+    "StandardOutput=",
+    "StandardError="
+   ]
+  },
+  "counterfactual-revisit": {
+   "arm": "ships-as-template",
+   "thinks": true,
+   "claude_credential": "thinker",
+   "why": "quarterly LLM-billed decision review; four OnCalendar lines emulate a quarter",
+   "exec": "organs/counterfactual_memory.py --revisit {DB}",
+   "systemd": "*-01-01 08:00:00",
+   "launchd": null,
+   "timeout": 1800,
+   "desc": "Counterfactual Revisit — quarterly decision path review",
+   "timer_extra": [
+    "OnCalendar=*-04-01 08:00:00",
+    "OnCalendar=*-07-01 08:00:00",
+    "OnCalendar=*-10-01 08:00:00"
+   ]
+  },
+  "dream-daytime": {
+   "arm": "ships-as-template",
+   "thinks": true,
+   "claude_credential": "thinker",
+   "why": "the 14:00 GPU-burst window is one machine's daily rhythm (the author is not gaming then); a stranger's afternoon is not scheduled by this package",
+   "exec": "organs/dream_pipeline.py run {DB} --daytime",
+   "systemd": "*-*-* 14:00:00",
+   "launchd": "daily:14:00",
+   "timeout": 3600,
+   "desc": "Dream Pipeline daytime heavy phases",
+   "service_extra": [
+    "SuccessExitStatus=79"
+   ]
+  },
+  "organ-yield": {
+   "arm": "ships-as-template",
+   "thinks": false,
+   "claude_credential": "thinker",
+   "why": "a sentinel over the ledger that organ-run-log writes; arm it after a week of ledger rows exist to judge, or it reports every organ as yielding nothing",
+   "exec": "organs/organ_yield_sentinel.py {DB}",
+   "systemd": "*-*-* 09:15:00",
+   "launchd": "daily:09:15",
+   "timeout": null,
+   "desc": "Organ yield sentinel — reports organs that run but produce nothing",
+   "service_extra": [
+    "Documentation=https://github.com/void-wright/voidloom",
+    "SuccessExitStatus=0 3",
+    "WantedBy=default.target"
+   ],
+   "timer_extra": [
+    "Documentation=https://github.com/void-wright/voidloom",
+    "RandomizedDelaySec=300"
+   ],
+   "service_omit": [
+    "Environment=PYTHON_KEYRING_BACKEND",
+    "WorkingDirectory="
+   ]
+  },
+  "embed-backfill": {
+   "arm": "armed-by-default",
+   "thinks": false,
+   "claude_credential": "thinker",
+   "why": "round 1 (L5): the safety net for organ write paths that stored a memory without a vector (359 found by the 2026-10-14 health check); idempotent, refuses rather than guessing a tier, exit 3 (keyword-only Tier 0) admitted. Armed by the owner's ruling (2026-10-15): it makes no LLM call and loads the embedder once a day, so a missed vector is repaired by morning instead of waiting for someone to notice",
+   "exec": "organs/embed_backfill.py {DB} --limit 2000 --json",
+   "systemd": "*-*-* 09:40:00",
+   "launchd": "daily:09:40",
+   "timeout": 1800,
+   "desc": "Embedding backfill — a vector for every live memory stored without one",
+   "service_extra": [
+    "Nice=15",
+    "SuccessExitStatus=3"
+   ],
+   "timer_extra": [
+    "RandomizedDelaySec=120"
+   ]
+  }
+ }
+}

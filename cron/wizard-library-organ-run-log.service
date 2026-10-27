@@ -1,0 +1,10 @@
+[Unit]
+Description=Voidloom organ ledger — observe declared units and record their runs (TO-05)
+Documentation=file:%h/.claude/memory/organs/organ_run_log.py
+After=default.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/organ_run_log.py observe --db %h/.claude/memory/claude_memory.db
+Nice=10
