@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 398,
+    "core": 399,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 353,
+    "all": 354,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 386,
+    "brain": 387,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "11c96bf",
+  "derived_at_head": "e9567c6",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 416,
+  "entries": 417,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 7610,
+   "bytes": 7902,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "982ab11c921c25c598ac9fd50dc6038401ca426ef60e43f99a497f84cd78c7db",
+   "sha256": "df3be6a10bed80cf69f9c3d2414e7bce44a2a1c6bb090f45812804d4d2500320",
    "src": "CHANGELOG.md"
   },
   {
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "65fee456f007ad68a60e5901fc8169bab93644b1c6e7f4b7b2636e8de90bb973",
+   "sha256": "991e78bee98bcc95bb09fa4e86ae31098da9e6342dc8f40d1652e5aa89e037f6",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1675,13 +1675,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 53828,
+   "bytes": 54351,
    "component": "core",
    "dst": "organs/embedding_upgrade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6f4432419b2126dfeb22ea014c19344835dc7ccda5e3d448e20874eac5116fa4",
+   "sha256": "1efbdd285c133057ce3b3a5722116739e9b4d00f00bbc5372c20b585be32d7fd",
    "src": "organs/embedding_upgrade.py"
   },
   {
@@ -1875,13 +1875,13 @@
    "src": "organs/quickening.py"
   },
   {
-   "bytes": 23159,
+   "bytes": 23431,
    "component": "core",
    "dst": "organs/qwen_reranker.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a1289ae81022d7eb2a12f80d54f1b158ef4707d5986ccb33d295f1298ca209dc",
+   "sha256": "6866dc3a4ef4ce98d3d4861f85953e4b37bd2777748d8eebc253edcd3e2bd409",
    "src": "organs/qwen_reranker.py"
   },
   {
@@ -3643,6 +3643,16 @@
    "root": "brain",
    "sha256": "fab053d8ac2413060559d516f42c17319bfc95a566cacfd9fa23dc214061eb99",
    "src": "voidloom/tests/test_preflight_verb.py"
+  },
+  {
+   "bytes": 3887,
+   "component": "core",
+   "dst": "voidloom/tests/test_qwen_revision_pinned.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "ad2c57e0c5c3551a8c707f397e910c4bb4cdb3b5888e5d1d9696d1be38bfa49a",
+   "src": "voidloom/tests/test_qwen_revision_pinned.py"
   },
   {
    "bytes": 3824,

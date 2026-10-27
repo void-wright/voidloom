@@ -12,6 +12,12 @@ All notable changes to Voidloom are recorded here. The format follows
   your own field; the default stays generic. A `research_focus` key in a `--config` file wins
   over it.
 
+### Changed
+
+- The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned
+  HuggingFace commit, as nomic and jina already did. Results no longer depend on when the
+  model was downloaded, and a warm cache loads offline. A test fails if either pin is removed.
+
 ## [1.0.0] — 2026-10-27
 
 The first public release, under the Apache License 2.0.

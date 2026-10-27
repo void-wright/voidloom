@@ -202,6 +202,10 @@ NOMIC_DIM = 768
 # (both endpoints returned the identical head SHA per model).
 JINA_REVISION = "dd76d535f5447ca3897a9c893fb1e612ead98192"
 NOMIC_REVISION = "e9b6763023c676ca8431644204f50c2b100d9aab"
+# Qwen3-Embedding-0.6B is Apache-2.0 and loads WITHOUT remote code, so the pin here
+# is for reproducibility, not RCE: an unpinned `main` could change the weights
+# between two benchmark runs. Verified 2026-10-27 (refs and commits/main agree).
+QWEN_REVISION = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
 
 # Jina v5 LoRA adapter tasks (from adapters/ directory)
 JINA_TASK_RETRIEVAL = "retrieval"
@@ -378,7 +382,14 @@ def _get_qwen_model():
     _quiet_model_load_noise()
     device = _torch_device(torch)
     logger.info("Loading Qwen3-Embedding-0.6B on %s...", device)
-    model = SentenceTransformer(QWEN_MODEL_NAME, device=device)
+    # H11 offline: warm cache => local-only, the same as the nomic and jina loaders.
+    offline = _hf_offline_ok(QWEN_MODEL_NAME)
+    model = SentenceTransformer(
+        QWEN_MODEL_NAME,
+        revision=QWEN_REVISION,
+        device=device,
+        local_files_only=offline,
+    )
     _qwen_model_cache["model"] = model
     return model
 

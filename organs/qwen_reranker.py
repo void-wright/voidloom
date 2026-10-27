@@ -60,6 +60,9 @@ logger = logging.getLogger("voidloom.qwen_reranker")
 # Model identity + device (mirror hybrid_retrieval's reranker constants).
 # ============================================================
 QWEN_RERANKER_MODEL_NAME = "Qwen/Qwen3-Reranker-0.6B"
+# Pinned for reproducibility (Apache-2.0, no remote code). Verified 2026-10-27:
+# HF refs and commits/main agree on this SHA.
+QWEN_RERANKER_REVISION = "e61197ed45024b0ed8a2d74b80b4d909f1255473"
 QWEN_RERANKER_DEVICE = "cuda:0"  # the CUDA case only, for diagnostics: the device is _torch_device()'s answer
 
 # Per-(query, doc) max length fed to the model (the judge prompt prefix/suffix are
@@ -221,7 +224,7 @@ def load_model(force_reload: bool = False) -> Optional[Dict[str, Any]]:
         # position is logits[:, -1, :] for EVERY row in a batch (this is exactly
         # why the model card sets it). Right padding would read a PAD position.
         tokenizer = AutoTokenizer.from_pretrained(
-            QWEN_RERANKER_MODEL_NAME, padding_side="left"
+            QWEN_RERANKER_MODEL_NAME, revision=QWEN_RERANKER_REVISION, padding_side="left"
         )
         device = _torch_device(torch)
         # FP16 on every accelerator (CUDA/ROCm, MPS, XPU: halves memory vs fp32; Turing
@@ -229,6 +232,7 @@ def load_model(force_reload: bool = False) -> Optional[Dict[str, Any]]:
         dtype = torch.float16 if device != "cpu" else torch.float32
         model = AutoModelForCausalLM.from_pretrained(
             QWEN_RERANKER_MODEL_NAME,
+            revision=QWEN_RERANKER_REVISION,
             torch_dtype=dtype,
             # NO attn_implementation="flash_attention_2": FA2 needs Ampere+; this
             # is Turing sm_75. The default ("eager"/"sdpa") path is correct here.
