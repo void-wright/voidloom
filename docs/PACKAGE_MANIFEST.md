@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-27T18:48:24Z from the checkout at `c3ba61d`.
+> Generated 2026-10-27T19:47:50Z from the checkout at `c215ca7`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| files tracked | 418 |
-| files hashed | 418 |
-| total bytes | 9966880 |
+| files tracked | 419 |
+| files hashed | 419 |
+| total bytes | 9977350 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -94,7 +94,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  160 files, 2594892 bytes
+### `voidloom` — The CLI facade  ·  161 files, 2602862 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -207,6 +207,7 @@
 | `voidloom/tests/test_reranker_gate.py` | 27923 | `0f272e2e01596bcb` |
 | `voidloom/tests/test_schema_migrator.py` | 8188 | `6aa0410c65f897ea` |
 | `voidloom/tests/test_seed_anchor_delta.py` | 19453 | `6b97c55bff94c3ad` |
+| `voidloom/tests/test_self_check_scale.py` | 7970 | `1f90a2e72b949c63` |
 | `voidloom/tests/test_self_check_seed_scope_r3.py` | 15061 | `fa7f001f0c98be46` |
 | `voidloom/tests/test_self_eval_counts_its_own_fires_d26.py` | 2182 | `21f022651716a9c2` |
 | `voidloom/tests/test_sentinel_live_run_r2.py` | 7816 | `1846f74567a4003a` |
@@ -299,7 +300,7 @@
 | `migrations/migration_041_belief_quarantine.sql` | 8065 | `c09d085857957b88` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 931765 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 934191 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -316,12 +317,12 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 121804 | `02671b153b43595c` |
+| `install/lay_manifest.json` | 122101 | `c336f6142c2a7701` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
 | `install/requirements.txt` | 9268 | `7b4fd5182fbf243a` |
-| `install/self_check.py` | 50913 | `5f9f5a6e516c3b97` |
+| `install/self_check.py` | 53042 | `6fec2301094e3728` |
 | `install/tier1_probe.py` | 42737 | `01f45138ccadea67` |
 | `install/wire_persona.ps1` | 8385 | `6c760a0105833234` |
 | `install/wire_persona.sh` | 10855 | `0896d140f773a1bc` |
@@ -454,7 +455,7 @@
 | `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 215602 bytes
+### `docs` — Documentation  ·  12 files, 215676 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -462,10 +463,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19332 | `6af8d4be38a85697` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8185 | `cb9abe672f9f3156` |
+| `docs/LAYOUT.md` | 8185 | `d48dc7ec70c71748` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 31758 | `fb540f2b40e321c7` |
+| `docs/PACKAGE_MANIFEST.md` | 31832 | `5cc196bb6679e695` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

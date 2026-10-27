@@ -332,30 +332,51 @@ def check_schema(checks: Checks, db_path: Path):
     return conn
 
 
-def _recall(conn, query: str, limit: int = 5):
-    """Run the SAME FTS5 recall the lite CLI runs; return list of (id, summary)."""
-    sql = """
+def _recall(conn, query: str, limit: int = 5, seed_tag: str = None):
+    """Run the SAME FTS5 recall the lite CLI runs; return list of (id, summary).
+
+    With ``seed_tag``, rank only the seed pack's own rows (tagged with the pack's common tag). The
+    ranking SQL is the lite CLI's; only the candidate set is narrowed."""
+    scope = ""
+    params = []
+    if seed_tag:
+        scope = "\n      AND m.id IN (SELECT memory_id FROM memory_tags WHERE tag = ?)"
+        params = [seed_tag]
+    sql = f"""
     SELECT m.id, m.summary, bm25(memories_fts) AS rank
     FROM memories_fts
     JOIN memories m ON m.rowid = memories_fts.rowid
     WHERE memories_fts MATCH ?
-      AND m.is_archived = 0
+      AND m.is_archived = 0{scope}
     ORDER BY rank ASC, m.importance DESC, m.created_at DESC
     LIMIT ?
     """
     sanitized = _fts_match_expr(query)
     if not sanitized:
         return []
-    rows = conn.execute(sql, (sanitized, limit)).fetchall()
+    rows = conn.execute(sql, [sanitized, *params, limit]).fetchall()
     return [(r[0], r[1]) for r in rows]
+
+
+def _recall_returns(conn, query: str, memory_id: int) -> bool:
+    """Does keyword recall return this row at all? (Membership, not rank: a rank threshold over the
+    whole brain grows with everything else the owner writes.)"""
+    sanitized = _fts_match_expr(query)
+    if not sanitized:
+        return False
+    row = conn.execute(
+        "SELECT 1 FROM memories_fts JOIN memories m ON m.rowid = memories_fts.rowid "
+        "WHERE memories_fts MATCH ? AND m.is_archived = 0 AND m.id = ?", (sanitized, memory_id)).fetchone()
+    return row is not None
 
 
 def check_own_content_recall(checks: Checks, conn):
     """3b. (--seed-optional, on a brain that carries no seed pack) the recall path over the
     brain's OWN content: the highest-importance live memory's own most distinctive word
-    (the longest alphabetic token of its summary, >= 5 letters) must surface that memory
-    in the top 10. The same claim check 3 makes, drawn from what this brain holds rather
-    than from a pack it was never given."""
+    (the longest alphabetic token of its summary, >= 5 letters) must be returned by keyword
+    recall. Membership, not a rank: on an aged brain that word also appears in the owner's
+    other notes, so a top-N window would fail a healthy brain as it grows. The same claim
+    check 3 makes, drawn from what this brain holds rather than from a pack it was never given."""
     row = conn.execute(
         "SELECT id, summary FROM memories WHERE COALESCE(is_archived,0)=0 AND summary IS NOT NULL "
         "AND length(summary) > 0 ORDER BY importance DESC, id ASC LIMIT 1").fetchone()
@@ -371,10 +392,9 @@ def check_own_content_recall(checks: Checks, conn):
         checks.add("recall over this brain's own content", False,
                    detail="memory #%s has no word of 5+ letters to query by" % row[0])
         return
-    hits = _recall(conn, words[0], limit=10)
-    checks.add("recall over this brain's own content ('%s')" % words[0], any(h[0] == row[0] for h in hits),
-               detail="memory #%s %s in the top %d" % (row[0], "found" if any(h[0] == row[0] for h in hits)
-                                                    else "NOT found", len(hits)),
+    found = _recall_returns(conn, words[0], row[0])
+    checks.add("recall over this brain's own content ('%s')" % words[0], found,
+               detail="memory #%s %s by keyword recall" % (row[0], "returned" if found else "NOT returned"),
                fix="Keyword recall does not return the brain's own memory -- memories_fts may be out of sync "
                    "with memories; inspect with the lite CLI: claude_memory_lite.py recall --query <word>",
                means="keyword recall did not return a memory the brain holds: questions to the brain may come back empty")
@@ -426,7 +446,18 @@ def check_seed_loaded(checks: Checks, conn, seeds: list, common_tag: str, of_tot
     return tagged
 
 
-def check_recall_path(checks: Checks, conn, seeds: list, summaries: list = None):
+# How deep a probe may find its seed AMONG THE SEED PACK'S OWN ROWS. Probing the whole brain made
+# the check depend on everything else the owner had written: measured 2026-10-27 on a 31k-memory
+# brain, 'two tier embedding nomic' put its seed at rank 5 of 38 when every word was required and
+# rank 7 of 8,787 once any word could match, and an upgrade failed a healthy brain. Scoped to seed
+# rows, every probe's seed ranks 1-2 on a fresh 82-memory brain and on the 31k brain alike, and a
+# window of 3 still fails every broken ordering an independent reviewer planted (bm25 dropped from
+# the sort, rowid order, and four more).
+SEED_PROBE_WINDOW = 3
+
+
+def check_recall_path(checks: Checks, conn, seeds: list, summaries: list = None,
+                      common_tag: str = "seed-pack-agnostic"):
     """3. Recall path: a query from a seed's OWN words surfaces THAT seed.
 
     We pick a handful of seeds with distinctive topic leads and assert the matching
@@ -453,8 +484,13 @@ def check_recall_path(checks: Checks, conn, seeds: list, summaries: list = None)
         if not any(must_contain in s for s in summaries):
             continue  # this seed pack doesn't carry that topic — skip silently
         any_run = True
-        hits = _recall(conn, query, limit=5)
-        matched = any(must_contain in (summ or "") for _id, summ in hits)
+        hits = _recall(conn, query, limit=SEED_PROBE_WINDOW, seed_tag=common_tag)
+        # The target is the seed ROW (by id), not any row whose summary happens to share the phrase.
+        target = {r[0] for r in conn.execute(
+            "SELECT m.id FROM memories m WHERE m.is_archived = 0 AND m.summary LIKE ? AND m.id IN "
+            "(SELECT memory_id FROM memory_tags WHERE tag = ?)",
+            ("%" + must_contain + "%", common_tag))}
+        matched = any(_id in target for _id, _summ in hits)
         top = hits[0][1][:60] + "…" if hits else "(no results)"
         checks.add(
             f"recall '{query}' -> finds the right memory", matched,
@@ -843,7 +879,7 @@ def run_self_check(seed_optional: bool = False) -> Checks:
                         "not loaded again (an archived memory is never resurrected)" % (
                             len(arch_u), "y" if len(arch_u) == 1 else "ies", ", #".join(str(a[3]) for a in arch_u[:10])))
         check_seed_loaded(checks, conn, received, common_tag, of_total=len(seeds))
-        check_recall_path(checks, conn, received, summaries=summaries)
+        check_recall_path(checks, conn, received, summaries=summaries, common_tag=common_tag)
         check_tag_filter(checks, conn, received, common_tag)
         new_a = [a[2] for a in plan["actions"] if a[0] == "new"]
         chg_a = [a[2] for a in plan["actions"] if a[0] == "changed"]
@@ -863,7 +899,7 @@ def run_self_check(seed_optional: bool = False) -> Checks:
                     db_path, organs / "claude_memory_lite.py", seed_path))
     elif conn is not None and seeds:
         check_seed_loaded(checks, conn, seeds, common_tag)
-        check_recall_path(checks, conn, seeds)
+        check_recall_path(checks, conn, seeds, common_tag=common_tag)
         check_tag_filter(checks, conn, seeds, common_tag)
     if conn is not None:
         conn.close()

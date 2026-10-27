@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 400,
+    "core": 401,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 355,
+    "all": 356,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 388,
+    "brain": 389,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "c3ba61d",
+  "derived_at_head": "c215ca7",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 418,
+  "entries": 419,
   "platforms": [
    "all",
    "posix",
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "cb9abe672f9f31560b8ef9b98a2428d858b24b196ae7e5395234370e43812411",
+   "sha256": "d48dc7ec70c717482457e25db1f259802daa6bb77fdfcf4e3b89599f35a671f5",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1065,13 +1065,13 @@
    "src": "install/requirements.txt"
   },
   {
-   "bytes": 50913,
+   "bytes": 53042,
    "component": "core",
    "dst": "install/self_check.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "5f9f5a6e516c3b97b4d7b686caa07e14a885d22af3cc8fa999c18c8ee5731d00",
+   "sha256": "6fec2301094e3728e934e98367e49e589236a0c370c5abf7e50084871e123bcb",
    "src": "install/self_check.py"
   },
   {
@@ -3713,6 +3713,16 @@
    "root": "brain",
    "sha256": "6b97c55bff94c3adff82d8ab3187d74114f5f75c910adee00ffad8e0043b54a3",
    "src": "voidloom/tests/test_seed_anchor_delta.py"
+  },
+  {
+   "bytes": 7970,
+   "component": "core",
+   "dst": "voidloom/tests/test_self_check_scale.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "1f90a2e72b949c63d065250dd74ecd1dfda19aa047abc9723ad79591b84713cf",
+   "src": "voidloom/tests/test_self_check_scale.py"
   },
   {
    "bytes": 15061,
