@@ -6,7 +6,7 @@ catalogue pin, bounded to the files the pin names.
 
 Drew's ruling (2026-09-20, Amendment 8): *"everything that matters to get the full
 memory system officially working is considered part of the install."* Until this
-verb existed `voidstead memory install` stopped at `init`: it wrote a lock naming
+verb existed the install stopped at `init`: it wrote a lock naming
 exact bytes, reported rc 0, and the customer's FIRST `store` then downloaded 4.4 GB
 the install never mentioned -- or, offline, failed with rc 1 (`SNAPSHOT_ABSENT`,
 executed by the round-5 curator on the referent). The check column and the words

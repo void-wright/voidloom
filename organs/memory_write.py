@@ -610,10 +610,13 @@ PROVENANCE_COLUMNS = ("memory_id", "vec_table", "model_id", "model_ref", "weight
                       "dim", "content_hash", "embedded_at", "organ", "input_kind", "inputs")
 MODEL_REF_UNRESOLVED = "unresolved"
 # migration_042's declared absence: "nobody recorded the checksum of the weights
-# that produced this vector". This writer has no install lock to read the
-# checksum from, so it states the absence rather than inventing an identity; a
-# reader that compares against a lock never matches it. Same spelling as
-# MODEL_REF_UNRESOLVED, on purpose: one word for "unknown" in this table.
+# that produced this vector". Written ONLY where no checksum was computed: a
+# vector into a tier the package catalogue does not ship (jina, kept for personal
+# installs), or a vector on a brain that predates the install lock when no
+# verified embedder is resident in this process. A reader that compares against a
+# lock never matches it. Same spelling as MODEL_REF_UNRESOLVED, on purpose: one
+# word for "unknown" in this table. Every other stamp carries the checksum the
+# resident embedder COMPUTED from its bytes (embedder_lock.require_loaded_hash).
 WEIGHTS_HASH_UNRESOLVED = "unresolved"
 _PROVENANCE_MIGRATION = (Path(__file__).resolve().parent.parent / "migrations"
                          / "migration_033_embedding_provenance.sql")
@@ -783,6 +786,75 @@ def model_identity(table: str) -> Dict[str, str]:
     return {"tier": tier, "model_id": model_id, "model_ref": ref, "ref_source": source}
 
 
+def _embedder_lock():
+    """embedder_lock, imported lazily so this module's import surface stays what
+    it was (stdlib + the organs it already reached for on demand)."""
+    import embedder_lock
+    return embedder_lock
+
+
+def _weights_hash_for(conn: sqlite3.Connection, table: str, dim: int,
+                      ident: Dict[str, str]) -> Tuple[str, str]:
+    """(weights_hash, source) for a vector this call just wrote to `table`.
+
+    The install lock beside THIS connection's database is read FIRST (owner
+    decision D2), on every call, never cached:
+
+    locked brain   the checksum the resident embedder COMPUTED from its bytes
+                   (embedder_lock.require_loaded_hash, which also refuses an
+                   embedder that writes another table or width). The write must
+                   land in the table the lock names (STAMP_INCONSISTENT) and the
+                   computed checksum must be the lock's (WEIGHTS_MISMATCH).
+                   Nothing resident is a refusal: a locked brain keeps no vector
+                   whose bytes nobody checked.
+    pre-lock brain (no embedder.lock.json beside the database)
+                   a catalogue tier: the computed checksum when a verified
+                   embedder is resident, compared to the shipped catalogue entry
+                   for that tier (embedding_upgrade.brain_lock); with none
+                   resident, the declared absence 'unresolved'.
+                   any other tier (jina, personal installs): 'unresolved' --
+                   the catalogue ships no checksum for it to compare against.
+    A malformed lock refuses (LOCK_MALFORMED); it is never read as absent.
+    """
+    el = _embedder_lock()
+    try:
+        lock = el.resolve(conn)
+    except el.EmbedderLockError as e:
+        if e.code != "LOCK_MISSING":
+            raise
+        lock = None
+    if lock is not None:
+        computed = el.require_loaded_hash(vec_table=table, dim=int(dim))
+        if table != lock["vec_table"] or int(dim) != int(lock["dim"]):
+            raise el.EmbedderLockError(
+                "STAMP_INCONSISTENT",
+                f"the write landed in {table!r} at {dim} wide, but the lock at {lock.get('_path')} "
+                f"promises {lock['vec_table']!r} at {lock['dim']}; refusing to stamp a row the "
+                "lock never promised", vec_table=table, dim=int(dim),
+                lock_vec_table=lock["vec_table"], lock_dim=int(lock["dim"]))
+        if computed != lock["weights_hash"]:
+            raise el.EmbedderLockError(
+                "WEIGHTS_MISMATCH",
+                f"the vector was produced by weights {computed[:12]}… but the lock at "
+                f"{lock.get('_path')} promises {lock['weights_hash'][:12]}…; refusing to stamp "
+                "(and so to keep) a vector from a model this install did not promise",
+                computed=computed, lock_hash=lock["weights_hash"])
+        return computed, "lock"
+    shipped = {e["vec_table"]: t for t, e in el.catalogue_tiers().items()}
+    if table not in shipped or el.loaded() is None:
+        return WEIGHTS_HASH_UNRESOLVED, "unresolved"
+    computed = el.require_loaded_hash(vec_table=table, dim=int(dim))
+    import embedding_upgrade                     # lazy: it imports this module's callers
+    entry = embedding_upgrade.brain_lock(conn, tier=ident["tier"])
+    if computed != entry["weights_hash"]:
+        raise el.EmbedderLockError(
+            "WEIGHTS_MISMATCH",
+            f"the vector was produced by weights {computed[:12]}… but the shipped catalogue "
+            f"promises {entry['weights_hash'][:12]}… for {table!r}; refusing to stamp it",
+            computed=computed, lock_hash=entry["weights_hash"])
+    return computed, "catalogue"
+
+
 def _stamp_provenance(conn: sqlite3.Connection, memory_id: int, table: str, dim: int,
                       text: str, organ: str) -> Dict[str, Any]:
     """Write the stamp row. EVERY column supplied here; NONE defaulted.
@@ -794,10 +866,11 @@ def _stamp_provenance(conn: sqlite3.Connection, memory_id: int, table: str, dim:
     """
     ensure_provenance_table(conn)
     ident = model_identity(table)
+    weights_hash, weights_source = _weights_hash_for(conn, table, int(dim), ident)
     row = {
         "memory_id": int(memory_id), "vec_table": table,
         "model_id": ident["model_id"], "model_ref": ident["model_ref"],
-        "weights_hash": WEIGHTS_HASH_UNRESOLVED,
+        "weights_hash": weights_hash,
         "dim": int(dim), "content_hash": content_hash(text),
         "embedded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "organ": organ or "?",
@@ -808,7 +881,8 @@ def _stamp_provenance(conn: sqlite3.Connection, memory_id: int, table: str, dim:
         f"VALUES ({', '.join(':' + c for c in PROVENANCE_COLUMNS)})",
         row,
     )
-    return {**row, "ref_source": ident["ref_source"], "tier": ident["tier"]}
+    return {**row, "ref_source": ident["ref_source"], "tier": ident["tier"],
+            "weights_source": weights_source}
 
 
 def _insert_vector_and_stamp(conn: sqlite3.Connection, memory_id: int, table: str,

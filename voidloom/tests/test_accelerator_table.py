@@ -586,8 +586,10 @@ def test_the_sweep_sees_the_shape_it_forbids():
 
 
 def test_the_ten_sites_route_through_torch_device():
+    # claude_memory.py: 0 since its nomic load moved into embedding_upgrade's one loader (get_locked_embedder), whose
+    # single _torch_device(torch) is counted under embedding_upgrade.py; the engine keeps the resolver import.
     for rel, n in (("organs/embedding_upgrade.py", 2), ("organs/model_garden.py", 1), ("organs/website_memory.py", 1),
-                   ("organs/whisper_network.py", 1), ("organs/claude_memory.py", 1), ("organs/hybrid_retrieval.py", 1),
+                   ("organs/whisper_network.py", 1), ("organs/claude_memory.py", 0), ("organs/hybrid_retrieval.py", 1),
                    ("organs/qwen_reranker.py", 1), ("organs/wizard_config.py", 1)):
         s = (ROOT / rel).read_text(encoding="utf-8")
         assert "from voidloom_device import torch_device" in s, rel

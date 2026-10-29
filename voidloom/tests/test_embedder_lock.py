@@ -529,7 +529,7 @@ class L6_CacheResolverHonoursHfHubCache(_Tmp):
         self.assertIsNone(got, "the resolver looked outside HF_HUB_CACHE")
 
     def test_control_the_engines_offline_probe_uses_the_same_resolver(self):
-        for rel in ("organs/embedding_upgrade.py",):
+        for rel in ("organs/embedding_upgrade.py", "organs/claude_memory.py"):
             src = (ROOT / rel).read_text(encoding="utf-8")
             i = src.index("def _hf_offline_ok("); j = src.index("\ndef ", i + 10)
             self.assertIn("embedder_lock.hf_hub_cache()", src[i:j], rel)

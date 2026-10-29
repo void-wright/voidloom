@@ -191,12 +191,63 @@ def _torch_device(torch_mod) -> str:
     return _td(torch_mod)
 
 
+# Catalogue tier names -> engine tier keys, and the installer's spellings.
+_EMBED_TIER_ALIASES = {"cpu": "nomic", "gpu": "qwen", "qwen3-0.6b": "qwen"}
+_TIER_TO_CATALOGUE = {"nomic": "cpu", "qwen": "gpu"}
+
+
+def _install_lock() -> Optional[Dict[str, Any]]:
+    """The validated install lock beside DB_PATH, or None when the brain predates
+    the lock (owner decision D2: such a brain keeps the env/metadata read below).
+
+    Resolved from the DATABASE FILE, symlinks followed -- the rule the reader
+    applies to a connection's own file (embedder_lock.data_dir_of) -- so a
+    symlinked brain sees ONE lock. A malformed lock RAISES
+    embedder_lock.EmbedderLockError (LOCK_MALFORMED): it is never read as absent.
+    Never sys.exit() from here: a probe that swallows Exception would not survive
+    a SystemExit; main() turns the typed error into the envelope."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embedder_lock
+    try:
+        return embedder_lock.resolve(Path(DB_PATH).resolve())
+    except embedder_lock.EmbedderLockError as e:
+        if e.code == "LOCK_MISSING":
+            return None
+        raise
+
+
 def _active_embed_model() -> str:
     """Resolve the active embedding tier: 'nomic' | 'jina' | 'qwen'.
 
-    Priority: WIZARD_EMBED_MODEL env var > metadata.active_embedding_table >
-    'nomic'. Cached per-process (the tier is stable within a run).
+    THE INSTALL LOCK FIRST (owner decision D2), read on every call: the lock
+    beside the brain names a vec_table, the bijection `_TABLE_TO_TIER` maps it to
+    the tier, and WIZARD_EMBED_MODEL may then only AGREE -- set and disagreeing is
+    a named refusal printing both (the lock is the promise; a variable cannot
+    re-point a brain without re-embedding it).
+
+    A brain with NO lock (it predates the lock, or it embeds under a tier the
+    package catalogue does not ship, such as jina) keeps the earlier read:
+    WIZARD_EMBED_MODEL > metadata.active_embedding_table > 'nomic', cached
+    per-process.
     """
+    lock = _install_lock()
+    if lock is not None:
+        import embedder_lock
+        tier = _TABLE_TO_TIER.get(lock.get("vec_table"))
+        if tier is None:
+            raise embedder_lock.EmbedderLockError(
+                "LOCK_MALFORMED",
+                f"{lock.get('_path')} names vec_table {lock.get('vec_table')!r}, which this engine "
+                f"does not map to a tier ({sorted(_TABLE_TO_TIER)})")
+        env = os.environ.get("WIZARD_EMBED_MODEL", "").strip().lower()
+        if env and _EMBED_TIER_ALIASES.get(env, env) != tier:
+            raise embedder_lock.EmbedderLockError(
+                "WEIGHTS_MISMATCH",
+                f"WIZARD_EMBED_MODEL asks for {env!r} but the install lock at {lock.get('_path')} "
+                f"names {tier!r} ({lock['model_id']}, weights {lock['weights_hash'][:12]}…). The lock "
+                "is the promise; unset the variable, or re-embed the brain under a new lock.",
+                env=env, locked_tier=tier)
+        return tier
     if "model" in _active_model_cache:
         return _active_model_cache["model"]
     env = os.environ.get("WIZARD_EMBED_MODEL", "").strip().lower()
@@ -666,16 +717,14 @@ def _hf_offline_ok(repo_id: str) -> bool:
         v = os.environ.get(var)
         if v is not None and v.strip().lower() in ("1", "true", "yes", "on"):
             return True
-    # Warm-cache detection: scan the HF hub cache for this repo's snapshot dir.
+    # Warm-cache detection through the ONE cache resolver (embedder_lock.hf_hub_cache,
+    # huggingface_hub's own precedence: HF_HUB_CACHE > HUGGINGFACE_HUB_CACHE >
+    # HF_HOME/hub > ~/.cache/huggingface/hub). Two resolvers used to read two caches.
     try:
-        cache_root = Path(
-            os.environ.get("HF_HOME")
-            or os.environ.get("HUGGINGFACE_HUB_CACHE")
-            or (Path.home() / ".cache" / "huggingface")
-        )
-        hub = cache_root / "hub" if (cache_root / "hub").exists() else cache_root
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import embedder_lock
         marker = "models--" + repo_id.replace("/", "--")
-        cached = hub / marker / "snapshots"
+        cached = embedder_lock.hf_hub_cache() / marker / "snapshots"
         if cached.exists() and any(cached.iterdir()):
             return True
     except Exception:
@@ -684,6 +733,12 @@ def _hf_offline_ok(repo_id: str) -> bool:
 
 
 def _load_model():
+    """The nomic embedder, loaded once per process by THE ONE LOADER
+    (embedding_upgrade.get_locked_embedder) under this brain's lock -- or, for a
+    brain that predates the lock, the shipped catalogue entry for nomic (D2). The
+    snapshot's checksum is computed and compared BEFORE instantiation, and the
+    computed value is what every stamp this process writes carries. This used to
+    load nomic by a literal revision with nothing hashed."""
     if "model" in _model_cache:
         return _model_cache["model"]
     try:
@@ -698,30 +753,19 @@ def _load_model():
         logging.getLogger("sentence_transformers").setLevel(
             log.getEffectiveLevel()
         )
-        from sentence_transformers import SentenceTransformer
-        import torch
-        device = _torch_device(torch)
-        # H11 offline: on a warm cache, prefer local files so there is no HF
-        # round-trip ("Fetching 8 files"). Honor HF_HUB_OFFLINE explicitly and
-        # auto-enable local-only when the model is already cached, but never on
-        # a cold machine (first download must still reach the hub).
-        offline = _hf_offline_ok(NOMIC_MODEL_NAME)
-        # trust_remote_code is paired with a PINNED revision below: we only ever
-        # execute the model's custom code from that exact commit, never HEAD.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import embedding_upgrade
         import contextlib
         # the model's remote code print()s "<All keys matched successfully>" to STDOUT, which landed in plain recall
         # output; a load's chatter belongs on stderr
         with contextlib.redirect_stdout(sys.stderr):
-            model = SentenceTransformer(
-                NOMIC_MODEL_NAME,
-                revision="e9b6763023c676ca8431644204f50c2b100d9aab",
-                trust_remote_code=True,
-                device=device,
-                local_files_only=offline,
-            )
+            model, _lock = embedding_upgrade.get_locked_embedder(
+                embedding_upgrade.brain_lock(DB_PATH, tier="nomic"))
         _model_cache["model"] = model
         return model
     except Exception as e:
+        if getattr(e, "code", None):
+            raise                       # a typed lock refusal: main() makes the envelope
         _error(f"Failed to load embedding model: {e}")
 
 
@@ -745,11 +789,11 @@ def _encode(text: str, prefix: str = "search_document") -> bytes:
         if prefix == "search_query":
             return embedding_upgrade.encode_qwen_query(text, lock=lock)
         return embedding_upgrade.encode_qwen_document(text, lock=lock)
-    model = _load_model()
-    import numpy as np
-    query = f"{prefix}: {text}"
-    vec = model.encode(query, normalize_embeddings=True)
-    return serialize_f32(vec[:NOMIC_DIM].astype(np.float32).tolist())
+    _load_model()                       # the engine's own load path (facade-readable failure text)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embedding_upgrade
+    return embedding_upgrade.encode_locked(text, is_query=(prefix == "search_query"),
+                                           lock=embedding_upgrade.brain_lock(DB_PATH, tier="nomic"))
 
 
 def _stamp_vector_provenance(conn: sqlite3.Connection, memory_id: int,
@@ -991,8 +1035,37 @@ def _cmd_init_body(args):
     # install now starts on qwen (1024, memory_embeddings_v3), and a fresh brain
     # with no table to write to fails on its FIRST store -- after the installer
     # has already reported success.
-    _tier = _active_embed_model()
-    _tab, _dim, _repo = EMBED_TIERS[_tier]
+    #
+    # THE INSTALL LOCK (owner decision D2). A brain on a tier the package
+    # catalogue ships (nomic -> `cpu`, qwen -> `gpu`) gets
+    # <data-dir>/embedder.lock.json naming exactly ONE catalogue entry by
+    # weights_hash: a copy of the entry whose checksum
+    # tools/build_embedder_catalogue.py COMPUTED from the snapshot's bytes, and
+    # which the loader recomputes from the bytes it loads, refusing a
+    # disagreement. The tier is `--tier` / WIZARD_EMBED_MODEL when given, else
+    # what this brain already declares (an existing lock first, then
+    # metadata), else nomic. An existing lock is never re-pointed: a re-run naming
+    # another tier is a typed refusal (WEIGHTS_MISMATCH) and one that agrees is a
+    # no-op. A tier the catalogue does not ship (jina, kept for personal installs)
+    # gets no lock and keeps the metadata declaration below.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embedder_lock
+    _want = (getattr(args, "tier", None) or os.environ.get("WIZARD_EMBED_MODEL", "") or "").strip().lower()
+    _tier = _EMBED_TIER_ALIASES.get(_want, _want) if _want else _active_embed_model()
+    if _tier not in EMBED_TIERS:
+        conn.close()
+        _error(f"LOCK_NOT_SHIPPED: unknown embedding tier {_want!r}; known: {sorted(EMBED_TIERS)}")
+    _lock: Optional[Dict[str, Any]] = None
+    if _tier in _TIER_TO_CATALOGUE:
+        try:
+            _lock = embedder_lock.write_lock(Path(DB_PATH).resolve().parent, _TIER_TO_CATALOGUE[_tier],
+                                             locked_by="claude_memory.init")
+        except embedder_lock.EmbedderLockError as e:
+            conn.close()
+            _error(f"{e.code}: {e}")
+        _tab, _dim, _repo = _lock["vec_table"], int(_lock["dim"]), _lock["model_id"]
+    else:
+        _tab, _dim, _repo = EMBED_TIERS[_tier]
     conn.execute(f"""
         CREATE VIRTUAL TABLE IF NOT EXISTS {_tab}
         USING vec0(
@@ -1174,6 +1247,10 @@ def _cmd_init_body(args):
         "status": "ok",
         "action": "init",
         "database": str(DB_PATH),
+        "embedder_lock": ({k: _lock[k] for k in ("tier", "model_id", "revision", "weights_hash",
+                                                 "dim", "vec_table", "locked_at", "catalogue_hash")}
+                          if _lock else None),
+        "embedder_lock_path": (_lock.get("_path") if _lock else None),
         "tables": tables,
         "schema_sweep": schema_sweep,
         "hybrid_migration": hybrid_migration,
@@ -3944,7 +4021,11 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # init
-    subparsers.add_parser("init", help="Create/verify database (auto-applies L2 migrations)")
+    p_init = subparsers.add_parser("init", help="Create/verify database (auto-applies L2 migrations); "
+                                                "writes embedder.lock.json for a shipped tier")
+    p_init.add_argument("--tier", choices=["cpu", "gpu", "nomic", "qwen", "jina"], default=None,
+                        help="embedding tier for this brain (default: WIZARD_EMBED_MODEL, else what the brain "
+                             "already declares, else nomic); jina gets no lock (not in the shipped catalogue)")
 
     # store
     p_store = subparsers.add_parser("store", help="Store a new memory")
@@ -4294,7 +4375,22 @@ def main():
         "belief": cmd_belief,
     }
 
-    cmd_map[args.command](args)
+    try:
+        cmd_map[args.command](args)
+    except Exception as e:
+        # A typed refusal from the install lock (LOCK_MALFORMED, WEIGHTS_MISMATCH,
+        # STAMP_INCONSISTENT, ...) is the verb's answer: one envelope, the code in
+        # `error`, exit 1. Anything without a `.code` is not ours to rephrase and
+        # propagates as before.
+        code = getattr(e, "code", None)
+        if not code or not isinstance(code, str):
+            raise
+        payload = {"status": "error", "error": code, "action": args.command, "message": str(e)}
+        det = getattr(e, "detail", None) or {}
+        if isinstance(det, dict):
+            for k, v in det.items():
+                payload.setdefault(k, v)
+        _output(payload, exit_code=1)
 
 
 if __name__ == "__main__":

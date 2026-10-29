@@ -13,9 +13,9 @@ TWO ARTIFACTS, ONE HONEST FACT EACH
        vec_table, files[]}. Answers "what may this package embed with". Generated
        by `tools/build_embedder_catalogue.py` from the model snapshots -- every
        hash in it is COMPUTED, never typed. It lives in organs/ and not seed/
-       because docs/voidstead_tiers.json puts seed/ in Tier 3 ("a birth-time act")
-       and this file is read EVERY TIME THE EMBEDDER LOADS; the tiers file's own
-       discriminator puts it in the organism.
+       because seed/ holds what is loaded once, when a brain is born, and this
+       file is read EVERY TIME THE EMBEDDER LOADS: it belongs with the code that
+       reads it.
     2. THE INSTALL LOCK  `<data-dir>/embedder.lock.json` (LOCK_NAME), a sibling of
        the SQLite file. Exactly one catalogue entry copied out plus `tier`,
        `locked_at`, `catalogue_hash`. Answers "what THIS install promised".
@@ -44,7 +44,7 @@ TWO ARTIFACTS, ONE HONEST FACT EACH
     `revision` (the hub commit) is KEPT as the fetch instruction and is never the
     identity: it is not recomputable from local bytes and was already degrading to
     'unresolved' for the tier with no code pin. The sidecar column that carries the
-    revision keeps its round-1 name, `model_ref` (ROUND_2_SCOPE.md IN-1).
+    revision keeps its original name, `model_ref`.
 
 WHO CHECKS WHAT, AND IN WHICH ORDER  (facts before policy)
     The LOADER (embedding_upgrade.get_locked_embedder): LOCK_MISSING ->
@@ -962,12 +962,11 @@ def fetch_models_needed(lock: Dict[str, Any], *, catalogue: Optional[Union[str, 
             f"{len(absent)} of {plan['count']} models the memory system needs are not under {hub} and could "
             f"not be fetched: {names}; bytes on disk for the needed set: {out['bytes_named_total']:,}. "
             f"The install is NOT complete and no working memory is claimed. Retry, with the network: "
-            f"`voidstead memory install` (or `python3 organs/model_fetch.py --db <brain>/claude_memory.db`) -- "
-            f"or populate the cache yourself at exactly these revisions.",
+            f"`python3 organs/model_fetch.py --db <brain>/claude_memory.db` (from the installed brain "
+            f"directory) -- or populate the cache yourself at exactly these revisions.",
             absent=absent, needed=plan["count"], hf_hub_cache=str(hub), offline=hf_offline(),
             bytes_on_disk=out["bytes_named_total"], models=out["models"],
-            retry=["voidstead memory install --package <checkout> --data-dir <DIR>",
-                   "python3 organs/model_fetch.py --db <brain>/claude_memory.db"])
+            retry=["python3 organs/model_fetch.py --db <brain>/claude_memory.db"])
     # every present model is then HASHED against its pin (the loader's own check),
     # so "present" means "the bytes the catalogue promised", never "a directory exists"
     for m, rec in zip(plan["needed"], out["models"]):

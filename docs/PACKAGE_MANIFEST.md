@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-29T22:12:05Z from the checkout at `aa1f4ef`.
+> Generated 2026-10-29T23:26:56Z from the checkout at `388af7f`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -10,14 +10,14 @@
 
 | | |
 |---|---|
-| files tracked | 429 |
-| files hashed | 429 |
-| total bytes | 10137021 |
+| files tracked | 430 |
+| files hashed | 430 |
+| total bytes | 10161641 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  75 files, 4512708 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  75 files, 4522625 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -31,7 +31,7 @@
 | `organs/belief_cli.py` | 19007 | `356c2411a17e146e` |
 | `organs/belief_engine.py` | 73377 | `b286bbdfc7116cd2` |
 | `organs/calibration_memory.py` | 47193 | `00fea3a3d28f1ded` |
-| `organs/claude_memory.py` | 197121 | `187e4c892bb206d8` |
+| `organs/claude_memory.py` | 203066 | `ea6bdc51ec3d5c06` |
 | `organs/claude_memory_lite.py` | 40794 | `ba0d3e266092a95a` |
 | `organs/cognitive_map.py` | 40183 | `794e44f65a79e4e3` |
 | `organs/communities.py` | 44809 | `fb4d4d8da43713e4` |
@@ -42,7 +42,7 @@
 | `organs/dream_pipeline.py` | 127443 | `7a097ab25415d113` |
 | `organs/embed_backfill.py` | 11765 | `4a48cf8fc254d994` |
 | `organs/embed_resolver.py` | 7841 | `1e1546aa4fafe9fe` |
-| `organs/embedder_lock.py` | 52623 | `aec4181a8c63cf8a` |
+| `organs/embedder_lock.py` | 52487 | `da63efce9cc754b7` |
 | `organs/embedders.lock.json` | 2557 | `6247a9cbb5988828` |
 | `organs/embedding_upgrade.py` | 64794 | `78c7eea88fa571d0` |
 | `organs/gap_mapping.py` | 107155 | `9e659adec01af772` |
@@ -52,8 +52,8 @@
 | `organs/kind_taxonomy.py` | 30780 | `042ae8556f4600df` |
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
 | `organs/memory_dreaming.py` | 106512 | `198f5f75c6931c5b` |
-| `organs/memory_write.py` | 49360 | `a85bcaf186a1080f` |
-| `organs/model_fetch.py` | 4659 | `63b353eefc242613` |
+| `organs/memory_write.py` | 53483 | `b0848d8b2d19e8e5` |
+| `organs/model_fetch.py` | 4644 | `d16b05711b1b49aa` |
 | `organs/model_garden.py` | 41541 | `bb6d3edf1a5b54bc` |
 | `organs/monthly_self_eval.py` | 203955 | `ab6970a8dfcd4c5e` |
 | `organs/organ_run_log.py` | 25697 | `406cae11096e9326` |
@@ -97,7 +97,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  163 files, 2656618 bytes
+### `voidloom` — The CLI facade  ·  164 files, 2670942 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -116,7 +116,7 @@
 | `voidloom/tests/_owned_brain.py` | 4509 | `e550d2b14985ecb6` |
 | `voidloom/tests/_thinker_fakes.py` | 15135 | `d63b82c100143add` |
 | `voidloom/tests/_thinker_gemini_fake.py` | 10414 | `f573c49ac6eaa4f5` |
-| `voidloom/tests/conftest.py` | 8528 | `f863a810f6783e7a` |
+| `voidloom/tests/conftest.py` | 9425 | `7d00b84b7e18d435` |
 | `voidloom/tests/fixtures/claude_2_1_287_tool_call_unparsed.json` | 3665 | `8fc8387ca64a6711` |
 | `voidloom/tests/harness/README.md` | 3514 | `9d572f2f3792cb87` |
 | `voidloom/tests/harness/c2_install_schema_suite.py` | 19152 | `48cf8c6741611e64` |
@@ -131,7 +131,7 @@
 | `voidloom/tests/harness/outside_target_diff.py` | 35895 | `e6f50e6d8b5a5577` |
 | `voidloom/tests/harness/property_battery_16_install.py` | 31627 | `1067b6c358dc43d9` |
 | `voidloom/tests/harness/run_all.py` | 5792 | `ecc5b27cfa5dc5e6` |
-| `voidloom/tests/test_accelerator_table.py` | 49139 | `07e1d0915d7828b1` |
+| `voidloom/tests/test_accelerator_table.py` | 49368 | `150660b4cd4b01f6` |
 | `voidloom/tests/test_affect_lighthouse_ddl_names_r2.py` | 1029 | `24af95d79420d7eb` |
 | `voidloom/tests/test_approvals_faces.py` | 7516 | `c8c58ca5f1bf872a` |
 | `voidloom/tests/test_approvals_policy_d26.py` | 24423 | `a45907a3d24bfd79` |
@@ -167,7 +167,7 @@
 | `voidloom/tests/test_edge_decay_repair_r2d.py` | 12087 | `7bba65e209c0263e` |
 | `voidloom/tests/test_edge_decay_retires_r2d.py` | 8536 | `e02347b289a12a4c` |
 | `voidloom/tests/test_edge_retire_readers_writers_r2d.py` | 12353 | `d6752d4b2e2d7720` |
-| `voidloom/tests/test_embedder_lock.py` | 40984 | `2dcc3b7b221dc60e` |
+| `voidloom/tests/test_embedder_lock.py` | 41010 | `36f1b4270bb1a226` |
 | `voidloom/tests/test_embedding_provenance.py` | 27454 | `5c67c6ac93667fcb` |
 | `voidloom/tests/test_encoder_tier_is_bijective.py` | 9285 | `e08d4e89b254ee18` |
 | `voidloom/tests/test_env_file_mode_follows_symlink.py` | 5084 | `d5df32f5ac8290f7` |
@@ -222,6 +222,7 @@
 | `voidloom/tests/test_sleep_loop_brain_lock_r3.py` | 12800 | `60d19e34fd22831c` |
 | `voidloom/tests/test_sleep_loop_unit_tests_r3g3.py` | 2379 | `f9917dcdc6a9b6ac` |
 | `voidloom/tests/test_sleep_loop_unstallable_r1.py` | 31281 | `bf063b29abea1a41` |
+| `voidloom/tests/test_stamp_weights_hash.py` | 13172 | `ed8e4af2dbfde798` |
 | `voidloom/tests/test_stranger_tier1_upgrade.py` | 89106 | `8702b2a878d71522` |
 | `voidloom/tests/test_suite_children_have_no_terminal.py` | 2046 | `5ca230c2de180a5d` |
 | `voidloom/tests/test_suite_is_portable.py` | 5091 | `5925f8ad9985a8f9` |
@@ -309,7 +310,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 937111 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 937413 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -326,7 +327,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 125021 | `0467d018da5fc63d` |
+| `install/lay_manifest.json` | 125323 | `34dc11a3b61807a2` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -465,7 +466,7 @@
 | `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 216394 bytes
+### `docs` — Documentation  ·  12 files, 216471 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -473,10 +474,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19332 | `6af8d4be38a85697` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8185 | `416a7a2a4065effb` |
+| `docs/LAYOUT.md` | 8185 | `92624e985664191f` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 32550 | `e8278e2a638521e3` |
+| `docs/PACKAGE_MANIFEST.md` | 32627 | `450ebc5f403aa7d8` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

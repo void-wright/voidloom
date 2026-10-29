@@ -77,6 +77,21 @@ def _restore_engine_globals():
         obj = getattr(cm, name, None)
         if isinstance(obj, dict):
             saved[name] = dict(obj)
+    # The lock module's process register (`_LOADED`: the one resident embedder and
+    # its COMPUTED checksum, which every stamp on a locked brain carries) and the
+    # loader's model cache are module globals with the same blast radius: a test
+    # that registers a saboteur checksum and forgets it would make every later
+    # stamp refuse WEIGHTS_MISMATCH in another file. Same discipline: save, restore.
+    extra = []
+    for modname, attr in (("embedder_lock", "_LOADED"), ("embedder_lock", "_catalogue_cache"),
+                          ("embedding_upgrade", "_model_cache")):
+        try:
+            mod = __import__(modname)
+            obj = getattr(mod, attr, None)
+            if isinstance(obj, dict):
+                extra.append((obj, dict(obj)))
+        except Exception:
+            pass
     try:
         yield
     finally:
@@ -85,6 +100,9 @@ def _restore_engine_globals():
             if isinstance(obj, dict):
                 obj.clear()
                 obj.update(before)
+        for obj, before in extra:
+            obj.clear()
+            obj.update(before)
 
 
 # ---------------------------------------------------------------------------
