@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """model_fetch — THE INSTALL'S FETCH: every model the memory system needs, at its
-catalogue pin, bounded to the files the pin names (Voidstead M1 round 6, item #1).
+catalogue pin, bounded to the files the pin names.
 
     python3 organs/model_fetch.py --db <brain>/claude_memory.db [--json] [--plan] [--no-fetch]
 

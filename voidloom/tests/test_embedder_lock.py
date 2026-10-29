@@ -17,7 +17,13 @@ it SKIPS and says so -- NOT MEASURED is not MEASURED AND FINE.
 Classes:
     L1  the shipped catalogue: computed, reproducible from the shell, permissive, no non-commercial entry
     L2  write_lock: one tier, atomic, receipted, never re-pointed
+    L3  read_lock / resolve: LOCK_MISSING, LOCK_MALFORMED, from the connection's own dir
+    L4  the checksum against the lock: WEIGHTS_MISMATCH / LOCK_NOT_SHIPPED before instantiation
     L5  the process register
+    L6  the cache resolver honours HF_HUB_CACHE, and the loader's offline probe uses it
+    L8  swap is a typed refusal AND exits non-zero
+    L9  the checksum reaches the code repository: a changed byte there is WEIGHTS_MISMATCH
+    D2  the tier's source of truth: the lock first, the database for a pre-lock brain, unknown refused
 """
 from __future__ import annotations
 
@@ -317,6 +323,431 @@ class L5_ProcessRegister(_Tmp):
                                             "SNAPSHOT_ABSENT", "MODELS_ABSENT"})
         with self.assertRaises(ValueError):
             el.EmbedderLockError("SOMETHING_ELSE", "x")
+
+
+# ------------------------------------------ L3: read_lock / resolve from the connection
+class L3_ReadAndResolve(_Tmp):
+    """Confound: an in-memory database has no data dir; that is LOCK_MISSING by
+    the same name and is distinguished by its message."""
+
+    def _db(self):
+        p = self.d / "brain.db"
+        c = sqlite3.connect(str(p))
+        c.execute("CREATE TABLE metadata (key TEXT, value TEXT)")
+        c.commit()
+        return c
+
+    def test_control_resolve_reads_the_lock_beside_the_connections_database(self):
+        el.write_lock(self.d, "gpu")
+        c = self._db()
+        lock = el.resolve(c)
+        self.assertEqual((lock["tier"], lock["vec_table"], lock["dim"]), ("gpu", "memory_embeddings_v3", 1024))
+        import embed_resolver
+        self.assertEqual(embed_resolver.resolve(c), ("memory_embeddings_v3", 1024))
+        c.close()
+
+    def test_saboteur_lock_missing(self):
+        """el.resolve refuses an absent lock. embed_resolver (owner decision D2) then reads
+        a PRE-LOCK brain's metadata -- and with no metadata row either, refuses LOCK_MISSING."""
+        c = self._db()
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            el.resolve(c)
+        self.assertEqual(cm.exception.code, "LOCK_MISSING")
+        import embed_resolver
+        with self.assertRaises(embed_resolver.EmbedTierUnresolved) as cm2:
+            embed_resolver.resolve(c)
+        self.assertEqual(cm2.exception.code, "LOCK_MISSING")
+        c.execute("INSERT INTO metadata VALUES ('active_embedding_table', 'memory_embeddings_v2')")
+        c.commit()
+        self.assertEqual(embed_resolver.resolve(c), ("memory_embeddings_v2", 1024),
+                         "a pre-lock brain is read from its metadata (D2's fallback)")
+        c.close()
+
+    def test_saboteur_in_memory_database_has_no_lock(self):
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            el.resolve(sqlite3.connect(":memory:"))
+        self.assertEqual(cm.exception.code, "LOCK_MISSING")
+        self.assertIn("in-memory", str(cm.exception))
+
+    def test_saboteur_lock_malformed_each_way(self):
+        el.write_lock(self.d, "cpu")
+        good = json.loads((self.d / el.LOCK_NAME).read_text())
+        plants = {
+            "not json": "{",
+            "not an object": "[]",
+            "missing weights_hash": json.dumps({k: v for k, v in good.items() if k != "weights_hash"}),
+            "short hash": json.dumps({**good, "weights_hash": "abc"}),
+            "uppercase hash": json.dumps({**good, "weights_hash": good["weights_hash"].upper()}),
+            "dim zero": json.dumps({**good, "dim": 0}),
+            "empty files": json.dumps({**good, "files": []}),
+            "empty tier": json.dumps({**good, "tier": ""}),
+        }
+        for name, text in plants.items():
+            (self.d / el.LOCK_NAME).write_text(text, encoding="utf-8")
+            with self.assertRaises(el.EmbedderLockError, msg=name) as cm:
+                el.resolve(self.d)
+            self.assertEqual(cm.exception.code, "LOCK_MALFORMED", name)
+
+    def test_control_a_metadata_row_cannot_move_a_locked_brain(self):
+        el.write_lock(self.d, "cpu")
+        c = self._db()
+        c.execute("INSERT INTO metadata VALUES ('active_embedding_table', 'memory_embeddings_v3')")
+        c.commit()
+        import embed_resolver
+        self.assertEqual(embed_resolver.resolve(c), ("memory_embeddings", 768),
+                         "the planted metadata row moved the resolver: the sibling trap is live")
+        c.close()
+
+    def test_saboteur_a_malformed_lock_is_never_read_as_absent(self):
+        el.write_lock(self.d, "cpu")
+        (self.d / el.LOCK_NAME).write_text("{", encoding="utf-8")
+        c = self._db()
+        c.execute("INSERT INTO metadata VALUES ('active_embedding_table', 'memory_embeddings')")
+        c.commit()
+        import embed_resolver
+        with self.assertRaises(embed_resolver.EmbedTierUnresolved) as cm:
+            embed_resolver.resolve(c)
+        self.assertEqual(cm.exception.code, "LOCK_MALFORMED")
+        c.close()
+
+
+# --------------------------------- L4: the checksum against the lock, before instantiation
+class L4_VerifyBeforeInstantiate(_Tmp):
+    """The executable check: forty f's → WEIGHTS_MISMATCH from a fresh
+    embedder start. Confound: on a host WITHOUT the snapshot the refusal for an
+    unshipped hash comes first (no fetch outside the catalogue); the control
+    below needs the bytes and skips without them."""
+
+    def _lock(self, tier="cpu", **kw):
+        lock = dict(el.catalogue_tiers()[tier]); lock["tier"] = tier; lock.update(kw)
+        return lock
+
+    def test_control_the_locked_snapshot_verifies_and_returns_the_computed_hash(self):
+        snap, entry = _snapshot("cpu")
+        if snap is None:
+            self.skipTest("cpu snapshot absent on this host")
+        got_snap, computed = el.verify_snapshot_against_lock(self._lock())
+        self.assertEqual(got_snap, snap)
+        self.assertEqual(computed, entry["weights_hash"])
+        self.assertIsNone(el.loaded(), "verify must not register; only a load does")
+
+    def test_saboteur_forty_fs_is_WEIGHTS_MISMATCH_before_any_instantiation(self):
+        snap, _ = _snapshot("cpu")
+        if snap is None:
+            self.skipTest("cpu snapshot absent on this host")
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            el.verify_snapshot_against_lock(self._lock(weights_hash="f" * 64))
+        self.assertEqual(cm.exception.code, "WEIGHTS_MISMATCH")
+        self.assertEqual(cm.exception.detail["lock_hash"], "f" * 64)
+        self.assertRegex(cm.exception.detail["computed"], r"^[0-9a-f]{64}$")
+        # and through the loader itself: nothing instantiated, nothing registered
+        import embedding_upgrade as eu
+        eu._model_cache.clear()
+        with self.assertRaises(el.EmbedderLockError) as cm2:
+            eu.get_locked_embedder(self._lock(weights_hash="f" * 64))
+        self.assertEqual(cm2.exception.code, "WEIGHTS_MISMATCH")
+        self.assertEqual(eu._model_cache, {})
+        self.assertIsNone(el.loaded())
+
+    def test_saboteur_a_real_but_unshipped_hash_is_LOCK_NOT_SHIPPED(self):
+        snap, entry = _snapshot("cpu")
+        if snap is None:
+            self.skipTest("cpu snapshot absent on this host")
+        # a catalogue that ships only gpu: the cpu bytes are real, verified, and NOT shipped
+        cat = el.load_catalogue()
+        only_gpu = {**cat, "tiers": {"gpu": cat["tiers"]["gpu"]}}
+        alt = self.d / "alt.lock.json"
+        alt.write_text(json.dumps(only_gpu), encoding="utf-8")
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            el.verify_snapshot_against_lock(self._lock(), catalogue=alt)
+        self.assertEqual(cm.exception.code, "LOCK_NOT_SHIPPED")
+
+    def test_saboteur_no_snapshot_and_unshipped_refuses_before_any_fetch(self):
+        lock = self._lock(model_id="nobody/no-such-model", revision="0" * 40, weights_hash="a" * 64)
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            el.verify_snapshot_against_lock(lock, allow_fetch=True)
+        self.assertEqual(cm.exception.code, "LOCK_NOT_SHIPPED")
+        self.assertIn("refusing to fetch", str(cm.exception))
+
+    def test_saboteur_a_missing_hashed_file_is_WEIGHTS_MISMATCH(self):
+        snap, _ = _snapshot("cpu")
+        if snap is None:
+            self.skipTest("cpu snapshot absent on this host")
+        lock = self._lock()
+        lock["files"] = lock["files"] + ["not_in_snapshot.bin"]
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            el.verify_snapshot_against_lock(lock)
+        self.assertEqual(cm.exception.code, "WEIGHTS_MISMATCH")
+
+    def test_control_the_loader_passes_code_revision_for_a_pinned_code_repository(self):
+        src = (ROOT / "organs" / "embedding_upgrade.py").read_text(encoding="utf-8")
+        i = src.index("def get_locked_embedder("); j = src.index("\ndef ", i + 10)
+        body = "\n".join(l for l in src[i:j].splitlines() if not l.strip().startswith("#"))
+        self.assertIn('"code_revision": code["revision"]', body)
+        self.assertIn("model_kwargs", body)
+        self.assertIn("config_kwargs", body)
+        self.assertIn("local_files_only", body)
+        self.assertIn("verify_snapshot_against_lock(lock)", body)
+        self.assertIn("_torch_device(torch)", body, "D1: the device comes from the compute-agnostic layer")
+        self.assertLess(body.index("verify_snapshot_against_lock(lock)"), body.index("SentenceTransformer("),
+                        "the bytes are verified BEFORE anything is instantiated")
+        # and the loader has NO lock-less form (no package-root fallback)
+        import inspect, embedding_upgrade as eu
+        self.assertEqual(list(inspect.signature(eu.get_locked_embedder).parameters), ["lock"])
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            eu.get_locked_embedder(None)
+        self.assertEqual(cm.exception.code, "LOCK_MISSING")
+
+
+# ------------------------------------------ L6: one cache resolver, HF's precedence
+class L6_CacheResolverHonoursHfHubCache(_Tmp):
+    """Confound: HF_HOME alone must still resolve to HF_HOME/hub."""
+
+    def _with(self, env, fn):
+        keep = {k: os.environ.get(k) for k in ("HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE", "HF_HOME")}
+        for k in keep:
+            os.environ.pop(k, None)
+        os.environ.update(env)
+        try:
+            return fn()
+        finally:
+            for k, v in keep.items():
+                os.environ.pop(k, None)
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_control_precedence(self):
+        self.assertEqual(self._with({"HF_HUB_CACHE": "/a", "HUGGINGFACE_HUB_CACHE": "/b", "HF_HOME": "/c"}, el.hf_hub_cache), Path("/a"))
+        self.assertEqual(self._with({"HUGGINGFACE_HUB_CACHE": "/b", "HF_HOME": "/c"}, el.hf_hub_cache), Path("/b"))
+        self.assertEqual(self._with({"HF_HOME": "/c"}, el.hf_hub_cache), Path("/c/hub"))
+        self.assertEqual(self._with({}, el.hf_hub_cache), Path.home() / ".cache" / "huggingface" / "hub")
+
+    def test_saboteur_a_cache_the_loader_would_not_use_finds_no_snapshot(self):
+        entry = el.catalogue_tiers()["cpu"]
+        got = self._with({"HF_HUB_CACHE": str(self.d)},
+                         lambda: el.snapshot_dir_for(entry["model_id"], entry["revision"]))
+        self.assertIsNone(got, "the resolver looked outside HF_HUB_CACHE")
+
+    def test_control_the_engines_offline_probe_uses_the_same_resolver(self):
+        for rel in ("organs/embedding_upgrade.py",):
+            src = (ROOT / rel).read_text(encoding="utf-8")
+            i = src.index("def _hf_offline_ok("); j = src.index("\ndef ", i + 10)
+            self.assertIn("embedder_lock.hf_hub_cache()", src[i:j], rel)
+
+
+# ----------------------------------------------------- L8: swap is refused
+class L8_SwapIsRefused(_Tmp):
+    """Confound: a swap that refused but still wrote the metadata rows would pass
+    a status check; the pair reads the rows back. And an error envelope
+    with EXIT 0 reads as success to every shell gate -- the process exits 1."""
+
+    def test_control_swap_refuses_typed_writes_nothing_and_exits_non_zero(self):
+        import embedding_upgrade as eu
+        db = self.d / "b.db"
+        c = sqlite3.connect(str(db)); c.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT)"); c.commit(); c.close()
+
+        class A:
+            db_path = str(db)
+        with self.assertRaises(eu.VerbRefused) as cm:
+            eu.cmd_swap(A())
+        env = cm.exception.as_dict()
+        self.assertEqual((env["status"], env["error"], env["replacement"], env["built"]),
+                         ("error", "SWAP_REFUSED", "tier set", False))
+        c = sqlite3.connect(str(db))
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM metadata").fetchone()[0], 0)
+        c.close()
+        # the PROCESS: envelope on stdout, exit status 1 -- read from the process, never a pipe
+        r = subprocess.run([sys.executable, str(ROOT / "organs" / "embedding_upgrade.py"),
+                            "--db-path", str(db), "swap"], capture_output=True, text=True, timeout=120,
+                           env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "CUDA_VISIBLE_DEVICES": ""})
+        self.assertEqual(r.returncode, 1, r.stdout[-400:] + r.stderr[-400:])
+        self.assertEqual(json.loads(r.stdout)["error"], "SWAP_REFUSED")
+
+    def test_control_the_shipped_swap_body_writes_no_metadata_row(self):
+        src = (ROOT / "organs" / "embedding_upgrade.py").read_text(encoding="utf-8")
+        i = src.index("def cmd_swap("); j = src.index("\ndef ", i + 10)
+        self.assertNotIn("INSERT OR REPLACE INTO metadata", src[i:j])
+        self.assertIn("raise VerbRefused(", src[i:j])
+
+
+# ------------------------- L9: the checksum reaches the code repository
+class L9_ChecksumReachesTheCodeRepository(_Tmp):
+    """The loader's verify step against a FAKE HF cache holding copies of both
+    snapshots: unchanged -> the catalogue hash; one byte changed in the remote-
+    code repository -> WEIGHTS_MISMATCH, before any instantiation. Confound: a
+    verify that hashed only the model snapshot passes BOTH halves of the old
+    check; only a byte in the CODE repository tells them apart."""
+
+    def _fake_cache(self, entry: dict, mutate_code: bool = False) -> Path:
+        hub = self.d / "hub"
+        snap, _ = _snapshot_of(entry)
+        csnap = _code_snapshot(entry)
+        def lay(model_id, revision, src, files):
+            repo = hub / ("models--" + model_id.replace("/", "--"))
+            sd = repo / "snapshots" / revision
+            for rel in files:
+                dst = sd / rel; dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(src / rel, dst)
+            (repo / "refs").mkdir(parents=True, exist_ok=True)
+            (repo / "refs" / "main").write_text(revision)
+            return sd
+        lay(entry["model_id"], entry["revision"], snap, entry["files"])
+        cd = lay(entry["code"]["model_id"], entry["code"]["revision"], csnap, entry["code"]["files"])
+        if mutate_code:
+            py = cd / entry["code"]["files"][-1]
+            py.write_bytes(py.read_bytes() + b"\n# a byte of forward-pass code the lock never promised\n")
+        return hub
+
+    def _with_cache(self, hub: Path, fn):
+        keep = {k: os.environ.get(k) for k in ("HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE", "HF_HOME")}
+        for k in keep:
+            os.environ.pop(k, None)
+        os.environ["HF_HUB_CACHE"] = str(hub)
+        try:
+            return fn()
+        finally:
+            for k, v in keep.items():
+                os.environ.pop(k, None)
+                if v is not None:
+                    os.environ[k] = v
+
+    def _lock(self):
+        entry = el.catalogue_tiers()["cpu"]
+        lock = dict(entry); lock["tier"] = "cpu"
+        return lock
+
+    def test_control_both_repositories_verify_from_the_cache(self):
+        entry = el.catalogue_tiers()["cpu"]
+        self.assertIn("code", entry, "the cpu entry carries no remote-code pin")
+        if _snapshot_of(entry)[0] is None or _code_snapshot(entry) is None:
+            self.skipTest("a cpu snapshot (model or code) is absent on this host")
+        hub = self._fake_cache(entry)
+        snap, computed = self._with_cache(hub, lambda: el.verify_snapshot_against_lock(self._lock(), allow_fetch=False))
+        self.assertEqual(computed, entry["weights_hash"])
+        self.assertTrue(str(snap).startswith(str(hub)))
+
+    def test_saboteur_a_changed_byte_in_the_code_repository_is_WEIGHTS_MISMATCH_before_instantiation(self):
+        entry = el.catalogue_tiers()["cpu"]
+        self.assertIn("code", entry, "the cpu entry carries no remote-code pin")
+        if _snapshot_of(entry)[0] is None or _code_snapshot(entry) is None:
+            self.skipTest("a cpu snapshot (model or code) is absent on this host")
+        hub = self._fake_cache(entry, mutate_code=True)
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            self._with_cache(hub, lambda: el.verify_snapshot_against_lock(self._lock(), allow_fetch=False))
+        self.assertEqual(cm.exception.code, "WEIGHTS_MISMATCH")
+        self.assertIsNotNone(cm.exception.detail.get("code_snapshot"))
+        self.assertIsNone(el.loaded(), "verify must not register")
+        # through the loader itself, still before anything is instantiated
+        import embedding_upgrade as eu
+        eu._model_cache.clear()
+        with self.assertRaises(el.EmbedderLockError) as cm2:
+            self._with_cache(hub, lambda: eu.get_locked_embedder(self._lock()))
+        self.assertEqual(cm2.exception.code, "WEIGHTS_MISMATCH")
+        self.assertEqual(eu._model_cache, {})
+
+    def test_saboteur_a_missing_code_snapshot_is_refused_not_fetched_outside_the_catalogue(self):
+        entry = el.catalogue_tiers()["cpu"]
+        self.assertIn("code", entry, "the cpu entry carries no remote-code pin")
+        if _snapshot_of(entry)[0] is None or _code_snapshot(entry) is None:
+            self.skipTest("a cpu snapshot (model or code) is absent on this host")
+        hub = self._fake_cache(entry)
+        shutil.rmtree(hub / ("models--" + entry["code"]["model_id"].replace("/", "--")))
+        lock = self._lock(); lock["weights_hash"] = "a" * 64          # not shipped
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            self._with_cache(hub, lambda: el.verify_snapshot_against_lock(lock, allow_fetch=True))
+        self.assertEqual(cm.exception.code, "LOCK_NOT_SHIPPED")
+        with self.assertRaises(el.EmbedderLockError) as cm2:
+            self._with_cache(hub, lambda: el.verify_snapshot_against_lock(self._lock(), allow_fetch=False))
+        self.assertEqual(cm2.exception.code, "SNAPSHOT_ABSENT")     # absent + no fetch is its own refusal
+        self.assertIn("remote code", str(cm2.exception))
+
+
+# --------------------------- D2: the tier's source of truth, lock first, unknown refused
+class D2_TierFactsLockFirst(_Tmp):
+    """Owner decision D2. The engine's tier registry is the only source of the tier
+    FACTS; the brain's install lock is read FIRST to learn which tier a brain has; a
+    brain that predates the lock is read from its database; an unknown name is refused
+    by name; the non-commercial tier is never what a lock (or the catalogue) yields.
+    Confound: a resolver that only ever reads metadata passes the pre-lock fixture and
+    fails the locked one; one that only reads the lock fails the pre-lock one."""
+
+    def _brain(self, table=None):
+        p = self.d / "claude_memory.db"
+        c = sqlite3.connect(str(p))
+        c.execute("CREATE TABLE metadata (key TEXT, value TEXT)")
+        if table:
+            c.execute("INSERT INTO metadata VALUES ('active_embedding_table', ?)", (table,))
+        c.commit()
+        c.close()
+        return p
+
+    def _installer_reads(self, db: Path) -> str:
+        """install.sh's own reader (hd_embed_model_from_db), run as the installer runs it."""
+        sh = (ROOT / "install.sh").read_text(encoding="utf-8")
+        i = sh.index("hd_embed_model_from_db() {")
+        j = sh.index("\n}\n", i) + 3
+        script = "%s\nPY_SYS=%s\nDB_PATH=%s\nhd_embed_model_from_db\n" % (sh[i:j], sys.executable, db)
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.strip()
+
+    def test_control_a_pre_lock_brain_is_read_from_its_database(self):
+        db = self._brain("memory_embeddings_v2")
+        self.assertEqual(self._installer_reads(db), "jina")
+        import embed_resolver
+        c = sqlite3.connect(str(db))
+        self.assertEqual(embed_resolver.resolve(c), ("memory_embeddings_v2", 1024))
+        c.close()
+
+    def test_control_the_lock_is_read_first_and_metadata_cannot_move_it(self):
+        db = self._brain("memory_embeddings_v2")
+        el.write_lock(self.d, "gpu")
+        self.assertEqual(self._installer_reads(db), "qwen")
+        import embed_resolver
+        c = sqlite3.connect(str(db))
+        self.assertEqual(embed_resolver.resolve(c), ("memory_embeddings_v3", 1024))
+        c.close()
+
+    def test_saboteur_a_malformed_lock_is_refused_not_read_through(self):
+        db = self._brain("memory_embeddings")
+        (self.d / el.LOCK_NAME).write_text('{"vec_table": "memory_embeddings_v2"}', encoding="utf-8")
+        self.assertEqual(self._installer_reads(db), "LOCK_MALFORMED",
+                         "a lock naming an unshipped table was read through")
+        (self.d / el.LOCK_NAME).write_text("{", encoding="utf-8")
+        self.assertEqual(self._installer_reads(db), "LOCK_MALFORMED")
+
+    def test_control_brain_lock_falls_back_to_the_catalogue_only_on_absence(self):
+        import embedding_upgrade as eu
+        db = self._brain("memory_embeddings")
+        lock = eu.brain_lock(str(db), tier="nomic")
+        self.assertEqual((lock["tier"], lock["weights_hash"]), ("cpu", el.catalogue_tiers()["cpu"]["weights_hash"]))
+        self.assertIn("pre-lock", lock["_source"])
+        el.write_lock(self.d, "gpu")
+        self.assertEqual(eu.brain_lock(str(db), tier="nomic")["tier"], "gpu",
+                         "a written lock is the answer whatever tier the caller guessed")
+        (self.d / el.LOCK_NAME).write_text("{", encoding="utf-8")
+        with self.assertRaises(el.EmbedderLockError) as cm:
+            eu.brain_lock(str(db), tier="nomic")
+        self.assertEqual(cm.exception.code, "LOCK_MALFORMED")
+
+    def test_saboteur_the_non_commercial_tier_and_a_typo_are_not_shipped(self):
+        import embedding_upgrade as eu
+        db = self._brain()
+        for name in ("jina", "nomci", ""):
+            with self.assertRaises(el.EmbedderLockError, msg=name) as cm:
+                eu.brain_lock(str(db), tier=name)
+            self.assertEqual(cm.exception.code, "LOCK_NOT_SHIPPED", name)
+        self.assertNotIn("jinaai/jina-embeddings-v5-text-small",
+                         {e["model_id"] for e in el.catalogue_tiers().values()})
+
+    def test_control_the_qwen_load_is_the_pinned_by_name_call(self):
+        """The one loader keeps public main's reproducibility pin for Qwen: a by-name load at
+        QWEN_REVISION, local files only, AFTER the bytes were verified."""
+        src = (ROOT / "organs" / "embedding_upgrade.py").read_text(encoding="utf-8")
+        i = src.index("def get_locked_embedder("); j = src.index("\ndef ", i + 10)
+        body = src[i:j]
+        self.assertIn("SentenceTransformer(\n            QWEN_MODEL_NAME,\n            revision=QWEN_REVISION,", body)
+        self.assertIn('lock["revision"] != QWEN_REVISION', body)
 
 
 if __name__ == "__main__":

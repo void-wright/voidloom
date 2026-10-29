@@ -586,7 +586,7 @@ def test_the_sweep_sees_the_shape_it_forbids():
 
 
 def test_the_ten_sites_route_through_torch_device():
-    for rel, n in (("organs/embedding_upgrade.py", 3), ("organs/model_garden.py", 1), ("organs/website_memory.py", 1),
+    for rel, n in (("organs/embedding_upgrade.py", 2), ("organs/model_garden.py", 1), ("organs/website_memory.py", 1),
                    ("organs/whisper_network.py", 1), ("organs/claude_memory.py", 1), ("organs/hybrid_retrieval.py", 1),
                    ("organs/qwen_reranker.py", 1), ("organs/wizard_config.py", 1)):
         s = (ROOT / rel).read_text(encoding="utf-8")

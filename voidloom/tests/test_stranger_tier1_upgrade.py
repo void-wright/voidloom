@@ -1024,8 +1024,14 @@ class TestTheTierRegistryHasOneSource(_Scratch):
         self.assertEqual(set(eng), {"nomic", "jina", "qwen"})
         for model, (table, dim, repo) in eng.items():
             self.assertEqual(_install_tier_facts(ROOT, model)[:2], (0, "%s|%s|%d|%s" % (model, table, dim, repo)))
-        # an unknown model degrades to the CPU tier by KEY, its facts still the engine's
-        self.assertEqual(_install_tier_facts(ROOT, "bogus")[1], "nomic|%s|%d|%s" % eng["nomic"])
+        # an unknown model is REFUSED BY NAME (owner decision D2), exit 2, no facts printed -- never the CPU tier
+        rc, out, err = _install_tier_facts(ROOT, "bogus")
+        self.assertEqual((rc, out), (2, ""), err)
+        self.assertIn("unknown embedding model 'bogus'", err)
+        # a malformed install lock is refused by its own name
+        rc, out, err = _install_tier_facts(ROOT, "LOCK_MALFORMED")
+        self.assertEqual((rc, out), (2, ""), err)
+        self.assertIn("install lock", err)
         sys.path.insert(0, str(ROOT / "organs"))
         try:
             import embed_resolver

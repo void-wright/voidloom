@@ -3,12 +3,28 @@
 
 Wizard Library Level 3 Component 1.
 
+THE ONE LOADER (owner decisions D1 + D2, 2026-10-19)
+    The shipped tiers -- nomic-768 (cpu) and Qwen3-Embedding-0.6B (gpu), both
+    apache-2.0 -- load through ONE function, `get_locked_embedder(lock)`: the
+    install lock beside the brain (or, for a brain that predates the lock, the
+    catalogue entry of the tier the brain already has -- `brain_lock()`) names
+    the model, its revision and the checksum of its bytes; the bytes on disk are
+    hashed and compared BEFORE anything is instantiated, the model runs on the
+    device the compute-agnostic layer picks, and the checksum it computed is
+    what this process's provenance stamps carry. The jina tier (cc-by-nc-4.0)
+    is not in the shipped catalogue: it keeps its own revision-pinned loader for
+    a personal, non-commercial install that asked for it by name, and a brain
+    with an install lock never reaches it.
+
+    `swap` is REFUSED (typed, exit 1): it re-pointed an install at another table
+    without re-embedding a single memory.
+
 This module handles the full lifecycle of upgrading the embedding model:
   1. Download + verify Jina v5 model
   2. Apply migration (create memory_embeddings_v2)
   3. Re-embed all memories in batches
   4. A/B comparison against Nomic baseline
-  5. Swap default (make Jina v5 the production path)
+  5. Swap default -- REFUSED since the install lock (see above)
   6. Stats + diagnostics
 
 Usage (standalone):
@@ -16,7 +32,7 @@ Usage (standalone):
     python3 -u embedding_upgrade.py migrate      # Apply migration SQL
     python3 -u embedding_upgrade.py re-embed     # Re-embed all memories
     python3 -u embedding_upgrade.py ab-compare   # Run 50-query A/B comparison
-    python3 -u embedding_upgrade.py swap         # Swap to Jina v5 as default
+    python3 -u embedding_upgrade.py swap         # REFUSED, typed, exit 1
     python3 -u embedding_upgrade.py stats        # Show embedding table stats
     python3 -u embedding_upgrade.py full         # All steps in sequence
 
@@ -105,6 +121,17 @@ def _torch_device(torch_mod) -> str:
     return _td(torch_mod)
 
 
+def _lock_module():
+    """organs/embedder_lock (stdlib-only), imported the way _device_api imports its module."""
+    try:
+        import embedder_lock as _el
+    except ImportError:
+        import sys as _s
+        _s.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import embedder_lock as _el
+    return _el
+
+
 def _hf_offline_ok(repo_id: str) -> bool:
     """H11: decide whether to load a HF model with local_files_only=True.
 
@@ -119,12 +146,12 @@ def _hf_offline_ok(repo_id: str) -> bool:
         if v is not None and v.strip().lower() in ("1", "true", "yes", "on"):
             return True
     try:
-        cache_root = Path(
-            os.environ.get("HF_HOME")
-            or os.environ.get("HUGGINGFACE_HUB_CACHE")
-            or (Path.home() / ".cache" / "huggingface")
-        )
-        hub = cache_root / "hub" if (cache_root / "hub").exists() else cache_root
+        # The SAME cache resolver the lock verifier uses (HF_HUB_CACHE >
+        # HUGGINGFACE_HUB_CACHE > HF_HOME/hub > ~/.cache/huggingface/hub). The old
+        # chain ignored HF_HUB_CACHE and read HUGGINGFACE_HUB_CACHE as a root, so it
+        # could answer about a cache the loader would never read.
+        embedder_lock = _lock_module()
+        hub = embedder_lock.hf_hub_cache()
         marker = "models--" + repo_id.replace("/", "--")
         cached = hub / marker / "snapshots"
         if cached.exists() and any(cached.iterdir()):
@@ -240,7 +267,6 @@ EVAL_QUERIES_PATH = Path(
 # ============================================================
 
 _jina_model_cache: Dict[str, Any] = {}
-_nomic_model_cache: Dict[str, Any] = {}
 
 
 def _get_jina_model():
@@ -278,38 +304,6 @@ def _get_jina_model():
     elapsed = time.time() - t0
     logger.info("Jina v5 loaded in %.1fs (device=%s)", elapsed, device)
     _jina_model_cache["model"] = model
-    return model
-
-
-def _get_nomic_model():
-    """Load Nomic v1.5 model (baseline for A/B comparison)."""
-    if "model" in _nomic_model_cache:
-        return _nomic_model_cache["model"]
-
-    import torch
-    from sentence_transformers import SentenceTransformer
-
-    _quiet_model_load_noise()  # H3: keep load INFO + ST version warning off default stderr
-    device = _torch_device(torch)
-    logger.info("Loading Nomic v1.5 model on %s...", device)
-    t0 = time.time()
-
-    # H11 offline: warm cache => local-only (no hub round-trip); explicit
-    # HF_HUB_OFFLINE honored; cold machine still downloads on first call.
-    offline = _hf_offline_ok(NOMIC_MODEL_NAME)
-    import contextlib
-    with contextlib.redirect_stdout(sys.stderr):  # remote code print()s; keep stdout clean
-        model = SentenceTransformer(
-            NOMIC_MODEL_NAME,
-            revision=NOMIC_REVISION,  # Voidloom #176 RCE: pin code tree (moved tag can't swap it)
-            trust_remote_code=True,
-            device=device,
-            local_files_only=offline,
-        )
-
-    elapsed = time.time() - t0
-    logger.info("Nomic v1.5 loaded in %.1fs (device=%s)", elapsed, device)
-    _nomic_model_cache["model"] = model
     return model
 
 
@@ -363,72 +357,256 @@ def encode_jina_document(text: str) -> bytes:
     return results[0]
 
 
-_qwen_model_cache: dict = {}
+# ============================================================
+# THE ONE LOADER for the shipped tiers (owner decision D1, 2026-10-19)
+#
+# The device layer decides WHERE a model runs (_torch_device, the compute-agnostic
+# resolver). The install lock and the shipped catalogue (organs/embedders.lock.json)
+# decide WHICH BYTES run. One loader holds both halves:
+#
+#   1. the caller passes the lock it resolved for ITS OWN database (brain_lock());
+#   2. embedder_lock.verify_snapshot_against_lock(lock) locates the snapshot the
+#      lock's (model_id, revision) name -- and the remote-code repository its
+#      `code` pin names -- hashes every listed file, and compares the result to
+#      lock.weights_hash BEFORE anything is instantiated (WEIGHTS_MISMATCH,
+#      LOCK_NOT_SHIPPED and SNAPSHOT_ABSENT refuse, typed). An absent snapshot is
+#      fetched only at the catalogue's pin and only when the process may go online
+#      (HF_HUB_OFFLINE=1 refuses instead): the old per-model loaders' "prefer local
+#      files, honour an explicit offline request" lives here now;
+#   3. the model is instantiated with local_files_only=True on the verified bytes;
+#   4. embedder_lock.register_loaded(... weights_hash=<the COMPUTED value>), the value
+#      every provenance stamp this process writes carries.
+#
+# One model resident per process; a lock with another hash under a running process
+# is refused. The non-commercial jina tier is not in the catalogue and never comes
+# through here (owner decision D2): it keeps its own revision-pinned loader above,
+# for a personal install that asked for it by name.
+# ============================================================
+
+_model_cache: Dict[str, Any] = {}      # {"model": SentenceTransformer, "lock": dict}
+
+# Engine tier keys (claude_memory.EMBED_TIERS) -> the catalogue's tier names.
+_TIER_KEY_TO_CATALOGUE = {"nomic": "cpu", "qwen": "gpu"}
 
 
-def _get_qwen_model():
-    """Load Qwen3-Embedding-0.6B (apache-2.0) — the SHIPPED 1024-dim tier.
+def brain_lock(target, *, tier: str) -> Dict[str, Any]:
+    """The lock the brain at `target` (a connection, a database path or a data
+    dir) embeds under -- owner decision D2: the brain's lock is read FIRST.
 
-    This exists because `_get_jina_model()` takes no arguments and hardcodes
-    JINA_MODEL_NAME. Registering Qwen against that loader (as model_garden briefly
-    did) would have loaded JINA while the package claimed Apache — a licence
-    violation that reports success. A loader that ignores its spec's repo_id can
-    only ever load one model; each tier needs its own, or one that takes the id.
-    """
-    if "model" in _qwen_model_cache:
-        return _qwen_model_cache["model"]
+    A brain that predates the lock (no embedder.lock.json beside its database:
+    every brain installed before it existed) gets the catalogue entry for the tier
+    the engine already resolved for it (`tier`, the engine's key, read by the
+    caller from the DB). The bytes are verified against that shipped entry exactly
+    as against a written lock. Every other lock defect (LOCK_MALFORMED, ...) still
+    refuses -- only ABSENCE falls back -- and a tier the catalogue does not ship
+    (jina, or a typo) is LOCK_NOT_SHIPPED, never another model."""
+    el = _lock_module()
+    try:
+        return el.resolve(target)
+    except el.EmbedderLockError as e:
+        if e.code != "LOCK_MISSING":
+            raise
+    cat_tier = _TIER_KEY_TO_CATALOGUE.get((tier or "").strip().lower())
+    entry = el.catalogue_tiers().get(cat_tier) if cat_tier else None
+    if entry is None:
+        raise el.EmbedderLockError(
+            "LOCK_NOT_SHIPPED",
+            f"no install lock beside {target!r}, and the tier {tier!r} is not in the shipped "
+            f"catalogue ({sorted(_TIER_KEY_TO_CATALOGUE)}); refusing to load anything else",
+            tier=tier)
+    lock = dict(entry)
+    lock["tier"] = cat_tier
+    lock["_source"] = "catalogue (pre-lock brain: no install lock beside its database)"
+    return lock
+
+
+def get_locked_embedder(lock: Dict[str, Any]):
+    """The embedder `lock` names, loaded once per process, checksum-verified BEFORE
+    instantiation and registered with the COMPUTED checksum. Returns (model, lock).
+
+    `lock` is REQUIRED: there is no lock-less form and no package-root default."""
+    embedder_lock = _lock_module()
+    if not isinstance(lock, dict) or "weights_hash" not in lock:
+        raise embedder_lock.EmbedderLockError(
+            "LOCK_MISSING",
+            "get_locked_embedder needs the lock the caller resolved for its own database "
+            "(brain_lock); there is no default lock")
+    if "model" in _model_cache:
+        held = _model_cache["lock"]
+        if held["weights_hash"] != lock["weights_hash"]:
+            raise embedder_lock.EmbedderLockError(
+                "WEIGHTS_MISMATCH",
+                f"this process already holds {held['model_id']} ({held['weights_hash'][:12]}…) "
+                f"and the lock now asks for {lock['model_id']} ({lock['weights_hash'][:12]}…); "
+                "one model per process, and a lock does not change under a running process",
+                resident=held["weights_hash"], requested=lock["weights_hash"])
+        return _model_cache["model"], lock
+
+    snapshot, computed = embedder_lock.verify_snapshot_against_lock(lock)   # refuses, typed
+
     import torch
     from sentence_transformers import SentenceTransformer
     _quiet_model_load_noise()
     device = _torch_device(torch)
-    logger.info("Loading Qwen3-Embedding-0.6B on %s...", device)
-    # H11 offline: warm cache => local-only, the same as the nomic and jina loaders.
-    offline = _hf_offline_ok(QWEN_MODEL_NAME)
-    model = SentenceTransformer(
-        QWEN_MODEL_NAME,
-        revision=QWEN_REVISION,
-        device=device,
-        local_files_only=offline,
-    )
-    _qwen_model_cache["model"] = model
+    logger.info("Loading %s@%s on %s (weights %s…)", lock["model_id"], lock["revision"][:12],
+                device, computed[:12])
+    t0 = time.time()
+    style = _encode_style(lock["model_id"])
+    if style == "qwen":
+        # Qwen3-Embedding loads without remote code, so loading it BY NAME at the
+        # pinned revision with local_files_only reads exactly the snapshot just
+        # hashed. The revision constant is public main's reproducibility pin; the
+        # catalogue must agree with it, or this is a packaging defect, refused.
+        if lock["model_id"] != QWEN_MODEL_NAME or lock["revision"] != QWEN_REVISION:
+            raise embedder_lock.EmbedderLockError(
+                "WEIGHTS_MISMATCH",
+                f"the lock names {lock['model_id']}@{lock['revision'][:12]} but this engine pins "
+                f"{QWEN_MODEL_NAME}@{QWEN_REVISION[:12]}; the catalogue and the engine disagree",
+                requested=lock["revision"], pinned=QWEN_REVISION)
+        model = SentenceTransformer(
+            QWEN_MODEL_NAME,
+            revision=QWEN_REVISION,
+            device=device,
+            local_files_only=True,
+        )
+    else:
+        kwargs: Dict[str, Any] = {
+            "device": device,
+            "local_files_only": True,       # verify_snapshot_against_lock just proved the bytes are here
+        }
+        if style == "nomic":
+            kwargs["trust_remote_code"] = True   # carries the HF custom_code tag
+        code = lock.get("code")
+        if code:
+            # The remote-code repository the model's auto_map names, pinned to the
+            # commit whose bytes were just hashed into weights_hash; without it the
+            # code tree would follow that repository's `main`.
+            kwargs["model_kwargs"] = {"code_revision": code["revision"]}
+            kwargs["config_kwargs"] = {"code_revision": code["revision"]}
+        # FROM THE VERIFIED SNAPSHOT DIRECTORY, never by repo name: the remote code
+        # nomic ships resolves its weights BY NAME at `main` when handed a repo id,
+        # and a cache filled at the pin carries no `refs/main` -- an offline load of
+        # exactly the bytes the lock names failed that way. Handed the directory, it
+        # reads the weights from the directory: the bytes hashed are the bytes run.
+        import contextlib
+        with contextlib.redirect_stdout(sys.stderr):  # remote code print()s; keep stdout clean
+            model = SentenceTransformer(str(snapshot), **kwargs)
+    embedder_lock.register_loaded(model_id=lock["model_id"], revision=lock["revision"],
+                                  weights_hash=computed, dim=int(lock["dim"]),
+                                  vec_table=lock["vec_table"], tier=lock.get("tier"),
+                                  snapshot=str(snapshot))
+    logger.info("%s loaded in %.1fs (device=%s, weights %s…)", lock["model_id"], time.time() - t0,
+                device, computed[:12])
+    _model_cache["model"] = model
+    _model_cache["lock"] = dict(lock)
+    return model, lock
+
+
+def _encode_style(model_id: str) -> str:
+    """How a model wants its text framed. Keyed on the hub id the LOCK names."""
+    mid = (model_id or "").lower()
+    if mid.startswith("nomic-ai/"):
+        return "nomic"
+    if mid.startswith("qwen/"):
+        return "qwen"
+    return "plain"
+
+
+def encode_locked(text: str, *, is_query: bool, lock: Dict[str, Any]) -> bytes:
+    """Encode ONE text with the locked embedder, framed the way that model wants
+    (nomic: a task prefix; Qwen3-Embedding is ASYMMETRIC: prompt_name='query' on the
+    query side, none on documents -- older sentence-transformers builds lack the
+    prompt, and a plain encode is slightly worse retrieval where a crash is an
+    outage). Width is the lock's dim."""
+    import numpy as np
+    model, lock = get_locked_embedder(lock)
+    dim = int(lock["dim"])
+    style = _encode_style(lock["model_id"])
+    if style == "nomic":
+        vec = model.encode(f"{'search_query' if is_query else 'search_document'}: {text}",
+                           normalize_embeddings=True)
+    elif style == "qwen" and is_query:
+        try:
+            vec = model.encode(text, prompt_name="query", normalize_embeddings=True)
+        except (TypeError, ValueError, KeyError):
+            vec = model.encode(text, normalize_embeddings=True)
+    else:
+        vec = model.encode(text, normalize_embeddings=True)
+    return serialize_f32(np.asarray(vec)[:dim].astype(np.float32).tolist())
+
+
+def encode_locked_batch(texts: List[str], *, is_query: bool = False,
+                        lock: Dict[str, Any]) -> List[bytes]:
+    """Batch form of encode_locked, for the re-embed path."""
+    import numpy as np
+    model, lock = get_locked_embedder(lock)
+    dim = int(lock["dim"])
+    style = _encode_style(lock["model_id"])
+    kw: Dict[str, Any] = {"normalize_embeddings": True, "show_progress_bar": False,
+                          "batch_size": min(max(len(texts), 1), BATCH_SIZE)}
+    if style == "nomic":
+        prefix = "search_query" if is_query else "search_document"
+        embs = model.encode([f"{prefix}: {t}" for t in texts], **kw)
+    elif style == "qwen" and is_query:
+        try:
+            embs = model.encode(texts, prompt_name="query", **kw)
+        except (TypeError, ValueError, KeyError):
+            embs = model.encode(texts, **kw)
+    else:
+        embs = model.encode(texts, **kw)
+    return [serialize_f32(np.asarray(e)[:dim].astype(np.float32).tolist()) for e in embs]
+
+
+def _model_for(model_id: str, lock: Dict[str, Any]):
+    """A per-tier entry point's way in: the locked embedder IF the lock the caller
+    resolved names this model; otherwise a typed refusal, never another model."""
+    embedder_lock = _lock_module()
+    model, lock = get_locked_embedder(lock)
+    if lock["model_id"] != model_id:
+        raise embedder_lock.EmbedderLockError(
+            "WEIGHTS_MISMATCH",
+            f"{model_id} was requested but the lock names {lock['model_id']} "
+            f"({lock['weights_hash'][:12]}…); this install embeds with nothing else",
+            requested=model_id, locked=lock["model_id"])
     return model
 
 
-def _encode_qwen(text: str, *, is_query: bool) -> bytes:
-    """Qwen3-Embedding is ASYMMETRIC: queries carry an instruction prompt,
-    documents do not. sentence-transformers exposes that as prompt_name='query'.
-    Older builds lack the prompt; fall back to plain encoding rather than raising,
-    because a symmetric encode is slightly worse retrieval and a crash is an
-    outage."""
-    import numpy as np
-    model = _get_qwen_model()
-    kwargs = {"normalize_embeddings": True}
-    if is_query:
-        try:
-            vec = model.encode(text, prompt_name="query", **kwargs)
-        except (TypeError, ValueError, KeyError):
-            vec = model.encode(text, **kwargs)
-    else:
-        vec = model.encode(text, **kwargs)
-    return serialize_f32(np.asarray(vec)[:QWEN_DIM].astype(np.float32).tolist())
+def _get_nomic_model(lock: Dict[str, Any]):
+    return _model_for(NOMIC_MODEL_NAME, lock)
 
 
-def encode_qwen_query(text: str) -> bytes:
-    return _encode_qwen(text, is_query=True)
+def _get_qwen_model(lock: Dict[str, Any]):
+    return _model_for(QWEN_MODEL_NAME, lock)
 
 
-def encode_qwen_document(text: str) -> bytes:
-    return _encode_qwen(text, is_query=False)
+def encode_qwen_query(text: str, *, lock: Dict[str, Any]) -> bytes:
+    _model_for(QWEN_MODEL_NAME, lock)
+    return encode_locked(text, is_query=True, lock=lock)
 
 
-def encode_nomic(text: str, prefix: str = "search_document") -> bytes:
-    """Encode using Nomic v1.5 (baseline). Matches existing _encode() API."""
-    import numpy as np
+def encode_qwen_document(text: str, *, lock: Dict[str, Any]) -> bytes:
+    _model_for(QWEN_MODEL_NAME, lock)
+    return encode_locked(text, is_query=False, lock=lock)
 
-    model = _get_nomic_model()
-    query = f"{prefix}: {text}"
-    vec = model.encode(query, normalize_embeddings=True)
-    return serialize_f32(vec[:NOMIC_DIM].astype(np.float32).tolist())
+
+def encode_nomic(text: str, prefix: str = "search_document", *, lock: Dict[str, Any]) -> bytes:
+    """Encode using Nomic v1.5 under the lock. Matches the engine's _encode() API."""
+    _model_for(NOMIC_MODEL_NAME, lock)
+    return encode_locked(text, is_query=(prefix == "search_query"), lock=lock)
+
+
+class VerbRefused(RuntimeError):
+    """A typed refusal from a verb of this module. `.code` names it; `.as_dict()` is
+    the envelope; main() prints the envelope and EXITS 1."""
+
+    def __init__(self, code: str, message: str, **detail: Any):
+        super().__init__(f"{code}: {message}")
+        self.code = code
+        self.message = message
+        self.detail = dict(detail)
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {"status": "error", "error": self.code, "message": self.message, **self.detail}
 
 
 # ============================================================
@@ -746,13 +924,16 @@ def cmd_ab_compare(args) -> Dict[str, Any]:
     per_query_results = []
 
     top_k = 10  # Retrieve top-10 for nDCG@10, evaluate recall@5 on top-5
+    # The nomic side encodes under the lock of THIS database (or, before the lock
+    # existed, the shipped catalogue's cpu entry): verified bytes, never a bare name.
+    nomic_lock = brain_lock(db_path, tier="nomic")
 
     for qi, q in enumerate(scoreable):
         query_text = q["query"]
         ground_truth = set(q["ground_truth_top_3"])
 
         # --- Nomic path (existing memory_embeddings) ---
-        nomic_vec = encode_nomic(query_text, prefix="search_query")
+        nomic_vec = encode_nomic(query_text, prefix="search_query", lock=nomic_lock)
         try:
             nomic_rows = conn.execute("""
                 SELECT emb.memory_id, emb.distance
@@ -902,61 +1083,29 @@ def cmd_ab_compare(args) -> Dict[str, Any]:
 # ============================================================
 
 def cmd_swap(args) -> Dict[str, Any]:
-    """Mark Jina v5 as the default embedding model.
+    """REFUSED, typed, and the process EXITS 1.
 
-    This updates metadata in the database. The actual code change (pointing
-    _encode() at Jina v5) is done in the patched claude_memory.py.
+    `swap` re-pointed a brain at another tier by rewriting the metadata rows
+    (`active_embedding_table` and friends) without re-embedding a single vector:
+    after it, the engine read one model's vectors with another model's queries --
+    same width, different space, no error anywhere. A brain with an install lock
+    takes its tier from the lock, so the rows would not even move it; a brain
+    without one would be silently re-pointed. Neither is a swap.
+
+    Changing an install's tier is re-embedding every memory under the new weights
+    and only then writing the new lock (`tier set`), which this release does not
+    build -- declared here rather than done halfway.
+
+    It RAISES; main() prints the envelope and exits 1. An error envelope with
+    process exit 0 reads as success to every shell gate that wraps the verb.
     """
-    db_path = args.db_path
-    logger.info("Swapping default embedding to Jina v5 in: %s", db_path)
-
-    conn = _get_conn(db_path)
-
-    # Verify v2 table is fully populated
-    v1_count = conn.execute("SELECT COUNT(*) FROM memory_embeddings").fetchone()[0]
-    v2_count = conn.execute("SELECT COUNT(*) FROM memory_embeddings_v2").fetchone()[0]
-
-    if v2_count < v1_count * 0.95:
-        conn.close()
-        return {
-            "status": "error",
-            "message": f"v2 table incomplete: {v2_count}/{v1_count} rows ({100*v2_count/v1_count:.1f}%)",
-        }
-
-    # Update metadata
-    conn.execute(
-        "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-        ("active_embedding_model", JINA_MODEL_NAME),
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-        ("active_embedding_dim", str(JINA_DIM)),
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-        ("active_embedding_table", "memory_embeddings_v2"),
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-        ("embedding_upgrade_completed", datetime.now().isoformat()),
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-        ("schema_version", "3.7-L3-embedding-upgrade"),
-    )
-    conn.commit()
-    conn.close()
-
-    result = {
-        "status": "success",
-        "active_model": JINA_MODEL_NAME,
-        "active_dim": JINA_DIM,
-        "active_table": "memory_embeddings_v2",
-        "v1_rows": v1_count,
-        "v2_rows": v2_count,
-    }
-    logger.info("Swap complete: %s", json.dumps(result, indent=2))
-    return result
+    raise VerbRefused(
+        "SWAP_REFUSED",
+        "`swap` re-pointed an install without re-embedding and is refused. The tier of an "
+        "install is its embedder.lock.json; changing it means re-embedding every memory "
+        "under the new weights before the lock moves (`tier set`), which this release "
+        "does not build.",
+        replacement="tier set", built=False, db_path=getattr(args, "db_path", None))
 
 
 # ============================================================
@@ -1095,8 +1244,11 @@ def cmd_full(args) -> Dict[str, Any]:
     # Step 5: Conditional swap
     verdict = results["ab_compare"].get("verdict", "REGRESSION")
     if verdict in ("UPGRADE", "NO_REGRESSION"):
-        logger.info("\n[5/5] Swapping to Jina v5 (verdict: %s)...", verdict)
-        results["swap"] = cmd_swap(args)
+        logger.info("\n[5/5] swap is refused under the install lock (verdict: %s)", verdict)
+        try:
+            results["swap"] = cmd_swap(args)
+        except VerbRefused as e:
+            results["swap"] = e.as_dict()
     else:
         logger.warning("\n[5/5] SKIPPING swap (verdict: %s — regression detected)", verdict)
         results["swap"] = {"status": "skipped", "reason": f"verdict={verdict}"}
@@ -1162,7 +1314,8 @@ def cmd_test(args) -> Dict[str, Any]:
 
     # Test 5: Nomic model loads and produces 768-dim embeddings
     try:
-        nomic_emb = encode_nomic("test embedding", prefix="search_query")
+        nomic_emb = encode_nomic("test embedding", prefix="search_query",
+                                 lock=brain_lock(sqlite3.connect(":memory:"), tier="nomic"))
         dim = len(struct.unpack(f"{NOMIC_DIM}f", nomic_emb))
         _assert("nomic_produces_768_dim", dim == 768, f"Got dim={dim}")
     except Exception as e:
@@ -1269,13 +1422,17 @@ def cmd_test(args) -> Dict[str, Any]:
 
         class FakeArgs2:
             db_path = temp_db2
-        swap_result = cmd_swap(FakeArgs2())
-        _assert("swap_succeeds", swap_result["status"] == "success")
+        try:
+            cmd_swap(FakeArgs2())
+            refused = None
+        except VerbRefused as e:
+            refused = e.code
+        _assert("swap_refuses_typed", refused == "SWAP_REFUSED")
 
-        # Verify metadata was set
+        # ...and wrote nothing
         conn = _get_conn(temp_db2)
-        active = conn.execute("SELECT value FROM metadata WHERE key = 'active_embedding_model'").fetchone()
-        _assert("swap_sets_active_model", active and active[0] == JINA_MODEL_NAME)
+        n_meta = conn.execute("SELECT COUNT(*) FROM metadata").fetchone()[0]
+        _assert("swap_writes_no_metadata", n_meta == 0)
         conn.close()
 
     finally:
@@ -1326,7 +1483,7 @@ def main():
     subparsers.add_parser("migrate", help="Apply migration SQL")
     subparsers.add_parser("re-embed", help="Re-embed all memories")
     subparsers.add_parser("ab-compare", help="Run A/B comparison")
-    subparsers.add_parser("swap", help="Swap default to Jina v5")
+    subparsers.add_parser("swap", help="REFUSED: re-pointing without re-embedding (exit 1)")
     subparsers.add_parser("stats", help="Show embedding stats")
     subparsers.add_parser("full", help="Full pipeline (all steps)")
     subparsers.add_parser("test", help="Run unit tests")
@@ -1362,7 +1519,13 @@ def main():
 
     handler = commands.get(args.command)
     if handler:
-        result = handler(args)
+        try:
+            result = handler(args)
+        except VerbRefused as e:
+            # An error envelope with process exit 0 reads as success to every shell
+            # gate that wraps this verb: a refusal exits 1.
+            print(json.dumps(e.as_dict(), indent=2))
+            sys.exit(1)
         print(json.dumps(result, indent=2))
     else:
         parser.print_help()

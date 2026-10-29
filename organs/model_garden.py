@@ -459,15 +459,25 @@ def _load_via_jina(spec: ModelSpec) -> Any:
     return eu._get_jina_model()
 
 
+def _engine_lock(eu: Any, tier: str) -> Dict[str, Any]:
+    """The lock the ENGINE's database embeds under (WIZARD_LIBRARY_DB, else the tree
+    root) -- the same object the engine's own load path resolves: the lock beside
+    the database first, the shipped catalogue entry for `tier` on a brain that
+    predates the lock (embedding_upgrade.brain_lock)."""
+    wizard_paths = importlib.import_module("wizard_paths")
+    return eu.brain_lock(wizard_paths.get_db_path(), tier=tier)
+
+
 def _load_via_qwen(spec: ModelSpec) -> Any:
-    """Delegate to embedding_upgrade._get_qwen_model (its module-global cache)."""
+    """Delegate to embedding_upgrade._get_qwen_model UNDER THE LOCK: a typed
+    refusal (WEIGHTS_MISMATCH) if the lock names another model."""
     eu = importlib.import_module("embedding_upgrade")
-    return eu._get_qwen_model()
+    return eu._get_qwen_model(_engine_lock(eu, "qwen"))
 
 
 def _load_via_nomic(spec: ModelSpec) -> Any:
     eu = importlib.import_module("embedding_upgrade")
-    return eu._get_nomic_model()
+    return eu._get_nomic_model(_engine_lock(eu, "nomic"))
 
 
 def _load_via_reranker(spec: ModelSpec) -> Any:

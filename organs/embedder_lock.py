@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """embedder_lock.py — the catalogue, the install lock, and the checksum that binds them.
 
-Voidstead M1-C1 (the lockfile half) and M1-C2 (the reader's source). Amendment 4,
-RELEASE_CRITERIA.md, 2026-09-17:
+The design rule it implements (2026-09-17):
 
     THE DERIVATION SOURCE MUST NAME THE EMBEDDER BY THE SAME CONTENT IDENTITY THAT
     EVERY VECTOR ROW CARRIES AS A WRITTEN FACT, SO THAT THE ONLY ACT CAPABLE OF

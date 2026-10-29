@@ -737,8 +737,14 @@ def _encode(text: str, prefix: str = "search_document") -> bytes:
         return encode_jina_query(text) if prefix == "search_query" else encode_jina_document(text)
     if _tier == "qwen":
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from embedding_upgrade import encode_qwen_query, encode_qwen_document
-        return encode_qwen_query(text) if prefix == "search_query" else encode_qwen_document(text)
+        import embedding_upgrade
+        # The one loader, under THIS brain's lock -- or, for a brain that predates
+        # the lock, the shipped catalogue entry of the tier resolved above (D2): the
+        # bytes are hashed against it before anything is instantiated.
+        lock = embedding_upgrade.brain_lock(DB_PATH, tier=_tier)
+        if prefix == "search_query":
+            return embedding_upgrade.encode_qwen_query(text, lock=lock)
+        return embedding_upgrade.encode_qwen_document(text, lock=lock)
     model = _load_model()
     import numpy as np
     query = f"{prefix}: {text}"

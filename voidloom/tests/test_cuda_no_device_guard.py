@@ -111,7 +111,7 @@ class TestTheGate(unittest.TestCase):
             else:
                 self.assertIn("from voidloom_device import torch_device", s, rel)
         self.assertEqual((ROOT / "organs/embedding_upgrade.py").read_text(encoding="utf-8")
-                         .count("_torch_device(torch)"), 3)
+                         .count("_torch_device(torch)"), 2)
         dv = (ROOT / "organs/voidloom_device.py").read_text(encoding="utf-8")
         self.assertIn("return cuda_available(torch), ", dv)          # torch_device's CUDA/ROCm confirmation is R-6's
 

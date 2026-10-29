@@ -1127,7 +1127,21 @@ gpu_count() {
 
 hd_embed_model_from_db() {   # bash 3.2 (macOS /bin/bash) cannot parse a heredoc inside $( ): the command and its heredoc live here, called as $(hd_embed_model_from_db) (round 2, B2)
     "$PY_SYS" - "$DB_PATH" <<'PYEOF' 2>/dev/null || true
-import os, sqlite3, sys, urllib.request   # escaped URI (iteration 4, LOW 2)
+import json, os, sqlite3, sys, urllib.request   # escaped URI (iteration 4, LOW 2)
+# THE INSTALL LOCK FIRST (owner decision D2): <brain-dir>/embedder.lock.json, beside the
+# database file with symlinks followed (the rule organs/embedder_lock.py applies). A lock
+# names only a SHIPPED tier; a lock that is unreadable or names anything else prints
+# LOCK_MALFORMED, which the tier-facts block refuses by name. No lock -> the brain predates
+# it, and its metadata row is read as before.
+_lock = os.path.join(os.path.dirname(os.path.realpath(os.path.abspath(sys.argv[1]))), "embedder.lock.json")
+if os.path.exists(_lock):
+    try:
+        with open(_lock, encoding="utf-8") as _f:
+            _tab = json.load(_f)["vec_table"]
+    except Exception:
+        _tab = None
+    print({"memory_embeddings_v3": "qwen", "memory_embeddings": "nomic"}.get(_tab, "LOCK_MALFORMED"))
+    sys.exit(0)
 try:
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(sys.argv[1])), uri=True)
     row = c.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
@@ -1165,7 +1179,7 @@ resolve_embed_model() {
     if [ -f "$DB_PATH" ]; then
         local m
         m="$(hd_embed_model_from_db)"
-        case "$m" in qwen|jina|nomic) echo "$m"; return ;; esac
+        case "$m" in qwen|jina|nomic|LOCK_MALFORMED) echo "$m"; return ;; esac
     fi
     # Fresh/blank brain: pick by hardware. GPU gets qwen, NOT jina -- jina is
     # non-commercial and must never be selected for someone by default.
@@ -1206,9 +1220,14 @@ if ! ENGINE_REGISTRY="$(engine_registry "$PY_SYS" "${PKG_ROOT}/organs/claude_mem
 fi
 _tier_row="$(printf '%s\n' "$ENGINE_REGISTRY" | awk -F'\t' -v m="$EMBED_MODEL" '$1 == m')"
 if [ -z "$_tier_row" ]; then
-    # an unknown WIZARD_EMBED_MODEL degrades to the CPU tier, as before -- chosen by KEY, its facts still the engine's
-    EMBED_MODEL="nomic"
-    _tier_row="$(printf '%s\n' "$ENGINE_REGISTRY" | awk -F'\t' -v m="$EMBED_MODEL" '$1 == m')"
+    # An unknown model is REFUSED BY NAME (owner decision D2), never swapped for the CPU tier: installing a
+    # tier the operator did not ask for and reporting success is the "success that changes the wrong thing".
+    if [ "$EMBED_MODEL" = "LOCK_MALFORMED" ]; then
+        echo "[install] REFUSED: the install lock beside ${DB_PATH} (embedder.lock.json) is unreadable or names a tier this package does not ship. Nothing was touched; inspect or restore that file." >&2
+    else
+        echo "[install] REFUSED: unknown embedding model '${EMBED_MODEL}' (WIZARD_EMBED_MODEL). This engine's tiers are: $(printf '%s\n' "$ENGINE_REGISTRY" | cut -f1 | tr '\n' ' ')-- nothing was touched." >&2
+    fi
+    exit 2
 fi
 IFS="$(printf '\t')" read -r _ EMBED_TABLE EMBED_DIM EMBED_REPO <<EOF_TIER_ROW
 $_tier_row

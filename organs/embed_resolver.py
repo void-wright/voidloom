@@ -15,10 +15,19 @@ WHY THIS EXISTS
     `_active_embed_dim`), and `_active_embed_dim`'s own docstring already says
     "use both together whenever unpacking raw embedding blobs". Nothing bound it.
 
+THE INSTALL LOCK IS READ FIRST (owner decision D2)
+    A brain installed with an install lock (<data-dir>/embedder.lock.json) takes its
+    table and width from THE LOCK, and a metadata row cannot move it: an UPDATE of
+    `active_embedding_table` would otherwise re-point recall at another model's
+    vectors without re-embedding one of them. Only a brain with NO lock beside its
+    database -- every brain installed before the lock existed -- is read from
+    metadata, as before. A malformed lock is never "absent": it refuses, typed.
+
 WHY NOT JUST IMPORT claude_memory
     `claude_memory` imports sleep_loop, temporal_edges and pre_cognitive_recall.
     Importing it back from those modules is a CIRCULAR IMPORT. This module imports
-    nothing from the package, so anyone may import it.
+    only `embedder_lock`, which imports nothing from the package, so anyone may
+    import it.
 
 TWO DELIBERATE DIFFERENCES FROM `claude_memory._active_embed_model()`
     1. It resolves from THE CALLER'S CONNECTION, not a module-level `DB_PATH`.
@@ -31,7 +40,14 @@ TWO DELIBERATE DIFFERENCES FROM `claude_memory._active_embed_model()`
        this brain cannot see; it must not be the default.
 """
 from __future__ import annotations
+import os as _os
 import sqlite3
+import sys as _sys
+
+_here = _os.path.dirname(_os.path.abspath(__file__))
+if _here not in _sys.path:
+    _sys.path.insert(0, _here)
+import embedder_lock  # noqa: E402  (stdlib-only; imports nothing from the package)
 
 NOMIC_DIM = 768
 JINA_DIM = 1024
@@ -46,14 +62,47 @@ _DIM_FOR = {_V3: QWEN_DIM, _V2: JINA_DIM, _V1: NOMIC_DIM}
 
 
 class EmbedTierUnresolved(RuntimeError):
-    """Raised instead of guessing. Loud beats a silent wrong table."""
+    """Raised instead of guessing. Loud beats a silent wrong table.
+    `.code` carries the embedder_lock refusal when there is one."""
+
+    def __init__(self, message: str, code: str = "LOCK_MISSING"):
+        super().__init__(message)
+        self.code = code
+
+
+def _from_lock(conn: sqlite3.Connection):
+    """(table, dim) from the install lock beside `conn`'s database; None when there
+    is NO lock (a pre-lock brain). Any other lock defect refuses, typed."""
+    try:
+        lock = embedder_lock.resolve(conn)
+    except embedder_lock.EmbedderLockError as e:
+        if e.code == "LOCK_MISSING":
+            return None
+        raise EmbedTierUnresolved(str(e), code=e.code) from e
+    table = str(lock["vec_table"]).strip()
+    dim = int(lock["dim"])
+    if table not in _DIM_FOR:
+        raise EmbedTierUnresolved(
+            f"the lock at {lock.get('_path')} names vec_table {table!r}, which this engine "
+            f"does not know how to create or search (known: {sorted(_DIM_FOR)})",
+            code="LOCK_MALFORMED")
+    if _DIM_FOR[table] != dim:
+        raise EmbedTierUnresolved(
+            f"the lock at {lock.get('_path')} says {table!r} is {dim} wide; this engine builds "
+            f"it {_DIM_FOR[table]} wide. Same name, different space: refusing.",
+            code="LOCK_MALFORMED")
+    return table, dim
 
 
 def resolve(conn: sqlite3.Connection) -> tuple[str, int]:
-    """Return (table, dim) for the database `conn` is attached to.
+    """Return (table, dim) for the database `conn` is attached to: from the install
+    lock beside it when there is one, else (a pre-lock brain) from metadata.
 
     Raises EmbedTierUnresolved rather than falling back to the dormant table.
     """
+    from_lock = _from_lock(conn)
+    if from_lock is not None:
+        return from_lock
     try:
         row = conn.execute(
             "SELECT value FROM metadata WHERE key='active_embedding_table'"
