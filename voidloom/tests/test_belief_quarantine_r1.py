@@ -61,9 +61,9 @@ def _authored(conn, mid):
     """Stamp a memory as the store path does: a person wrote it (2026-10-26: the
     belief engine judges only pairs whose both ends a person authored)."""
     conn.execute(
-        "INSERT INTO embedding_provenance (memory_id, vec_table, model_id, model_ref, dim, content_hash, "
-        "embedded_at, organ) VALUES (?, 'memory_embeddings_v2', 'test/model', 'unresolved', 1024, ?, "
-        "datetime('now'), 'claude_memory.store')", (mid, "0" * 64))
+        "INSERT INTO embedding_provenance (memory_id, vec_table, model_id, model_ref, weights_hash, dim, "
+        "content_hash, embedded_at, organ, input_kind, inputs) VALUES (?, 'memory_embeddings_v2', 'test/model', "
+        "'unresolved', 'unresolved', 1024, ?, datetime('now'), 'claude_memory.store', 'text', NULL)", (mid, "0" * 64))
 
 
 def _edge_pair(conn, a, b, conf=0.95):

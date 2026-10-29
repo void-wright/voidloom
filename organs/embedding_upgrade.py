@@ -580,8 +580,10 @@ def cmd_re_embed(args) -> Dict[str, Any]:
     # Log the upgrade run
     started_at = datetime.now().isoformat()
     conn.execute(
-        "INSERT INTO embedding_upgrade_log (started_at, memories_total, status) VALUES (?, ?, ?)",
-        (started_at, total, "in_progress"),
+        "INSERT INTO embedding_upgrade_log (started_at, model_name, embedding_dim, memories_total, status) "
+        "VALUES (?, ?, ?, ?, ?)",
+        # migration_043: the log names the model this run embeds with; no column DEFAULT names it for us
+        (started_at, JINA_MODEL_NAME, JINA_DIM, total, "in_progress"),
     )
     conn.commit()
 

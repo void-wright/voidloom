@@ -606,11 +606,19 @@ def unfindable_report(conn: sqlite3.Connection) -> Dict[str, Any]:
 # ==========================================================================
 
 PROVENANCE_TABLE = "embedding_provenance"
-PROVENANCE_COLUMNS = ("memory_id", "vec_table", "model_id", "model_ref",
-                      "dim", "content_hash", "embedded_at", "organ")
+PROVENANCE_COLUMNS = ("memory_id", "vec_table", "model_id", "model_ref", "weights_hash",
+                      "dim", "content_hash", "embedded_at", "organ", "input_kind", "inputs")
 MODEL_REF_UNRESOLVED = "unresolved"
+# migration_042's declared absence: "nobody recorded the checksum of the weights
+# that produced this vector". This writer has no install lock to read the
+# checksum from, so it states the absence rather than inventing an identity; a
+# reader that compares against a lock never matches it. Same spelling as
+# MODEL_REF_UNRESOLVED, on purpose: one word for "unknown" in this table.
+WEIGHTS_HASH_UNRESOLVED = "unresolved"
 _PROVENANCE_MIGRATION = (Path(__file__).resolve().parent.parent / "migrations"
                          / "migration_033_embedding_provenance.sql")
+_PROVENANCE_MIGRATION_042 = (Path(__file__).resolve().parent.parent / "migrations"
+                             / "migration_042_embedder_lock.sql")
 _provenance_stmt_cache: Dict[str, List[str]] = {}
 
 
@@ -640,7 +648,7 @@ class ProvenanceUnmatched(ProvenanceError):
         self.coverage = coverage
 
 
-def _provenance_statements() -> List[str]:
+def _provenance_statements(path: Optional[Path] = None) -> List[str]:
     """The migration's statements, split by sqlite3.complete_statement, cached.
 
     Comment-only text is dropped; a comment line that introduces a statement
@@ -648,14 +656,15 @@ def _provenance_statements() -> List[str]:
     re-implemented here rather than imported so this module's import surface
     does not widen).
     """
-    key = str(_PROVENANCE_MIGRATION)
+    path = path or _PROVENANCE_MIGRATION
+    key = str(path)
     if key in _provenance_stmt_cache:
         return _provenance_stmt_cache[key]
     try:
-        sql = _PROVENANCE_MIGRATION.read_text(encoding="utf-8")
+        sql = path.read_text(encoding="utf-8")
     except OSError as e:
         raise ProvenanceUnreadable(
-            f"provenance migration absent at {_PROVENANCE_MIGRATION} ({e}). "
+            f"provenance migration absent at {path} ({e}). "
             "The package is built from `git ls-files`; an untracked migration is "
             "absent from every install.") from e
 
@@ -674,15 +683,47 @@ def _provenance_statements() -> List[str]:
     if buf.strip() and has_sql(buf):
         out.append(buf.strip())
     if not out:
-        raise ProvenanceUnreadable(f"{_PROVENANCE_MIGRATION} parsed to zero statements")
+        raise ProvenanceUnreadable(f"{path} parsed to zero statements")
     _provenance_stmt_cache[key] = out
     return out
 
 
+def _sidecar_columns(conn: sqlite3.Connection) -> List[str]:
+    return [r[1] for r in conn.execute(f"PRAGMA table_info({PROVENANCE_TABLE})").fetchall()]
+
+
 def ensure_provenance_table(conn: sqlite3.Connection) -> None:
-    """Idempotent. One statement at a time. NEVER executescript (see header)."""
-    for stmt in _provenance_statements():
-        conn.execute(stmt)
+    """Idempotent, shape-driven, one statement at a time, inside ONE savepoint.
+
+    absent      -> migration_033 then migration_042 (a fresh, empty sidecar)
+    033 shape   -> migration_042 alone: the house rebuild, which carries every
+                   existing row forward with weights_hash 'unresolved'
+    042 shape   -> nothing.
+
+    A SAVEPOINT with no transaction open BEGINS one; inside a caller's open
+    transaction it nests. Either way a refused rebuild (one of 042's named
+    CHECKs) rolls back whole -- no `embedding_provenance_new` stranded, no row
+    moved -- and RELEASE commits only when this was the outermost frame.
+    NEVER executescript here: it would COMMIT the caller's open transaction.
+    """
+    cols = _sidecar_columns(conn)
+    if "weights_hash" in cols:
+        return
+    sp = "ensure_provenance_table"
+    conn.execute(f"SAVEPOINT {sp}")
+    try:
+        if not cols:
+            for stmt in _provenance_statements():
+                conn.execute(stmt)
+        for stmt in _provenance_statements(_PROVENANCE_MIGRATION_042):
+            conn.execute(stmt)
+        conn.execute(f"RELEASE SAVEPOINT {sp}")
+    except sqlite3.Error as e:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+        conn.execute(f"RELEASE SAVEPOINT {sp}")
+        raise ProvenanceUnreadable(
+            f"the provenance sidecar could not be brought to migration_042's shape ({e}); "
+            "it is left exactly as found. Run `schema_migrator apply` and read its report.") from e
 
 
 def content_hash(text: str) -> str:
@@ -756,9 +797,11 @@ def _stamp_provenance(conn: sqlite3.Connection, memory_id: int, table: str, dim:
     row = {
         "memory_id": int(memory_id), "vec_table": table,
         "model_id": ident["model_id"], "model_ref": ident["model_ref"],
+        "weights_hash": WEIGHTS_HASH_UNRESOLVED,
         "dim": int(dim), "content_hash": content_hash(text),
         "embedded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "organ": organ or "?",
+        "input_kind": "text", "inputs": None,
     }
     conn.execute(
         f"INSERT OR REPLACE INTO {PROVENANCE_TABLE} ({', '.join(PROVENANCE_COLUMNS)}) "

@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS embedding_upgrade_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at TEXT NOT NULL,
     completed_at TEXT,
-    model_name TEXT NOT NULL DEFAULT 'jinaai/jina-embeddings-v5-text-small',
+    model_name TEXT NOT NULL,
     embedding_dim INTEGER NOT NULL DEFAULT 1024,
     memories_processed INTEGER DEFAULT 0,
     memories_total INTEGER DEFAULT 0,

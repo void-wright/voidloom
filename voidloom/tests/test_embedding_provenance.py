@@ -106,8 +106,10 @@ def _plant_default_style_stamp(conn: sqlite3.Connection, model_id: str) -> None:
     plausible-looking stamp is still a lie."""
     conn.execute(f"""
         INSERT OR REPLACE INTO embedding_provenance
-            (memory_id, vec_table, model_id, model_ref, dim, content_hash, embedded_at, organ)
-        SELECT id, '{TABLE}', ?, 'deadbeef', {DIM}, ?, '2026-01-01T00:00:00+00:00', 'mutant'
+            (memory_id, vec_table, model_id, model_ref, weights_hash, dim, content_hash, embedded_at, organ,
+             input_kind, inputs)
+        SELECT id, '{TABLE}', ?, 'deadbeef', 'unresolved', {DIM}, ?, '2026-01-01T00:00:00+00:00', 'mutant',
+               'text', NULL
         FROM memories
     """, (model_id, hashlib.sha256(b"").hexdigest()))
     conn.commit()
@@ -301,9 +303,9 @@ class C6_ForeignModelStampIsNotCoverage(_BrainCase):
         mid = _add(self.conn, "mixed")
         self.conn.execute(f"INSERT INTO {TABLE} (memory_id, embedding) VALUES (?, ?)",
                           (mid, _stub_encoder("mixed")))
-        self.conn.execute("""INSERT INTO embedding_provenance VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                          (mid, TABLE, "some/other-model", "cafe", DIM,
-                           hashlib.sha256(b"mixed").hexdigest(), "2026-01-01T00:00:00+00:00", "t"))
+        self.conn.execute("""INSERT INTO embedding_provenance VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                          (mid, TABLE, "some/other-model", "cafe", "unresolved", DIM,
+                           hashlib.sha256(b"mixed").hexdigest(), "2026-01-01T00:00:00+00:00", "t", "text", None))
         self.conn.commit()
         cov = self.mw.provenance_coverage(self.conn)
         self.assertEqual(cov.stamped_foreign, 1)
@@ -324,9 +326,9 @@ class C7_ReaderRefusesTyped(_BrainCase):
         mid = _add(self.conn, "a")
         self.conn.execute(f"INSERT INTO {TABLE} (memory_id, embedding) VALUES (?, ?)",
                           (mid, _stub_encoder("a")))
-        self.conn.execute("INSERT INTO embedding_provenance VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                          (mid, TABLE, "some/other-model", "cafe", DIM,
-                           hashlib.sha256(b"a").hexdigest(), "2026-01-01T00:00:00+00:00", "t"))
+        self.conn.execute("INSERT INTO embedding_provenance VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                          (mid, TABLE, "some/other-model", "cafe", "unresolved", DIM,
+                           hashlib.sha256(b"a").hexdigest(), "2026-01-01T00:00:00+00:00", "t", "text", None))
         self.conn.commit()
         with self.assertRaises(self.mw.ProvenanceUnmatched) as cm:
             self.mw.provenance_coverage(self.conn)

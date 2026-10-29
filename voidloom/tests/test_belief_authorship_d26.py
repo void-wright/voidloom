@@ -52,9 +52,9 @@ def _mem(conn, content):
 
 def _stamp(conn, mid, organ):
     conn.execute(
-        "INSERT INTO embedding_provenance (memory_id, vec_table, model_id, model_ref, dim, content_hash, "
-        "embedded_at, organ) VALUES (?, 'memory_embeddings_v2', 'test/model', 'unresolved', 1024, ?, "
-        "datetime('now'), ?)", (mid, "0" * 64, organ))
+        "INSERT INTO embedding_provenance (memory_id, vec_table, model_id, model_ref, weights_hash, dim, "
+        "content_hash, embedded_at, organ, input_kind, inputs) VALUES (?, 'memory_embeddings_v2', 'test/model', "
+        "'unresolved', 'unresolved', 1024, ?, datetime('now'), ?, 'text', NULL)", (mid, "0" * 64, organ))
 
 
 def _live_pair(conn, a, b, by='{"authored_by": "belief_engine"}'):

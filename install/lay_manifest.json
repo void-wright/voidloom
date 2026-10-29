@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 401,
+    "core": 406,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 356,
+    "all": 361,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 389,
+    "brain": 394,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "c215ca7",
+  "derived_at_head": "7cfa8e6",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 419,
+  "entries": 424,
   "platforms": [
    "all",
    "posix",
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "d48dc7ec70c717482457e25db1f259802daa6bb77fdfcf4e3b89599f35a671f5",
+   "sha256": "dae6c3a8643743904c8ac9d1873ca12b1dfbc7f1e77ea9f84f365d6fcb0ab047",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1235,13 +1235,13 @@
    "src": "migrations/migration_012_cross_tier_bridges.sql"
   },
   {
-   "bytes": 1532,
+   "bytes": 1485,
    "component": "core",
    "dst": "migrations/migration_013_embedding_upgrade.sql",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "dcb755845acaf3e5336f2a33a89b57600b2ae912c35ba7811941ba25e2e72030",
+   "sha256": "b824a6857f13c19d22656ad5fc98278af55c304a16025839209b35f7bb5e2cbf",
    "src": "migrations/migration_013_embedding_upgrade.sql"
   },
   {
@@ -1453,6 +1453,46 @@
    "root": "brain",
    "sha256": "c09d085857957b882f7a919a555f97306fda42cb396ee2505b041e4c5e6f39ff",
    "src": "migrations/migration_041_belief_quarantine.sql"
+  },
+  {
+   "bytes": 6491,
+   "component": "core",
+   "dst": "migrations/migration_042_embedder_lock.sql",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "8605e858ef34af9336181293bc30ded7e58d2ae8e22d4bab5f2465f7b0dc217a",
+   "src": "migrations/migration_042_embedder_lock.sql"
+  },
+  {
+   "bytes": 6161,
+   "component": "core",
+   "dst": "migrations/migration_043_retire_encumbered_default.sql",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "28dcb0834effc4aa93006d116f4ecf35bf015e3136074cbeb05fd1b0e1afc610",
+   "src": "migrations/migration_043_retire_encumbered_default.sql"
+  },
+  {
+   "bytes": 1533,
+   "component": "core",
+   "dst": "migrations/migration_044_seed_origin.sql",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "9c42d637284c1a58b867ecc366078c4ff6eecb59bde59bc2a37a8d4aa2f0ad69",
+   "src": "migrations/migration_044_seed_origin.sql"
+  },
+  {
+   "bytes": 1317,
+   "component": "core",
+   "dst": "migrations/migration_045_derived_layer_stamp.sql",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "e3c2a801859f297dda9abc9b80b841ccae9b45e465e3e567d12012a658851749",
+   "src": "migrations/migration_045_derived_layer_stamp.sql"
   },
   {
    "bytes": 2640,
@@ -1675,13 +1715,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 54351,
+   "bytes": 54527,
    "component": "core",
    "dst": "organs/embedding_upgrade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1efbdd285c133057ce3b3a5722116739e9b4d00f00bbc5372c20b585be32d7fd",
+   "sha256": "5d219bbbfcca92170dbac724a5328ecc5c90708a4f01c5809fff3bf4574bad01",
    "src": "organs/embedding_upgrade.py"
   },
   {
@@ -1755,13 +1795,13 @@
    "src": "organs/memory_dreaming.py"
   },
   {
-   "bytes": 47150,
+   "bytes": 49360,
    "component": "core",
    "dst": "organs/memory_write.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "b6926d3059294f3acc56f88f002811b68c4cdc96d1ecd87035c6c02c366e729d",
+   "sha256": "a85bcaf186a1080faa6368ac10bc9b7c875740a53cfacc6f19d8b73c3ec50e71",
    "src": "organs/memory_write.py"
   },
   {
@@ -3005,13 +3045,13 @@
    "src": "voidloom/tests/test_batch.py"
   },
   {
-   "bytes": 14106,
+   "bytes": 14168,
    "component": "core",
    "dst": "voidloom/tests/test_belief_authorship_d26.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "35e1041b7feb788d01ccb8ce37fec21651a084b10d62351439bbdf9bfab92567",
+   "sha256": "f200244d800ce308f7458b3523025b72a726549881cc8b8fdce0e2a5815198a6",
    "src": "voidloom/tests/test_belief_authorship_d26.py"
   },
   {
@@ -3025,13 +3065,13 @@
    "src": "voidloom/tests/test_belief_pair_counts_r2.py"
   },
   {
-   "bytes": 17284,
+   "bytes": 17346,
    "component": "core",
    "dst": "voidloom/tests/test_belief_quarantine_r1.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "bd357e9bae2d943391a0c1ac7bcc617f074efb4630c1e4650503db001cd6de71",
+   "sha256": "6733b724413fec53d8acdd637232311b4c6af44c41a73e9a9f74bcc90237c806",
    "src": "voidloom/tests/test_belief_quarantine_r1.py"
   },
   {
@@ -3285,13 +3325,13 @@
    "src": "voidloom/tests/test_edge_retire_readers_writers_r2d.py"
   },
   {
-   "bytes": 27290,
+   "bytes": 27454,
    "component": "core",
    "dst": "voidloom/tests/test_embedding_provenance.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e0295425e2bf8fa613722b884739343c3c468b38fc1f78815ab60774a75658fb",
+   "sha256": "5c67c6ac93667fcbe0a0f792a0daf93bb2f8e75eb733f46c06fce2a03175d153",
    "src": "voidloom/tests/test_embedding_provenance.py"
   },
   {
@@ -3543,6 +3583,16 @@
    "root": "brain",
    "sha256": "fc4edf7319aaea4a122ccfc13c653d89d1153acb9b5cdb3d746c2c63ae319412",
    "src": "voidloom/tests/test_migration_041_plain_sql_release_r2.py"
+  },
+  {
+   "bytes": 12164,
+   "component": "core",
+   "dst": "voidloom/tests/test_migrations_042_045.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "d533e837d338f13dddfa0a93ed940d296a13770d3dbf735653eb24d5f13ef280",
+   "src": "voidloom/tests/test_migrations_042_045.py"
   },
   {
    "bytes": 1809,
