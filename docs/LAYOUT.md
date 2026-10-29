@@ -1,6 +1,6 @@
 # Repository layout — how to find anything in one screen
 
-> Read this before you read code. **424 tracked files, 10 of them at the
+> Read this before you read code. **429 tracked files, 10 of them at the
 > top level.** Every count on this page is derived from the tree, and
 > `voidloom/tests/test_docs_name_real_paths.py` re-derives them and fails if
 > this page and `git ls-files` disagree — because the previous version said
@@ -32,7 +32,7 @@ Everything else is in a directory named for what it does.
 > **Does the module import its siblings, or is it imported by them?**
 > Yes → `organs/`. No → the directory named for its job.
 
-`organs/` is a single flat namespace **on purpose**. The 71 tracked modules there
+`organs/` is a single flat namespace **on purpose**. The 73 tracked modules there
 import each other by bare name (`import hybrid_retrieval`), and ~25 of them
 self-heal that with `sys.path.insert(0, Path(__file__).parent)`. Splitting them
 into `core/` + `organs/` would break every cross-directory import — and the
@@ -49,7 +49,7 @@ the directory around it is the tidying.**
 ├── install.sh             ← the installer (POSIX). Windows: install/install.ps1
 ├── voidloom_manifest.json ← per-machine hardware/model manifest (installer-written)
 │
-├── organs/                ← ★ THE ORGANISM — 71 modules, one flat namespace
+├── organs/                ← ★ THE ORGANISM — 73 modules, one flat namespace
 │   ├── claude_memory.py        ★ THE ENGINE. store / recall / stats / init
 │   ├── claude_memory_lite.py   ★ Tier-0 engine: keyword-only, stdlib, no model
 │   ├── wizard_paths.py         ★ the tree-root vs module-dir resolver

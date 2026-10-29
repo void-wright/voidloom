@@ -1,0 +1,80 @@
+{
+ "default_tier": "cpu",
+ "generated_at": "2026-10-29T21:16:22Z",
+ "generated_by": "tools/build_embedder_catalogue.py",
+ "hash_algorithm": "sha256 over the sha256sum lines ('<hex>  <path>\\n') of `files` in the listed order, followed by the sha256sum lines of `code.files` in the remote-code repository the model's config.json auto_map names (when it names one); reproduce with: ( cd <model snapshot> && sha256sum $(jq -r '.files[]' <entry>); cd <code snapshot> && sha256sum $(jq -r '.code.files[]' <entry>) ) | sha256sum",
+ "rerankers": {
+  "qwen3-reranker-0.6b": {
+   "files": [
+    "1_LogitScore/config.json",
+    "config.json",
+    "config_sentence_transformers.json",
+    "merges.txt",
+    "model.safetensors",
+    "modules.json",
+    "sentence_bert_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+   ],
+   "license": "apache-2.0",
+   "loader": "organs/qwen_reranker.py",
+   "model_id": "Qwen/Qwen3-Reranker-0.6B",
+   "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+   "status": "active",
+   "weights_hash": "577f1f202dd27736297d1a4295893bea83cb9f12b8dbcfee81113947dcf67396"
+  }
+ },
+ "schema": "voidloom.embedder-catalogue/1",
+ "tiers": {
+  "cpu": {
+   "code": {
+    "files": [
+     "configuration_hf_nomic_bert.py",
+     "modeling_hf_nomic_bert.py"
+    ],
+    "model_id": "nomic-ai/nomic-bert-2048",
+    "revision": "7710840340a098cfb869c4f65e87cf2b1b70caca"
+   },
+   "dim": 768,
+   "files": [
+    "1_Pooling/config.json",
+    "config.json",
+    "config_sentence_transformers.json",
+    "model.safetensors",
+    "modules.json",
+    "sentence_bert_config.json",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.txt"
+   ],
+   "license": "apache-2.0",
+   "model_id": "nomic-ai/nomic-embed-text-v1.5",
+   "revision": "e9b6763023c676ca8431644204f50c2b100d9aab",
+   "status": "active",
+   "vec_table": "memory_embeddings",
+   "weights_hash": "ed625c77dfd3f7055147aa6326ff510f13bf9b2505786eed7bf8184ec79bf809"
+  },
+  "gpu": {
+   "dim": 1024,
+   "files": [
+    "1_Pooling/config.json",
+    "config.json",
+    "config_sentence_transformers.json",
+    "merges.txt",
+    "model.safetensors",
+    "modules.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json"
+   ],
+   "license": "apache-2.0",
+   "model_id": "Qwen/Qwen3-Embedding-0.6B",
+   "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+   "status": "active",
+   "vec_table": "memory_embeddings_v3",
+   "weights_hash": "4ab32bd49e639251464b53bdece63f988cb31dfa24376cbbe3086adeb9445570"
+  }
+ }
+}
