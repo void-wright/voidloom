@@ -1,0 +1,30 @@
+{
+  "schema": "voidloom.seed-denylist/1",
+  "_doc": [
+    "THE SEED DENYLIST: a scrub over seed/seed_pack.json that runs BEFORE the loader writes",
+    "a row. Every pattern is a regular expression matched case-insensitively against the",
+    "WHOLE pack file's text (every field, not only content). organs/seed_loader.py refuses",
+    "the whole load, typed SEED_DENYLIST_HIT (rc 4), on any hit, naming the class and the",
+    "byte offset, never the matched text (a refusal that prints the secret is a second leak).",
+    "Run it yourself: python3 organs/claude_memory_lite.py seed-scrub.",
+    "This shipped list is a GENERIC EXAMPLE of the mechanism: shapes that should never ride",
+    "inside a starter pack meant for strangers (home-directory paths, private hostnames,",
+    "credential shapes, hardware identifiers) plus two placeholder names showing where a",
+    "maintainer lists the client and person names of their own context. If you build your",
+    "own pack, add your own names here; keep private lists out of a public repository."
+  ],
+  "patterns": [
+    {"class": "developer path", "pattern": "(?<![A-Za-z0-9_.~])/home/[a-z_][a-z0-9_.-]*/"},
+    {"class": "developer path", "pattern": "(?<![A-Za-z0-9_.~])/Users/[A-Za-z0-9_.-]+/"},
+    {"class": "developer path", "pattern": "\\b[A-Z]:(?:\\\\){1,2}Users(?:\\\\){1,2}[^\\\\\\s\"]+"},
+    {"class": "developer path", "pattern": "/mnt/[a-z]/Users/[^/\\s]+"},
+    {"class": "client name", "pattern": "\\bexample[ _-]client[ _-]corp\\b"},
+    {"class": "person name", "pattern": "\\bjane[ ._-]q[ ._-]example\\b"},
+    {"class": "hostname", "pattern": "\\b[a-z0-9][a-z0-9-]*\\.(?:local|lan|internal|corp|home\\.arpa)\\b"},
+    {"class": "secret shape", "pattern": "\\b(?:sk|pk|rk)-[A-Za-z0-9_-]{20,}"},
+    {"class": "secret shape", "pattern": "\\bgh[pousr]_[A-Za-z0-9]{30,}\\b"},
+    {"class": "secret shape", "pattern": "\\bAKIA[0-9A-Z]{16}\\b"},
+    {"class": "secret shape", "pattern": "-----BEGIN [A-Z ]*PRIVATE KEY-----"},
+    {"class": "machine identifier", "pattern": "\\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\\b"}
+  ]
+}

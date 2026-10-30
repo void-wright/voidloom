@@ -23,7 +23,10 @@ COMMANDS
   stats      — overview of DB contents
   prime      — print a session-start preamble (persona-neutral)
   context    — the full CLI's `context` JSON envelope, read-only here (R4: the facade calls it)
-  load-seed  — load an agnostic seed pack JSON: a per-memory anchor delta (install + upgrade)
+  load-seed  — load an agnostic seed pack JSON: a per-memory anchor delta (install + upgrade); every
+               inserted row through memory_write's guarded writer, flagged seed=1 + origin, the
+               pack scrubbed by seed/seed_denylist.json first (organs/seed_loader.py)
+  seed-scrub / seed-self-test / seed-delete-one / seed-shape — the seed's own checks
 
 DB RESOLUTION (install-anywhere, no hardcoded absolute path)
 ------------------------------------------------------------
@@ -488,7 +491,27 @@ def seed_plan(conn: sqlite3.Connection, mems: list, common_tag: str) -> dict:
     return {"actions": actions, "invalid": invalid, "counts": counts}
 
 
-def _insert_seed_entry(conn: sqlite3.Connection, m: dict, common_tag: str, extra_tags=()) -> int:
+def _seed_lib():
+    """organs/seed_loader.py, the library behind this verb: HOW a seed row is written (the one guarded writer,
+    memory_write.write_memory; the seed/origin COLUMNS of migration_044; the denylist scrub). Imported lazily from
+    beside this file; None when it is not laid there (a bare copy of lite alone keeps the direct INSERT)."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        import seed_loader  # type: ignore
+        return seed_loader
+    except Exception:
+        return None
+
+
+def _seed_emit(doc: dict, rc: int) -> int:
+    print(json.dumps(doc, default=str))
+    return rc
+
+
+def _insert_seed_entry(conn: sqlite3.Connection, m: dict, common_tag: str, extra_tags=(),
+                       version: str = "", embed: bool = False) -> int:
     content = m.get("content", "")
     tags = m.get("tags", "") or ""
     # ensure the common tag is present so idempotency + pruning work
@@ -496,13 +519,52 @@ def _insert_seed_entry(conn: sqlite3.Connection, m: dict, common_tag: str, extra
         tags = (tags + "," + common_tag).strip(",") if tags else common_tag
     for t in extra_tags:
         tags = tags + "," + t
-    return _insert_memory(
+    lib = _seed_lib()
+    if lib is not None:
+        return lib.write_seed_row(
+            conn, content=content, summary=_entry_summary(m), category=m.get("category"),
+            kind=m.get("kind", "episodic"), importance=float(m.get("importance", 0.7)),
+            source_project=m.get("source_project", "seed_pack"),
+            source_context=m.get("source_context", "agnostic seed pack — how the memory system works"),
+            tags=[t.strip() for t in tags.split(",")], version=version, embed=embed)["memory_id"]
+    # fallback (seed_loader.py not laid beside this file): the direct INSERT, flagged when the columns exist
+    mid = _insert_memory(
         conn, content=content, summary=_entry_summary(m), category=m.get("category"),
         kind=m.get("kind", "episodic"), importance=float(m.get("importance", 0.7)),
         project=m.get("source_project", "seed_pack"),
         context=m.get("source_context", "agnostic seed pack — how the memory system works"),
         tags=tags,
     )
+    if version and {"seed", "origin"} <= _has_columns(conn, "memories", {"seed", "origin"}):
+        import hashlib
+        conn.execute("UPDATE memories SET seed = 1, origin = ? WHERE id = ?",
+                     (f"seed_pack:{version}#{hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]}", mid))
+    return mid
+
+
+def _seed_preflight(seed_path: Path, args: argparse.Namespace):
+    """Before the load opens its transaction: the denylist over the whole pack (any hit refuses the load,
+    rc 4, nothing written). Returns (lib, scrub envelope or None, error rc or None)."""
+    lib = _seed_lib()
+    if lib is None:
+        if getattr(args, "embed", False):
+            return lib, None, _seed_emit({"status": "error", "error": "SEED_LIBRARY_ABSENT", "action": "load-seed",
+                                          "message": "--embed needs organs/seed_loader.py beside this file"}, 2)
+        return lib, None, None
+    try:
+        return lib, lib.refuse_on_hits(seed_path), None
+    except lib.SeedLoadError as e:
+        return lib, None, _seed_emit({**e.as_dict(), "action": "load-seed"},
+                                     4 if e.code == "SEED_DENYLIST_HIT" else 2)
+
+
+def _seed_write_failed(conn: sqlite3.Connection, e: Exception) -> int:
+    """A row the guarded writer refused (under --embed: no embedder, no vector): roll back the WHOLE load."""
+    conn.rollback()
+    conn.close()
+    return _seed_emit({"status": "error", "error": getattr(e, "code", None) or "SEED_EMBED_REFUSED",
+                       "action": "load-seed", "message": f"{type(e).__name__}: {str(e)[:300]}",
+                       "note": "nothing was written: the load is one transaction, and the brain is as it was"}, 3)
 
 
 def cmd_load_seed(args: argparse.Namespace) -> int:
@@ -523,30 +585,47 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
     anchored = all(len(_entry_anchor(m)) == 1 for m in mems)
     plan_only = bool(getattr(args, "plan", False))
 
+    version = str(data.get("seed_pack_version") or "")
+    embed = bool(getattr(args, "embed", False))
+    lib, scrubbed = None, None
+    if not plan_only:
+        lib, scrubbed, err = _seed_preflight(seed_path, args)
+        if err is not None:
+            return err
+
     if anchored and not args.force:
         conn = _connect(readonly=plan_only)
         plan = seed_plan(conn, mems, common_tag)
-        written = {"new": [], "changed": [], "adopted": [], "superseded_ids": []}
+        written = {"new": [], "changed": [], "adopted": [], "superseded_ids": [], "columns_set": 0}
         if not plan_only:
-            for action, i, anchor, row_id in plan["actions"]:
-                m = mems[i]
-                rev_tag = SEED_REV_PREFIX + seed_revision(_entry_summary(m), m.get("content", ""))
-                if action == "new":
-                    _insert_seed_entry(conn, m, common_tag, (rev_tag,))
-                    written["new"].append(anchor)
-                elif action == "adopted":
-                    for t in (anchor, rev_tag):
+            try:
+                if embed:
+                    lib.enable_vec(conn)
+                for action, i, anchor, row_id in plan["actions"]:
+                    m = mems[i]
+                    rev_tag = SEED_REV_PREFIX + seed_revision(_entry_summary(m), m.get("content", ""))
+                    if action == "new":
+                        _insert_seed_entry(conn, m, common_tag, (rev_tag,), version, embed)
+                        written["new"].append(anchor)
+                    elif action == "adopted":
+                        for t in (anchor, rev_tag):
+                            conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
+                                         (row_id, t))
+                        written["adopted"].append(anchor)
+                    elif action == "changed":
+                        conn.execute("UPDATE memories SET is_archived = 1, updated_at = ? WHERE id = ?",
+                                     (_now(), row_id))
                         conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
-                                     (row_id, t))
-                    written["adopted"].append(anchor)
-                elif action == "changed":
-                    conn.execute("UPDATE memories SET is_archived = 1, updated_at = ? WHERE id = ?",
-                                 (_now(), row_id))
-                    conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
-                                 (row_id, SEED_SUPERSEDED_TAG))
-                    _insert_seed_entry(conn, m, common_tag, (rev_tag,))
-                    written["changed"].append(anchor)
-                    written["superseded_ids"].append(row_id)
+                                     (row_id, SEED_SUPERSEDED_TAG))
+                        _insert_seed_entry(conn, m, common_tag, (rev_tag,), version, embed)
+                        written["changed"].append(anchor)
+                        written["superseded_ids"].append(row_id)
+                    # a seed row this load does not insert -- adopted, or present but written before
+                    # migration_044 -- gets its seed/origin columns; its words and vector are untouched
+                    if action in ("adopted", "present") and lib is not None:
+                        written["columns_set"] += int(lib.stamp_columns(conn, row_id, version, m.get("content", "")))
+            except Exception as e:
+                return _seed_write_failed(conn, e)
             conn.commit()
         total = conn.execute("SELECT COUNT(*) FROM memories WHERE is_archived = 0").fetchone()[0]
         conn.close()
@@ -562,6 +641,10 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
             "held_untagged": by["held-untagged"],
             "held_untagged_ids": [a[3] for a in plan["actions"] if a[0] == "held-untagged"],
             "superseded_ids": written["superseded_ids"],
+            "seed_columns_set_on_existing_rows": written["columns_set"],
+            "writer": ("memory_write.write_memory via organs/seed_loader.py" if lib is not None
+                       else "lite direct INSERT (seed_loader.py not laid beside this file)"),
+            "embed": embed, "scrub": scrubbed,
             "total_memories_now": total,
             "note": ("Nothing was written (--plan)." if plan_only else
                      "A per-memory anchor delta: only new and changed entries were inserted; a changed entry's "
@@ -609,7 +692,12 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
         if category not in VALID_CATEGORIES or kind not in VALID_KINDS:
             skipped += 1
             continue
-        _insert_seed_entry(conn, m, common_tag)
+        try:
+            if embed and loaded == 0:
+                lib.enable_vec(conn)
+            _insert_seed_entry(conn, m, common_tag, (), version, embed)
+        except Exception as e:
+            return _seed_write_failed(conn, e)
         loaded += 1
     conn.commit()
     total = conn.execute("SELECT COUNT(*) FROM memories WHERE is_archived = 0").fetchone()[0]
@@ -623,6 +711,60 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
                 "Tier 1 (full CLI) can re-embed them for semantic recall.",
     }))
     return 0
+
+
+def cmd_seed_scrub(args: argparse.Namespace) -> int:
+    lib = _seed_lib()
+    if lib is None:
+        return _seed_emit({"status": "error", "error": "SEED_LIBRARY_ABSENT", "action": "seed-scrub"}, 2)
+    try:
+        sc = lib.scrub(Path(args.file), Path(args.denylist))
+    except lib.SeedLoadError as e:
+        return _seed_emit({**e.as_dict(), "action": "seed-scrub"}, 2)
+    return _seed_emit({"status": "ok" if not sc["hits"] else "error", "action": "seed-scrub", **sc},
+                      0 if not sc["hits"] else 4)
+
+
+def cmd_seed_self_test(args: argparse.Namespace) -> int:
+    """The doctrine set needs the Tier-1 organs (hybrid_retrieval + the locked embedder); on a Tier-0 host it
+    refuses typed rather than pretending a number."""
+    lib = _seed_lib()
+    if lib is None:
+        return _seed_emit({"status": "error", "error": "SEED_LIBRARY_ABSENT", "action": "seed-self-test"}, 2)
+    try:
+        res = lib.self_test(str(DB_PATH), doctrine=Path(args.doctrine), mode=args.mode)
+    except lib.SeedLoadError as e:
+        return _seed_emit({**e.as_dict(), "action": "seed-self-test"}, 2)
+    except Exception as e:
+        code = getattr(e, "code", None) or "SELF_TEST_UNAVAILABLE"
+        return _seed_emit({"status": "error", "error": code, "action": "seed-self-test",
+                           "message": f"{type(e).__name__}: {e}"}, 3)
+    sys.stderr.write(res["line"] + "\n")
+    return _seed_emit(res, 0 if res["meets_bar"] else 5)
+
+
+def cmd_seed_delete_one(args: argparse.Namespace) -> int:
+    lib = _seed_lib()
+    if lib is None:
+        return _seed_emit({"status": "error", "error": "SEED_LIBRARY_ABSENT", "action": "seed-delete-one"}, 2)
+    if not DB_PATH.exists():
+        return _seed_emit({"status": "error", "error": "DB_NOT_FOUND", "action": "seed-delete-one",
+                           "db": str(DB_PATH)}, 2)
+    try:
+        return _seed_emit(lib.delete_one(str(DB_PATH), args.origin), 0)
+    except lib.SeedLoadError as e:
+        return _seed_emit({**e.as_dict(), "action": "seed-delete-one"}, 1)
+
+
+def cmd_seed_shape(_args: argparse.Namespace) -> int:
+    lib = _seed_lib()
+    if lib is None:
+        return _seed_emit({"status": "error", "error": "SEED_LIBRARY_ABSENT", "action": "seed-shape"}, 2)
+    conn = _connect(readonly=True)
+    try:
+        return _seed_emit({"status": "ok", "action": "seed-shape", **lib.seed_shape(conn)}, 0)
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -803,7 +945,29 @@ def main() -> int:
                     help="insert every entry again, whatever the brain already holds (the old meaning)")
     ls.add_argument("--plan", action="store_true",
                     help="report the delta (new / changed / adopted / present) and write nothing")
+    ls.add_argument("--embed", action="store_true",
+                    help="write every row with its vector through the locked embedder (Tier 1); "
+                         "without it rows are keyword-findable and embed_backfill.py vectors them later")
     ls.set_defaults(func=cmd_load_seed)
+
+    _seed_dir = Path(__file__).resolve().parent.parent / "seed"
+    sc = sub.add_parser("seed-scrub", help="the seed denylist over the pack: hits (rc 4 on any)")
+    sc.add_argument("--file", "-f", default=str(_seed_dir / "seed_pack.json"))
+    sc.add_argument("--denylist", default=str(_seed_dir / "seed_denylist.json"))
+    sc.set_defaults(func=cmd_seed_scrub)
+
+    sst = sub.add_parser("seed-self-test", help="the 25-query doctrine set through the shipped recall, per mode")
+    sst.add_argument("--doctrine", default=str(_seed_dir / "seed_doctrine_queries.json"))
+    sst.add_argument("--mode", default=None, choices=("vector-only", "bm25-only", "no-rerank", "hybrid"),
+                     help="restrict to one recall mode (a measurement); default: the set's modes")
+    sst.set_defaults(func=cmd_seed_self_test)
+
+    sdo = sub.add_parser("seed-delete-one", help="delete ONE seed row permanently by its origin")
+    sdo.add_argument("origin")
+    sdo.set_defaults(func=cmd_seed_delete_one)
+
+    ssh = sub.add_parser("seed-shape", help="every seed number on this brain, derived now")
+    ssh.set_defaults(func=cmd_seed_shape)
 
     st = sub.add_parser("stats", help="DB overview")
     st.set_defaults(func=cmd_stats)

@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 412,
+    "core": 416,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 367,
+    "all": 371,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 400,
+    "brain": 404,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "86d4dd4",
+  "derived_at_head": "1e731db",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 430,
+  "entries": 434,
   "platforms": [
    "all",
    "posix",
@@ -755,13 +755,13 @@
    "src": "docs/INSTRUCTIONS.md"
   },
   {
-   "bytes": 8185,
+   "bytes": 8356,
    "component": "core",
    "dst": "docs/LAYOUT.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "92624e985664191f761c416280b533234bcb5cff428c880fb59fca0912b0bb56",
+   "sha256": "1d4456c9a82a8c2c0aa3a664ab3f34916a0c8a6dcb52bc0a8452ec7808c3ed81",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1615,13 +1615,13 @@
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 40794,
+   "bytes": 49442,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ba0d3e266092a95a2d6ab18a6979bcf12e61b079c9e428b6819aadffe44f2f28",
+   "sha256": "6f3a25437093755c811b687e990c070e023a2aeba20dfd979af5516f6962eda7",
    "src": "organs/claude_memory_lite.py"
   },
   {
@@ -1993,6 +1993,16 @@
    "root": "brain",
    "sha256": "fea20209240e0e9d3cb0badc2eb4dca1b6d6512d341868dcdad15c7fa2300c64",
    "src": "organs/schema_migrator.py"
+  },
+  {
+   "bytes": 17127,
+   "component": "core",
+   "dst": "organs/seed_loader.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "8ebd3d9d395053a7074698cb340223f4dd10eb9590f1e14f2ab9048bdcf908b2",
+   "src": "organs/seed_loader.py"
   },
   {
    "bytes": 55320,
@@ -2463,6 +2473,26 @@
    "root": "brain",
    "sha256": "f1e15db427fa7a5647b1e7ff42dfb0de0c6fc3330088d3b7b74d932fdcf6f186",
    "src": "seed/claude_memory_blank.db"
+  },
+  {
+   "bytes": 2086,
+   "component": "core",
+   "dst": "seed/seed_denylist.json",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "df402528c4e6477b60fb5e66becac6929356160f0dfbee23a9aa14845862a022",
+   "src": "seed/seed_denylist.json"
+  },
+  {
+   "bytes": 9963,
+   "component": "core",
+   "dst": "seed/seed_doctrine_queries.json",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "fd82ba55ad934f7cd01135f50885b53c9f3ce2a47d85f3d54e90d9cf3553fb33",
+   "src": "seed/seed_doctrine_queries.json"
   },
   {
    "bytes": 156515,
@@ -3813,6 +3843,16 @@
    "root": "brain",
    "sha256": "6b97c55bff94c3adff82d8ab3187d74114f5f75c910adee00ffad8e0043b54a3",
    "src": "voidloom/tests/test_seed_anchor_delta.py"
+  },
+  {
+   "bytes": 12191,
+   "component": "core",
+   "dst": "voidloom/tests/test_seed_doctrine_and_denylist.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "3da7084a2a2757cee315847962b47434ca56c29f1b149b3ca423422ded09b9ec",
+   "src": "voidloom/tests/test_seed_doctrine_and_denylist.py"
   },
   {
    "bytes": 7970,

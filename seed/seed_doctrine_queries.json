@@ -1,0 +1,226 @@
+{
+  "schema": "voidloom.seed-doctrine/2",
+  "seed_pack_version": "1.6.2",
+  "_doc": [
+    "THE 25-QUERY DOCTRINE SET. Each query is phrased as a user would ASK -- a paraphrase,",
+    "never the summary copied -- and names the seed row it must surface by its ANCHOR",
+    "(the pack entry's anchor:seed_<name> tag, stable across pack versions and re-loads);",
+    "expect_origin is the row's origin under THIS pack version (seed_pack:<version>#",
+    "<sha256(content)[:16]>), kept beside it. `claude_memory_lite.py seed-self-test`",
+    "runs every query through the shipped recall and prints the REAL number per mode:",
+    "`primary_mode` (hybrid = the pinned embedder + FTS5 + the pinned reranker, the mode",
+    "`recall` runs by default) carries the bar; every other mode in `modes` is measured",
+    "and printed beside it. voidloom/tests/test_seed_doctrine_and_denylist.py asserts",
+    "that every anchor and origin here matches seed/seed_pack.json -- a pack change that",
+    "moves an entry fails it until this file is re-keyed."
+  ],
+  "top_k": 3,
+  "bar": 23,
+  "primary_mode": "hybrid",
+  "modes": [
+    "hybrid",
+    "vector-only"
+  ],
+  "queries": [
+    {
+      "n": 1,
+      "query": "what is this memory system and why should I store things in it",
+      "expect_anchor": "anchor:seed_what_this_is",
+      "expect_origin": "seed_pack:1.6.2#f739e908c29b4ecd",
+      "expect_index": 0,
+      "expect_summary_prefix": "WHAT THIS IS — a vectorized long-term memory brain for your "
+    },
+    {
+      "n": 2,
+      "query": "when in doubt should I save a memory or not",
+      "expect_anchor": "anchor:seed_store_discipline",
+      "expect_origin": "seed_pack:1.6.2#ec72a53eabb53e01",
+      "expect_index": 2,
+      "expect_summary_prefix": "STORE DISCIPLINE — store liberally; cost of storing is near-"
+    },
+    {
+      "n": 3,
+      "query": "should I write memories while I am working or only when I finish",
+      "expect_anchor": "anchor:seed_continuous_capture",
+      "expect_origin": "seed_pack:1.6.2#512d9e5692abc396",
+      "expect_index": 3,
+      "expect_summary_prefix": "CONTINUOUS CAPTURE — capture DURING work, not only at the en"
+    },
+    {
+      "n": 4,
+      "query": "fastest way to run many recall queries at once",
+      "expect_anchor": "anchor:seed_batch_parallel_recall",
+      "expect_origin": "seed_pack:1.6.2#877f1ac6ba75b1b8",
+      "expect_index": 5,
+      "expect_summary_prefix": "BATCH PARALLEL RECALL — run 8-15 recall queries in ONE shell"
+    },
+    {
+      "n": 5,
+      "query": "how do I phrase a recall query so it finds the right memory",
+      "expect_anchor": "anchor:seed_targeted_recall_query_craft",
+      "expect_origin": "seed_pack:1.6.2#8bd6227c662a9bb4",
+      "expect_index": 6,
+      "expect_summary_prefix": "TARGETED RECALL + QUERY CRAFT — for focused work use 1-3 que"
+    },
+    {
+      "n": 6,
+      "query": "where are tags stored, is there a tags column on the memories table",
+      "expect_anchor": "anchor:seed_schema_gotcha_tags_join_table",
+      "expect_origin": "seed_pack:1.6.2#639a49557a176e86",
+      "expect_index": 8,
+      "expect_summary_prefix": "SCHEMA GOTCHA — TAGS live in the memory_tags JOIN table (mem"
+    },
+    {
+      "n": 7,
+      "query": "how do I fetch one specific memory again if there is no get by id command",
+      "expect_anchor": "anchor:seed_schema_gotcha_no_get_by_id",
+      "expect_origin": "seed_pack:1.6.2#549583c960d60f9d",
+      "expect_index": 9,
+      "expect_summary_prefix": "SCHEMA GOTCHA — there is NO 'get-by-id' verb. To re-read a s"
+    },
+    {
+      "n": 8,
+      "query": "which table holds the vectors and which one holds the full text search index",
+      "expect_anchor": "anchor:seed_schema_gotcha_embeddings_side_table",
+      "expect_origin": "seed_pack:1.6.2#3a97cc3985941492",
+      "expect_index": 10,
+      "expect_summary_prefix": "SCHEMA GOTCHA — embeddings live in a SIDE vector table (memo"
+    },
+    {
+      "n": 9,
+      "query": "what category values are allowed when I store a memory",
+      "expect_anchor": "anchor:seed_valid_categories",
+      "expect_origin": "seed_pack:1.6.2#0d5484824cddd08b",
+      "expect_index": 11,
+      "expect_summary_prefix": "VALID CATEGORIES (12, fixed enum) — user_preference, technic"
+    },
+    {
+      "n": 10,
+      "query": "what does the kind field mean, episodic versus semantic versus procedural",
+      "expect_anchor": "anchor:seed_valid_kinds",
+      "expect_origin": "seed_pack:1.6.2#1f5372bdfd3ca047",
+      "expect_index": 12,
+      "expect_summary_prefix": "VALID KINDS (4, fixed enum) — episodic (default; a specific "
+    },
+    {
+      "n": 11,
+      "query": "difference between the keyword-only lite mode and the semantic full mode",
+      "expect_anchor": "anchor:seed_tier_0_vs_tier_1",
+      "expect_origin": "seed_pack:1.6.2#10ed2e8899b76cb3",
+      "expect_index": 14,
+      "expect_summary_prefix": "TIER 0 vs TIER 1 — the brain ships in two capability tiers s"
+    },
+    {
+      "n": 12,
+      "query": "what should I run at the beginning of a new session to load context",
+      "expect_anchor": "anchor:seed_session_start_protocol",
+      "expect_origin": "seed_pack:1.6.2#f6101e2cb501edc0",
+      "expect_index": 15,
+      "expect_summary_prefix": "SESSION-START PROTOCOL — at the start of a substantive sessi"
+    },
+    {
+      "n": 13,
+      "query": "I am a new assistant that just got this brain, what are the first steps",
+      "expect_anchor": "anchor:seed_fresh_claude_bootstrap",
+      "expect_origin": "seed_pack:1.6.2#469cd8718933ffc3",
+      "expect_index": 18,
+      "expect_summary_prefix": "FRESH-CLAUDE BOOTSTRAP — if you are a Claude that just inher"
+    },
+    {
+      "n": 14,
+      "query": "how does the install build the brain from a fresh clone of the repo",
+      "expect_anchor": "anchor:seed_self_assembly_install",
+      "expect_origin": "seed_pack:1.6.2#c32fdba27b3e9f33",
+      "expect_index": 23,
+      "expect_summary_prefix": "SELF-ASSEMBLY / INSTALL — one idempotent command builds the "
+    },
+    {
+      "n": 15,
+      "query": "can I mix vectors from two different embedding models in one database",
+      "expect_anchor": "anchor:seed_dim_lock_re_embed_law",
+      "expect_origin": "seed_pack:1.6.2#dd8d19f92e74e994",
+      "expect_index": 25,
+      "expect_summary_prefix": "THE DIM-LOCK RE-EMBED LAW — ONE embedding model per database"
+    },
+    {
+      "n": 16,
+      "query": "how do I check that my brain actually works after installing",
+      "expect_anchor": "anchor:seed_smoke_test",
+      "expect_origin": "seed_pack:1.6.2#dff32dd682de7575",
+      "expect_index": 26,
+      "expect_summary_prefix": "SMOKE-TEST (is my brain alive?) — run the shipped self-check"
+    },
+    {
+      "n": 17,
+      "query": "which scheduled jobs run at night and are they on by default",
+      "expect_anchor": "anchor:seed_nightly_maintenance",
+      "expect_origin": "seed_pack:1.6.2#1bc4b752933e8bef",
+      "expect_index": 28,
+      "expect_summary_prefix": "NIGHTLY MAINTENANCE (optional) — consolidation/sleep, dream "
+    },
+    {
+      "n": 18,
+      "query": "will the store command accept text that contains an API key",
+      "expect_anchor": "anchor:seed_security_in_daily_use",
+      "expect_origin": "seed_pack:1.6.2#a66c473427e27f4a",
+      "expect_index": 29,
+      "expect_summary_prefix": "SECURITY IN DAILY USE — (1) a pre-store SECRET-DETECTOR REFU"
+    },
+    {
+      "n": 19,
+      "query": "does the brain change my memories on its own or only suggest changes",
+      "expect_anchor": "anchor:seed_governance_propose_not_police",
+      "expect_origin": "seed_pack:1.6.2#c938ed2063162d3b",
+      "expect_index": 31,
+      "expect_summary_prefix": "GOVERNANCE = PROPOSE-NOT-POLICE — the brain PROPOSES changes"
+    },
+    {
+      "n": 20,
+      "query": "recall on a read-only database raises an error, why",
+      "expect_anchor": "anchor:seed_operational_gotchas",
+      "expect_origin": "seed_pack:1.6.2#950e82ec9c492ce5",
+      "expect_index": 32,
+      "expect_summary_prefix": "OPERATIONAL GOTCHAS — (1) recall writes back access-stats, s"
+    },
+    {
+      "n": 21,
+      "query": "the semantic tier failed to install, is my brain still usable",
+      "expect_anchor": "anchor:seed_recovery_troubleshooting",
+      "expect_origin": "seed_pack:1.6.2#f52fdc55e9552c5c",
+      "expect_index": 33,
+      "expect_summary_prefix": "RECOVERY & TROUBLESHOOTING — if Tier 1 (semantic) fails to i"
+    },
+    {
+      "n": 22,
+      "query": "why is a rollback that only exists as a comment worthless",
+      "expect_anchor": "anchor:seed_rollback_as_a_comment",
+      "expect_origin": "seed_pack:1.6.2#7824aad4fe7f8351",
+      "expect_index": 43,
+      "expect_summary_prefix": "ROLLBACK AS A COMMENT — a rollback written as a comment is a"
+    },
+    {
+      "n": 23,
+      "query": "a test suite that passes on reverted code proves what exactly",
+      "expect_anchor": "anchor:seed_running_a_check_proves_it_executes",
+      "expect_origin": "seed_pack:1.6.2#09302d8d3aa63166",
+      "expect_index": 46,
+      "expect_summary_prefix": "RUNNING A CHECK PROVES IT EXECUTES, NEVER THAT IT DISCRIMINA"
+    },
+    {
+      "n": 24,
+      "query": "two models output the same vector width, are their embeddings compatible",
+      "expect_anchor": "anchor:seed_dimension_check_not_compatibility",
+      "expect_origin": "seed_pack:1.6.2#4d7a035e3a29693b",
+      "expect_index": 54,
+      "expect_summary_prefix": "A DIMENSION CHECK IS NOT A COMPATIBILITY CHECK — two differe"
+    },
+    {
+      "n": 25,
+      "query": "why must I never pass rich text through a shell command substitution",
+      "expect_anchor": "anchor:seed_never_interpolate_through_a_shell",
+      "expect_origin": "seed_pack:1.6.2#cd18af12f44447c3",
+      "expect_index": 61,
+      "expect_summary_prefix": "NEVER INTERPOLATE RICH CONTENT THROUGH A SHELL — backticks a"
+    }
+  ]
+}
