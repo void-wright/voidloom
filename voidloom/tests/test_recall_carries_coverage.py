@@ -159,6 +159,54 @@ class CoverageNeverProbesTheVectorTablePerRow(unittest.TestCase):
         hits = re.findall(r"EXISTS \(SELECT 1 FROM \{[a-z_.]+\} \w+ WHERE \w+\.memory_id = p\.memory_id\)", src)
         self.assertEqual(hits, [])
 
+    # The same shape anywhere in the shipped tree: a subquery on a vector table (a templated
+    # name, or a memory_embeddings* literal) correlated on memory_id to an outer row's column.
+    # Measured on a 31,904-memory brain: embed_backfill's count 10.76 s, tier_set's rollback
+    # gap 12.77 s, its pending set 4.19 s and coverage 4.66 s, seed_shape 4.86 s (with 11,048
+    # seed rows); the uncorrelated IN form read the same values in 0.016-0.11 s.
+    _SEAM = r"[\"']\s*\n?\s*[fFrR]{0,2}[\"']"          # adjacent string literals, joined first
+    _CORRELATED = (r"(?:EXISTS|IN)\s*\(\s*SELECT\s+[\w.*1]+\s+FROM\s+(\{[^}]+\}|memory_embeddings\w*)\s+(\w+)\s+"
+                   r"WHERE\s+\2\.memory_id\s*=\s*\w+\.(?:id|memory_id)\b")
+    # {PROVENANCE_TABLE} is embedding_provenance: an ordinary table keyed (memory_id, vec_table), not vec0.
+    _NOT_A_VECTOR_TABLE = {"{PROVENANCE_TABLE}"}
+
+    def _correlated_hits(self, text):
+        import re
+        joined = re.sub(self._SEAM, "", text)
+        return [m.group(0) for m in re.finditer(self._CORRELATED, joined, re.I)
+                if m.group(1) not in self._NOT_A_VECTOR_TABLE]
+
+    def test_the_detector_fires_on_every_shape_it_forbids(self):
+        planted = [
+            'f"  AND NOT EXISTS (SELECT 1 FROM {table} e WHERE e.memory_id = m.id)"',
+            'f"AND EXISTS (SELECT 1 FROM {table} v WHERE v.memory_id = m.id)", (table,)',
+            "              AND EXISTS (SELECT 1 FROM {t} v WHERE v.memory_id = m.id))",
+            'gap = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE NOT EXISTS "\n'
+            '                   f"(SELECT 1 FROM {restored} v WHERE v.memory_id = m.id)")',
+            "WHERE NOT EXISTS (SELECT 1 FROM memory_embeddings_v3 v WHERE v.memory_id = p.memory_id)",
+        ]
+        for sample in planted:
+            self.assertEqual(len(self._correlated_hits(sample)), 1, sample)
+        # and stays quiet on the shapes that replace it, and on the provenance table
+        for clean in ['f"  AND m.id NOT IN (SELECT memory_id FROM {table})"',
+                      "AND EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p WHERE p.memory_id = m.id)"]:
+            self.assertEqual(self._correlated_hits(clean), [], clean)
+
+    def test_no_shipped_file_has_a_correlated_vector_table_lookup(self):
+        files = [ROOT / "install.sh"]
+        for top in ("organs", "install", "voidloom", "tools", "capability"):
+            files += [p for p in (ROOT / top).rglob("*")
+                      if p.suffix in (".py", ".sh", ".ps1") and "tests" not in p.relative_to(ROOT).parts]
+        scanned, hits = 0, []
+        for p in files:
+            if not p.is_file():
+                continue
+            scanned += 1
+            hits += [f"{p.relative_to(ROOT)}: {h[:90]}"
+                     for h in self._correlated_hits(p.read_text(encoding="utf-8", errors="replace"))]
+        self.assertGreater(scanned, 100)                # the walk found the tree, not an empty directory
+        self.assertEqual(hits, [])
+
 
 class BatchRecordsCarryCoverage(unittest.TestCase):
     def test_each_record_carries_its_querys_coverage_even_with_no_rows(self):

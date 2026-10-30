@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "1a35f3c",
+  "derived_at_head": "95603fa",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 446,
   "platforms": [
@@ -1695,13 +1695,13 @@
    "src": "organs/dream_pipeline.py"
   },
   {
-   "bytes": 11765,
+   "bytes": 12071,
    "component": "core",
    "dst": "organs/embed_backfill.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "4a48cf8fc254d994f122e9a4451d0f15f15de33764879925018e40f09b51110e",
+   "sha256": "78b69f50eaf37f3753807d48b131f5af02bfa24cd4d72d0b99531c719b0f5cdf",
    "src": "organs/embed_backfill.py"
   },
   {
@@ -1995,13 +1995,13 @@
    "src": "organs/schema_migrator.py"
   },
   {
-   "bytes": 17148,
+   "bytes": 17130,
    "component": "core",
    "dst": "organs/seed_loader.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "beb3e9c4882400c4db35488b7b01b3d231ac3cde5eb139796f7d2bc6e9eeb73b",
+   "sha256": "a2536b2052e5e98bcead38721c41cc1deec198bec29aa2836bed922cdc00270c",
    "src": "organs/seed_loader.py"
   },
   {
@@ -2075,13 +2075,13 @@
    "src": "organs/thinkers.json"
   },
   {
-   "bytes": 38049,
+   "bytes": 38339,
    "component": "core",
    "dst": "organs/tier_set.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ab5c29be7c22fc7f7cea85bae769d9167ee6ea9a7d00f2da1624aece7b83849b",
+   "sha256": "df6de8028bfd79681d15f5e5abd78867e8080e4f472c2a24c1f5a7e1af22b708",
    "src": "organs/tier_set.py"
   },
   {
@@ -3875,13 +3875,13 @@
    "src": "voidloom/tests/test_readers_lock_first.py"
   },
   {
-   "bytes": 7926,
+   "bytes": 10940,
    "component": "core",
    "dst": "voidloom/tests/test_recall_carries_coverage.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "27ca5bae407fec0cd4984beaa5687d949361cd17a4812d2b7f3778c5fdd19541",
+   "sha256": "4c575d0239f2e8b029ccad1a512a03ef08a9a3174162ff642988a97b4e26ac9b",
    "src": "voidloom/tests/test_recall_carries_coverage.py"
   },
   {

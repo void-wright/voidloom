@@ -86,10 +86,13 @@ def _connect(db_path: str) -> sqlite3.Connection:
 
 def count_unembedded(conn: sqlite3.Connection, table: str) -> int:
     """Live memories with no vector in `table`. The denominator, counted now."""
+    # One uncorrelated `IN (SELECT memory_id FROM <vec table>)`, never a per-row EXISTS: a correlated look-up does
+    # one vec0 point read per memory (~0.4 ms each; measured 10.76 s on a 31,904-memory brain, 0.016 s this way). The
+    # vec0 `memory_id` is its INTEGER PRIMARY KEY, so it is never NULL and NOT IN cannot go empty on a NULL.
     return conn.execute(
         f"SELECT COUNT(*) FROM memories m "
         f"WHERE COALESCE(m.is_archived, 0) = 0 "
-        f"  AND NOT EXISTS (SELECT 1 FROM {table} e WHERE e.memory_id = m.id)"
+        f"  AND m.id NOT IN (SELECT memory_id FROM {table})"
     ).fetchone()[0]
 
 
@@ -155,7 +158,7 @@ def backfill(db_path: str, limit: Optional[int] = None,
         rows = conn.execute(
             f"SELECT m.id, m.content FROM memories m "
             f"WHERE COALESCE(m.is_archived, 0) = 0 "
-            f"  AND NOT EXISTS (SELECT 1 FROM {table} e WHERE e.memory_id = m.id) "
+            f"  AND m.id NOT IN (SELECT memory_id FROM {table}) "
             f"ORDER BY m.id" + (f" LIMIT {int(limit)}" if limit else "")
         ).fetchall()
 

@@ -203,6 +203,9 @@ def _source(conn: sqlite3.Connection, db: Path) -> Dict[str, Any]:
             "metadata": _metadata(conn)}
 
 
+# One uncorrelated `IN (SELECT memory_id FROM <vec table>)`, never a per-row EXISTS: a correlated look-up does
+# one vec0 point read per memory (~0.4 ms each; measured 4.19 s for this query on a 31,904-memory brain, 0.091 s this way). The
+# vec0 `memory_id` is its INTEGER PRIMARY KEY, so it is never NULL and NOT IN cannot go empty on a NULL.
 _PENDING_SQL = """
     SELECT m.id FROM memories m
      WHERE NOT EXISTS (
@@ -210,7 +213,7 @@ _PENDING_SQL = """
             WHERE p.memory_id = m.id AND p.vec_table = :t AND p.weights_hash = :h
               AND p.dim = :d AND p.input_kind = 'text'
               AND p.content_hash = vl_sha256(m.content)
-              AND EXISTS (SELECT 1 FROM {t} v WHERE v.memory_id = m.id))
+              AND m.id IN (SELECT memory_id FROM {t}))
      ORDER BY m.id
 """
 
@@ -343,7 +346,7 @@ def _coverage(conn: sqlite3.Connection, lock: Dict[str, Any]) -> Dict[str, int]:
         f"SELECT COUNT(*) FROM memories m JOIN embedding_provenance p ON p.memory_id = m.id "
         f" WHERE p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? AND p.input_kind = 'text' "
         f"   AND p.content_hash = vl_sha256(m.content) "
-        f"   AND EXISTS (SELECT 1 FROM {t} v WHERE v.memory_id = m.id)",
+        f"   AND m.id IN (SELECT memory_id FROM {t})",
         (t, lock["weights_hash"], int(lock["dim"]))).fetchone()[0]
     orphan_stamps = conn.execute(
         "SELECT COUNT(*) FROM embedding_provenance WHERE vec_table = ? AND memory_id NOT IN "
@@ -614,8 +617,8 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
             conn.execute("ROLLBACK")
             raise
         os.replace(data_dir / PREIMAGE_NAME, data_dir / f"embedder.lock.preimage.{stamp}.used.json")
-        gap = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE NOT EXISTS "
-                           f"(SELECT 1 FROM {restored} v WHERE v.memory_id = m.id)").fetchone()[0]
+        gap = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE m.id NOT IN "
+                           f"(SELECT memory_id FROM {restored})").fetchone()[0]
     finally:
         conn.close()
     restored_tier = {"memory_embeddings": "nomic", "memory_embeddings_v3": "qwen"}.get(restored)

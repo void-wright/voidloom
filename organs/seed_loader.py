@@ -201,7 +201,7 @@ def seed_shape(conn: sqlite3.Connection) -> Dict[str, Any]:
         out["seed_rows_with_vector_and_stamp"] = conn.execute(
             f"SELECT COUNT(*) FROM memories m JOIN embedding_provenance p ON p.memory_id = m.id "
             f"WHERE m.seed = 1 AND COALESCE(m.is_archived,0)=0 AND p.vec_table = ? "
-            f"AND EXISTS (SELECT 1 FROM {table} v WHERE v.memory_id = m.id)", (table,)).fetchone()[0]
+            f"AND m.id IN (SELECT memory_id FROM {table})", (table,)).fetchone()[0]
         out["vector_table"] = table
     except Exception as e:                       # no tier / no vec0: UNKNOWN, not zero
         out["seed_rows_with_vector_and_stamp"] = f"UNMEASURED: {type(e).__name__}"
