@@ -491,6 +491,19 @@ def seed_plan(conn: sqlite3.Connection, mems: list, common_tag: str) -> dict:
     return {"actions": actions, "invalid": invalid, "counts": counts}
 
 
+def _embed_resolver():
+    """organs/embed_resolver.py (stdlib-only; it imports only embedder_lock): the one lock-first answer to
+    "which vector table". Imported lazily from beside this file; None when it is not laid there."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        import embed_resolver  # type: ignore
+        return embed_resolver
+    except Exception:
+        return None
+
+
 def _seed_lib():
     """organs/seed_loader.py, the library behind this verb: HOW a seed row is written (the one guarded writer,
     memory_write.write_memory; the seed/origin COLUMNS of migration_044; the denylist scrub). Imported lazily from
@@ -782,12 +795,27 @@ def cmd_stats(_args: argparse.Namespace) -> int:
         by_kind = dict(c.execute(
             "SELECT kind, COUNT(*) FROM memories WHERE is_archived = 0 GROUP BY kind"
         ).fetchall())
-    # Embedding coverage: how many memories have a Tier-1 vector?
-    embedded = None
-    try:
-        embedded = c.execute("SELECT COUNT(*) FROM memory_embeddings").fetchone()[0]
-    except sqlite3.OperationalError:
-        embedded = None  # vec0 table absent on a bare/Tier-0 DB
+    # Embedding coverage: how many vectors does THIS brain's table hold? The table comes from the
+    # install lock first (metadata only for a brain with no lock), never a literal: a qwen brain's
+    # vectors are not in the nomic table. The count reads on this stdlib connection (see
+    # embed_resolver.stored_vector_count); it used to ask the vec0 table directly, which a stdlib
+    # connection cannot read, so a brain holding vectors reported "not present".
+    embedded, emb_table, emb_unresolved = None, None, None
+    er = _embed_resolver()
+    if er is None:
+        emb_unresolved = "organs/embed_resolver.py is not beside this file"
+    else:
+        try:
+            emb_table, _dim = er.resolve(conn)
+            embedded = er.stored_vector_count(conn, emb_table)
+        except er.EmbedTierUnresolved as e:
+            vec_tables = c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN "
+                                   "('memory_embeddings', 'memory_embeddings_v2', 'memory_embeddings_v3')"
+                                   ).fetchone()[0]
+            if vec_tables:                          # a tier exists but cannot be named: say so, never "Tier 0"
+                emb_unresolved = f"{e.code}: {e}"
+            else:
+                embedded = 0                        # a bare / Tier-0 brain: no vector table at all
     latest = c.execute(
         "SELECT id, summary, created_at FROM memories WHERE is_archived = 0 "
         "ORDER BY id DESC LIMIT 5"
@@ -798,7 +826,11 @@ def cmd_stats(_args: argparse.Namespace) -> int:
         "by_category": by_cat,
         "by_kind": by_kind,
         "embedded_memories": embedded,
-        "semantic_tier": "active" if embedded else "not present (Tier 0 / keyword-only)",
+        "embedding_table": emb_table,
+        "semantic_tier": ("active" if embedded else
+                          f"unknown: {emb_unresolved}" if emb_unresolved else
+                          "present, vector count unreadable on this interpreter" if embedded is None else
+                          "not present (Tier 0 / keyword-only)"),
         "latest_5": [{"id": r[0], "summary": (r[1] or "")[:100], "created_at": r[2]}
                      for r in latest],
         "db_path": str(DB_PATH),

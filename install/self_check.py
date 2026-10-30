@@ -661,15 +661,23 @@ def check_models(checks: Checks, db_path: Path):
             _row = conn.execute(
                 "SELECT value FROM metadata WHERE key='tier0_only'").fetchone()
             _t0 = bool(_row) and str(_row[0]).strip().lower() not in ("", "0", "false", "no", "off")
+            # THIS brain's table, lock first (metadata only for a brain with no lock): the
+            # nomic table literal counted the wrong table on every other tier. A vec0
+            # VIRTUAL table cannot be counted without the extension, and loading it here
+            # would break the stdlib-only promise this script's own name makes, so the
+            # count reads sqlite-vec's ordinary shadow table (embed_resolver.stored_vector_count).
             try:
-                _vecs = conn.execute("SELECT COUNT(*) FROM memory_embeddings").fetchone()[0]
+                _org = str(Path(__file__).resolve().parent.parent / "organs")
+                if _org not in sys.path:
+                    sys.path.insert(0, _org)
+                import embed_resolver as _er
+                _vecs = _er.stored_vector_count(conn, _er.resolve(conn)[0])
             except Exception:
-                # A vec0 VIRTUAL table cannot be counted without the extension, and
-                # loading it here would break the stdlib-only promise this script's
-                # own name makes. So fall back to a count that is always stdlib:
-                # a brain with no live memories has nothing embedded, whatever the
-                # table is. UNKNOWN stays UNKNOWN when neither can be read.
                 _vecs = None
+            if _vecs is None:
+                # Fall back to a count that is always stdlib: a brain with no live
+                # memories has nothing embedded, whatever the table is. UNKNOWN stays
+                # UNKNOWN when neither can be read.
                 try:
                     _mem = conn.execute(
                         "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=0"

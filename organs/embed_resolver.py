@@ -129,6 +129,32 @@ def resolve_dim(conn: sqlite3.Connection) -> int:
     return resolve(conn)[1]
 
 
+def stored_vector_count(conn: sqlite3.Connection, table: str):
+    """How many vectors `table` holds, readable on a STDLIB connection; None when it
+    cannot be read (UNMEASURED, never a guessed zero). 0 when the table does not exist.
+
+    A vec0 table cannot be counted without the sqlite-vec extension, and the stdlib-only
+    scripts (claude_memory_lite, install/self_check) promise not to load it. sqlite-vec
+    keeps one row per vector in an ordinary shadow table, `<table>_rowids`, which any
+    connection can count. Measured on sqlite-vec 0.1.6 (the version install/requirements.txt
+    pins): equal to the vec0 count on a 28,063-vector table and after deletes and a replace.
+    The vec0 count is tried first, so a connection that loaded the extension reads it directly."""
+    if table not in _DIM_FOR:                     # a name this engine builds, so never an injected one
+        return None
+    try:
+        present = conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (table,)).fetchone()
+        if present is None:
+            return 0
+    except sqlite3.Error:
+        return None
+    for sql in (f"SELECT COUNT(*) FROM {table}", f"SELECT COUNT(*) FROM {table}_rowids"):
+        try:
+            return int(conn.execute(sql).fetchone()[0])
+        except sqlite3.Error:
+            continue
+    return None
+
+
 if __name__ == "__main__":
     # CRUCIBLE-3 D8-F11 (seat 221): `Path` was used here and imported nowhere, so
     # the DOCUMENTED no-argument form -- `python3 organs/embed_resolver.py` -- died

@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 428,
+    "core": 429,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 383,
+    "all": 384,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 416,
+    "brain": 417,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "95603fa",
+  "derived_at_head": "f400335",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 446,
+  "entries": 447,
   "platforms": [
    "all",
    "posix",
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "136abce45662c7119152253ef6c31084f11caa338728c88fa054a2e157d37180",
+   "sha256": "761863d4dfa01f3d1b7a930535e963cf79b6eb2cb7299fc5d1a1d98aa39fd264",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1065,13 +1065,13 @@
    "src": "install/requirements.txt"
   },
   {
-   "bytes": 54508,
+   "bytes": 54995,
    "component": "core",
    "dst": "install/self_check.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "dc6cb2024fae0272bd4ac5c875277addd2645a5f805ad287792cf79b9f6c8d7b",
+   "sha256": "8fb30e4f7d25226b5d099d0d5ffaa9ea2680b71963b41ffa021693c0d8102dae",
    "src": "install/self_check.py"
   },
   {
@@ -1615,13 +1615,13 @@
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 49442,
+   "bytes": 51227,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6f3a25437093755c811b687e990c070e023a2aeba20dfd979af5516f6962eda7",
+   "sha256": "caaf66d8d837e10bb89f2c0eafd3a4a4a5cba3318ef1a4df581c6df85329919b",
    "src": "organs/claude_memory_lite.py"
   },
   {
@@ -1705,13 +1705,13 @@
    "src": "organs/embed_backfill.py"
   },
   {
-   "bytes": 7841,
+   "bytes": 9180,
    "component": "core",
    "dst": "organs/embed_resolver.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1e1546aa4fafe9fe2112ee3b646404b25a8b61ca4c5ebd133d8677b3c1b40b5c",
+   "sha256": "7d7ac51bc2981931d06ef70384d7877e63cafc82f2c4ab1fd3c50c44a7800af2",
    "src": "organs/embed_resolver.py"
   },
   {
@@ -3863,6 +3863,16 @@
    "root": "brain",
    "sha256": "ad2c57e0c5c3551a8c707f397e910c4bb4cdb3b5888e5d1d9696d1be38bfa49a",
    "src": "voidloom/tests/test_qwen_revision_pinned.py"
+  },
+  {
+   "bytes": 7747,
+   "component": "core",
+   "dst": "voidloom/tests/test_readers_count_the_brains_table.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "1bec17ce2bc31b168db3676a7f44cdea829ea62c02689dac45a5d64d47945be7",
+   "src": "voidloom/tests/test_readers_count_the_brains_table.py"
   },
   {
    "bytes": 8533,
