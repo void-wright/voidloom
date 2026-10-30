@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 429,
+    "core": 432,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 384,
+    "all": 387,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 417,
+    "brain": 419,
     "home": 2,
-    "null": 10,
+    "null": 11,
     "skills": 18
    }
   },
-  "derived_at_head": "f400335",
+  "derived_at_head": "27c6585",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 447,
+  "entries": 450,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 16979,
+   "bytes": 18502,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "eac8d2c7f6e8c493834787479b010eff904849bf0d431ddebb63ed1d1a614ae9",
+   "sha256": "2c3bbf47495998c416f05ce4c79c1be9c2ef18530ce6aa3c5974fddc81ffe81f",
    "src": "CHANGELOG.md"
   },
   {
@@ -163,6 +163,16 @@
    "root": null,
    "sha256": "d8a208bd8c0f35ffc0d146f99018c0896d685ad47fd00ffd8a149e8b5bb9bace",
    "src": "CODE_OF_CONDUCT.md"
+  },
+  {
+   "bytes": 3397,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "2e558b023b46c380b0973dc88a66c1de3d9ff7d6ccdab39f75dd01529c269f54",
+   "src": "COMPAT.json"
   },
   {
    "bytes": 6709,
@@ -755,13 +765,13 @@
    "src": "docs/INSTRUCTIONS.md"
   },
   {
-   "bytes": 8356,
+   "bytes": 8372,
    "component": "core",
    "dst": "docs/LAYOUT.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "761863d4dfa01f3d1b7a930535e963cf79b6eb2cb7299fc5d1a1d98aa39fd264",
+   "sha256": "61fa4f308aee9185789ec1b4d100afef97905887c5bacff68360b58ce1c0057c",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -2515,6 +2525,16 @@
    "src": "seed/seed_pack.json"
   },
   {
+   "bytes": 11326,
+   "component": "core",
+   "dst": "tools/build_compat.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "16530dcfca56d01307289b92ce78ac1e60ce526e4207e24be2bdc8d2bd05d123",
+   "src": "tools/build_compat.py"
+  },
+  {
    "bytes": 9845,
    "component": "core",
    "dst": "tools/build_embedder_catalogue.py",
@@ -2845,13 +2865,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 144144,
+   "bytes": 145945,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "d91a6ffbed46c7ced3b4eba3711c39becc97cba8e99de5802ba055e8b6d7810a",
+   "sha256": "d18f0c089fd8e9ede357bb37b34ce4b37c0e492a50e76d3822e1b82dbe8f0673",
    "src": "voidloom/cli.py"
   },
   {
@@ -3203,6 +3223,16 @@
    "root": "brain",
    "sha256": "5875111fc486ec70b2da7601f04c79ab3210d748c9bd7835f37c87eadbc1848a",
    "src": "voidloom/tests/test_cognitive_map_degree_cost_d26.py"
+  },
+  {
+   "bytes": 7759,
+   "component": "core",
+   "dst": "voidloom/tests/test_compat_and_version_json.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "7352e97bdc9ab4c705518b5f92471f1df703227ede6c07cc0277b87b12c4d47d",
+   "src": "voidloom/tests/test_compat_and_version_json.py"
   },
   {
    "bytes": 6508,

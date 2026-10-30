@@ -33,11 +33,29 @@ All notable changes to Voidloom are recorded here. The format follows
   **Both bounds are invented, not tuned**: nothing was measured to choose them.
 - Migrations 042–045: provenance stamps can name the weights checksum; the re-embed log states
   its model and width; seed and origin columns on memories; derived-layer stamps.
+- **`COMPAT.json`**, at the top of the package: what this package produces and accepts, so a
+  program that installs it can refuse a mismatch before writing anything. It names the version,
+  the migrations and the sha256 of a fresh brain's normalised schema, the oldest schema it can
+  migrate (a brain carrying only `migrations/schema.sql`), the Python range (`>=3.10`, the
+  installer's own floor; no ceiling is declared), the CLI surface, and the scheduled units of
+  `install/cron_roster.json`. `tools/build_compat.py --emit` derives it and `--check` compares;
+  the test suite rebuilds a fresh brain and checks the schema hash every run.
+- **`voidloom --version --json`** prints the version and `cli_surface_version`, a digest of
+  every verb and option the CLI accepts; `COMPAT.json` carries the same value. Plain
+  `voidloom --version` is unchanged.
 
 ### Fixed
 
 - Measuring coverage took 13 to 14 seconds on a brain with 28,063 vectors, because each count
   looked up the vector table once per row. The same counts now take about 0.1 seconds.
+- Six more queries looked up the vector table once per memory: the backfill count and its row
+  query, `seed-shape`, `tier set`'s pending set and switch coverage, and `tier rollback`'s gap.
+  On a 31,904-memory brain they took 4.2 to 12.8 seconds; they now read the same values in
+  0.016 to 0.11 seconds.
+- `claude_memory_lite.py stats` reported "not present (Tier 0 / keyword-only)" on brains that
+  hold vectors: it counted the nomic table whatever the tier, and its stdlib connection cannot
+  read a vector table at all. It now counts the brain's own table (the install lock first) and
+  names it. The self-check's "nothing to verify" probe counts the same way.
 - The belief engine read its neighbours' vectors from the jina table by name, whatever model the
   brain used, so on a nomic or qwen brain its similarity gate compared vectors from another
   model's table. It now reads through the search set.

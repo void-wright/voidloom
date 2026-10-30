@@ -1,6 +1,6 @@
 # Repository layout — how to find anything in one screen
 
-> Read this before you read code. **447 tracked files, 10 of them at the
+> Read this before you read code. **450 tracked files, 11 of them at the
 > top level.** Every count on this page is derived from the tree, and
 > `voidloom/tests/test_docs_name_real_paths.py` re-derives them and fails if
 > this page and `git ls-files` disagree — because the previous version said
@@ -12,8 +12,8 @@
 tree under `$HOME/.claude/memory/` — file by file, from `install/lay_manifest.json`,
 which is derived from the git index and bound to it by
 `voidloom/tests/test_lay_manifest.py` — so what you read here is what runs.
-Ten front-door files (README, LICENSE, NOTICE, CHANGELOG, CONTRIBUTING,
-SECURITY, CODE_OF_CONDUCT, install.sh, uninstall.sh, .gitignore) ship but are not laid; `persona/skills/*` lands under `~/.claude/skills/`, the
+Eleven front-door files (README, LICENSE, NOTICE, CHANGELOG, CONTRIBUTING,
+SECURITY, CODE_OF_CONDUCT, install.sh, uninstall.sh, .gitignore, COMPAT.json) ship but are not laid; `persona/skills/*` lands under `~/.claude/skills/`, the
 council under the same root only when `install/install_council.sh` is run, and
 the Persona Forge (`persona/skills/persona-forge/` + `/persona-forge`, component
 `forge`) by `install/install_persona_forge.sh`, which `install.sh` calls as its

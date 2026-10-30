@@ -2395,13 +2395,38 @@ def _add_global_flags(sp: argparse.ArgumentParser) -> None:
                     help="force full stderr silence (suppress model-load logs).")
 
 
+CLI_SURFACE_SCHEMA = "cli-surface/1"
+
+
+def cli_surface_version(parser: Optional[argparse.ArgumentParser] = None) -> str:
+    """The CLI's surface as a version string: a digest of every verb and every option and positional it
+    accepts, read from the parser itself, so it moves whenever the surface moves and never by hand.
+    `voidloom --version --json` prints it; COMPAT.json carries the same value (tools/build_compat.py)."""
+    import hashlib
+    p = parser or build_parser()
+
+    def _shape(ap: argparse.ArgumentParser) -> List[str]:
+        return sorted([o for a in ap._actions for o in a.option_strings]
+                      + ["<" + a.dest + ">" for a in ap._actions
+                         if not a.option_strings and not isinstance(a, argparse._SubParsersAction)])
+
+    surface: Dict[str, List[str]] = {"": _shape(p)}
+    for a in p._actions:
+        if isinstance(a, argparse._SubParsersAction):
+            for name, sp in a.choices.items():
+                surface[name] = _shape(sp)
+    digest = hashlib.sha256(json.dumps(surface, sort_keys=True).encode("utf-8")).hexdigest()
+    return f"{CLI_SURFACE_SCHEMA}:{digest[:16]}"
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="voidloom",
         description="The LLM's execution surface over the Voidloom memory brain "
                     "(a thin facade over claude_memory.py).")
     p.add_argument("--version", action="version",
-                   version=f"voidloom {__version__}")
+                   version=f"voidloom {__version__}",
+                   help="print the version and exit (with --json: the version and cli_surface_version)")
     p.add_argument("--db", default=None,
                    help="override the brain DB path (advanced; must precede the "
                         "verb, e.g. `voidloom --db PATH recall ...`; also "
@@ -2657,6 +2682,13 @@ def dispatch(argv: Optional[Sequence[str]] = None) -> int:
     Top-level fail-graceful: any unexpected exception becomes an ``error``
     envelope (never a stacktrace into the caller)."""
     parser = build_parser()
+    # `voidloom --version --json`: the version AND the CLI surface, as an envelope, for a program that must
+    # check what it installed before it relies on a verb. Plain `--version` keeps argparse's text line.
+    _av = list(sys.argv[1:] if argv is None else argv)
+    if "--version" in _av and "--json" in _av and set(_av) <= {"--version", "--json", "--quiet"}:
+        print(json.dumps({"status": "ok", "action": "version", "version": __version__,
+                          "cli_surface_version": cli_surface_version(parser)}))
+        return 0
     # The organ verbs own their grammar (`voidloom hooks --status --json`), so
     # unknown options must reach them in order rather than exit 2 here.  For
     # every other verb an unknown option is the usage error it always was.

@@ -1,0 +1,99 @@
+{
+  "cli_surface_version": "cli-surface/1:b231860f86c15e07",
+  "install_verb_contract": "install.sh (install/install.ps1 on Windows) lays install/lay_manifest.json into the install root, creates the brain with `organs/claude_memory.py init` (which writes embedder.lock.json beside it for a shipped tier), applies organs/schema_migrator.py, and loads seed/seed_pack.json with `organs/claude_memory_lite.py load-seed`; the package's commit is the one this file ships in",
+  "oldest_migratable_schema": {
+    "migrations": []
+  },
+  "profiles": {
+    "personal": {
+      "unit_set": [
+        "affect-probe",
+        "anti-recency",
+        "arcane-manifest",
+        "belief-scan",
+        "cognitive-map",
+        "counterfactual-revisit",
+        "dream-daytime",
+        "dreaming",
+        "embed-backfill",
+        "gap-mapping",
+        "gap-research",
+        "organ-run-log",
+        "organ-yield",
+        "pre-cognitive",
+        "self-eval",
+        "skill-graduation",
+        "sleep-loop",
+        "whisper-digest"
+      ]
+    },
+    "workbench": {
+      "unit_set": [
+        "affect-probe",
+        "anti-recency",
+        "arcane-manifest",
+        "belief-scan",
+        "cognitive-map",
+        "counterfactual-revisit",
+        "dream-daytime",
+        "dreaming",
+        "embed-backfill",
+        "gap-mapping",
+        "gap-research",
+        "organ-run-log",
+        "organ-yield",
+        "pre-cognitive",
+        "self-eval",
+        "skill-graduation",
+        "sleep-loop",
+        "whisper-digest"
+      ]
+    }
+  },
+  "python_range": ">=3.10",
+  "schema": "voidloom.compat/1",
+  "schema_produced": {
+    "migrations": [
+      "migration_001_fts5.sql",
+      "migration_002_kind_taxonomy.sql",
+      "migration_003_temporal_edges.sql",
+      "migration_004_procedural_memory.sql",
+      "migration_005_sleep_loop.sql",
+      "migration_006_persona_lenses.sql",
+      "migration_007_skill_graduation.sql",
+      "migration_008_anti_recency.sql",
+      "migration_009_whisper_network.sql",
+      "migration_010_provenance_graph.sql",
+      "migration_011_cognitive_map.sql",
+      "migration_012_cross_tier_bridges.sql",
+      "migration_013_embedding_upgrade.sql",
+      "migration_014_calibration_memory.sql",
+      "migration_015_gap_mapping.sql",
+      "migration_016_pre_cognitive_recall.sql",
+      "migration_017_dreaming.sql",
+      "migration_018_council.sql",
+      "migration_019_counterfactual.sql",
+      "migration_020_arcane_manifest.sql",
+      "migration_021_self_eval.sql",
+      "migration_022_bridge_tiers_and_scope.sql",
+      "migration_023_belief_engine.sql",
+      "migration_024_diversity.sql",
+      "migration_027_dream_pipeline.sql",
+      "migration_028_communities.sql",
+      "migration_029_warden_untrusted_source.sql",
+      "migration_030_decision_units.sql",
+      "migration_031_qwen_tier.sql",
+      "migration_032_governance_proposals.sql",
+      "migration_033_embedding_provenance.sql",
+      "migration_039_gap_research_log_thinker.sql",
+      "migration_040_sleep_run_lifecycle.sql",
+      "migration_041_belief_quarantine.sql",
+      "migration_042_embedder_lock.sql",
+      "migration_043_retire_encumbered_default.sql",
+      "migration_044_seed_origin.sql",
+      "migration_045_derived_layer_stamp.sql"
+    ],
+    "schema_sha256": "8ff646e59cfeb44f3f7d7aa8d8b4e3902954983cd3bb9bca5f383daf8d8353c8"
+  },
+  "version": "1.0.0"
+}
