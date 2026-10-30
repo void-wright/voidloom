@@ -1233,17 +1233,39 @@ def _approval_ref_re():
     return re.compile(r"^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9_.:-]+$")
 
 
-_APPROVAL_REF_RE = _approval_ref_re()
+# Derived on FIRST USE, not at import: the owner module imports the approvals
+# backend, which pulls in the thinker and numpy, and `voidloom --help` (which
+# imports this file to print the verb list) must import neither.
+#
+# The eager call also put organs/ on sys.path at import, and organ verbs that
+# import their module by bare name (`voidloom persona decline`) came to rely on
+# that side effect: measured, deferring it made that verb report organ_missing.
+# So the path insertion stays at import -- it costs nothing -- and only the
+# import of the owner moves.
+try:
+    _od_at_import = str(_paths.organ_dir())
+    if _od_at_import not in sys.path:
+        sys.path.insert(0, _od_at_import)
+except Exception:
+    pass
+_APPROVAL_REF_RE_CACHE: List[Any] = []
+
+
+def _approval_ref_pattern():
+    if not _APPROVAL_REF_RE_CACHE:
+        _APPROVAL_REF_RE_CACHE.append(_approval_ref_re())
+    return _APPROVAL_REF_RE_CACHE[0]
 
 
 def _validate_approval_ref(ref: str) -> Optional[Dict[str, Any]]:
     """Return None if the ref is structurally valid, else a refusal envelope."""
-    if not ref or not _APPROVAL_REF_RE.match(ref):
+    pattern = _approval_ref_pattern()
+    if not ref or not pattern.match(ref):
         return refused("invalid_approval_ref",
                        f"approval ref {ref!r} is malformed; expected "
                        "'self-eval:<id>' or 'belief:<batch>'",
                        data={"given": ref,
-                             "pattern": _APPROVAL_REF_RE.pattern},
+                             "pattern": pattern.pattern},
                        verb="approvals")
     return None
 

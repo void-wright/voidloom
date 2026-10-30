@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 424,
+    "core": 425,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 379,
+    "all": 380,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 412,
+    "brain": 413,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "acabf52",
+  "derived_at_head": "75a3fee",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 442,
+  "entries": 443,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 13105,
+   "bytes": 14353,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "663959959a091342e91203ce8aef662520170b72eb7855bc5a8c51b0ddd58441",
+   "sha256": "ffcb60ba7278e5a170fcbd2ff2f4671d367d90f0d4b25ed6c9432db4290c44bf",
    "src": "CHANGELOG.md"
   },
   {
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "73e1e83e361c783eed70dfccd1202dbc81638a0f2e8302f6ef34236712987a38",
+   "sha256": "c7cc27a42ca95b3cb064d650c92d33301b6ccded75005e47d9ce3296b861f78a",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -2845,13 +2845,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 143240,
+   "bytes": 144144,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "0247018bf1e13b125cfb615076db3ad3ae8dfb6c040c0a1f55838d09d5f6289f",
+   "sha256": "d91a6ffbed46c7ced3b4eba3711c39becc97cba8e99de5802ba055e8b6d7810a",
    "src": "voidloom/cli.py"
   },
   {
@@ -3543,6 +3543,16 @@
    "root": "brain",
    "sha256": "b4301eda25d0806826d63eb4635b84cf3fae2198fe0cc5975365f0bb64a97a81",
    "src": "voidloom/tests/test_heartbeat_headless_d26.py"
+  },
+  {
+   "bytes": 2965,
+   "component": "core",
+   "dst": "voidloom/tests/test_help_is_lazy.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "43a182c8d0f64b2943de47936d3b050047d674ded5657056633171831f1205d3",
+   "src": "voidloom/tests/test_help_is_lazy.py"
   },
   {
    "bytes": 3921,

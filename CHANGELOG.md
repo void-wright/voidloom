@@ -56,9 +56,24 @@ All notable changes to Voidloom are recorded here. The format follows
     only when no content word of the query appears anywhere in the brain. Such misses are
     rare, so the suggestion will seldom fire. Its rolling window moves to the new meaning
     within 500 recalls.
+- `voidloom --help` no longer imports the approvals backend, the overnight thinker or numpy to
+  print the verb list. The approval-ref pattern is still taken from the module that owns the
+  vocabulary, on first use. Measured on the development machine: median 196 ms before, 46 ms
+  after (20 runs each, back to back).
+- An install lock that names a vector table this package does not build, a shipped table at
+  another width, or another tier's table is refused as `LOCK_MALFORMED` when it is read, for
+  every reader. Before, a lock naming the jina table under the cpu tier was accepted, and the
+  engine then selected the jina model.
 
 ### Changed
 
+- `memory_write.provenance_filter` returns a `ProvenanceFilter` object (it returned a
+  `(table, model, dim)` tuple), and `memory_write` gains the reader the vector readers can take:
+  `search_set`, `read_vector`, `read_vectors`, `knn`, `coverage_envelope`, and one count of the
+  memories still to embed (`pending_embeddings`). On a brain with an install lock the searchable
+  set is the vectors whose provenance stamp carries the lock's checksum; vectors without one are
+  left out and the reader says how many. A brain with no lock is searched as before, whole. Each
+  answer names which of the two it used.
 - The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned
   HuggingFace commit, as nomic and jina already did. Results no longer depend on when the
   model was downloaded, and a warm cache loads offline. A test fails if either pin is removed.

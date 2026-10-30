@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-30T19:13:00Z from the checkout at `acabf52`.
+> Generated 2026-10-30T19:54:11Z from the checkout at `75a3fee`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| files tracked | 442 |
-| files hashed | 442 |
-| total bytes | 10387868 |
+| files tracked | 443 |
+| files hashed | 443 |
+| total bytes | 10393344 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  172 files, 2766006 bytes
+### `voidloom` — The CLI facade  ·  173 files, 2769875 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -113,7 +113,7 @@
 | `voidloom/_facade.py` | 38539 | `c51738a45510e0f4` |
 | `voidloom/_guard.py` | 11713 | `11461a1e7bd1ef77` |
 | `voidloom/_paths.py` | 6524 | `6822733e57600c1a` |
-| `voidloom/cli.py` | 143240 | `0247018bf1e13b12` |
+| `voidloom/cli.py` | 144144 | `d91a6ffbed46c7ce` |
 | `voidloom/tests/__init__.py` | 29 | `c00b7e2467584fad` |
 | `voidloom/tests/_owned_brain.py` | 4509 | `e550d2b14985ecb6` |
 | `voidloom/tests/_thinker_fakes.py` | 15135 | `d63b82c100143add` |
@@ -183,6 +183,7 @@
 | `voidloom/tests/test_generic_personas.py` | 9644 | `441cc0f36796410d` |
 | `voidloom/tests/test_gpu_display_declared.py` | 6998 | `4788f84581ed97bf` |
 | `voidloom/tests/test_heartbeat_headless_d26.py` | 7546 | `b4301eda25d08068` |
+| `voidloom/tests/test_help_is_lazy.py` | 2965 | `43a182c8d0f64b29` |
 | `voidloom/tests/test_hidden_cuda_probe_r1.py` | 3921 | `c2a70343a42ff847` |
 | `voidloom/tests/test_init_prelock_snapshot.py` | 5345 | `cbe5c00b70334b24` |
 | `voidloom/tests/test_installer_accelerator.py` | 40526 | `9a64dfb7b1d3d16b` |
@@ -320,7 +321,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 946467 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 946756 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -337,7 +338,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 128830 | `75776fe72b9e911f` |
+| `install/lay_manifest.json` | 129119 | `6231f3827883c00e` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -478,7 +479,7 @@
 | `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 217504 bytes
+### `docs` — Documentation  ·  12 files, 217574 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -486,21 +487,21 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19332 | `6af8d4be38a85697` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8356 | `73e1e83e361c783e` |
+| `docs/LAYOUT.md` | 8356 | `c7cc27a42ca95b3c` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 33489 | `1e38f761a817e31c` |
+| `docs/PACKAGE_MANIFEST.md` | 33559 | `237fde2a944066d7` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  10 files, 414269 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  10 files, 415517 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 13105 | `663959959a091342` |
+| `CHANGELOG.md` | 14353 | `ffcb60ba7278e5a1` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `CONTRIBUTING.md` | 6709 | `475e8fbc09ff909e` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
