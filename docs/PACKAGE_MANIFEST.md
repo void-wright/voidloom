@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-30T16:17:08Z from the checkout at `9f3717f`.
+> Generated 2026-10-30T18:50:58Z from the checkout at `221bb7b`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -10,14 +10,14 @@
 
 | | |
 |---|---|
-| files tracked | 441 |
-| files hashed | 441 |
-| total bytes | 10337819 |
+| files tracked | 442 |
+| files hashed | 442 |
+| total bytes | 10347387 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4594005 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4596052 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -42,7 +42,7 @@
 | `organs/dream_pipeline.py` | 127866 | `35dfb3a588889438` |
 | `organs/embed_backfill.py` | 11765 | `4a48cf8fc254d994` |
 | `organs/embed_resolver.py` | 7841 | `1e1546aa4fafe9fe` |
-| `organs/embedder_lock.py` | 52799 | `bc1d865892bf43a8` |
+| `organs/embedder_lock.py` | 54846 | `5a146644d6163b68` |
 | `organs/embedders.lock.json` | 2557 | `6247a9cbb5988828` |
 | `organs/embedding_upgrade.py` | 66806 | `ba3766ecadfff29e` |
 | `organs/gap_mapping.py` | 107155 | `9e659adec01af772` |
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  171 files, 2746571 bytes
+### `voidloom` — The CLI facade  ·  172 files, 2753781 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -196,6 +196,7 @@
 | `voidloom/tests/test_lay_manifest.py` | 32508 | `46ef4c6bbcb13cce` |
 | `voidloom/tests/test_leak_clean.py` | 11453 | `360ba48a2b90d5f9` |
 | `voidloom/tests/test_leak_gate.py` | 9858 | `85558a868799daee` |
+| `voidloom/tests/test_lock_table_checked_once.py` | 7210 | `49e62fa66d81eb92` |
 | `voidloom/tests/test_migration_041_plain_sql_release_r2.py` | 4209 | `fc4edf7319aaea4a` |
 | `voidloom/tests/test_migrations_042_045.py` | 12164 | `d533e837d338f13d` |
 | `voidloom/tests/test_no_test_file_is_gitignored.py` | 1809 | `7bd5fc023edd020e` |
@@ -319,7 +320,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 946156 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 946467 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -336,7 +337,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 128519 | `8c066ad2330ed47b` |
+| `install/lay_manifest.json` | 128830 | `f797f51d3b9315c5` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -485,10 +486,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19332 | `6af8d4be38a85697` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8356 | `12ecbe53a53984be` |
+| `docs/LAYOUT.md` | 8356 | `73e1e83e361c783e` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 33408 | `eb4b4ba607d40507` |
+| `docs/PACKAGE_MANIFEST.md` | 33408 | `f3b7a8fde95ba68b` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

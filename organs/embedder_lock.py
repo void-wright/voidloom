@@ -504,8 +504,44 @@ def read_lock(path: Union[str, Path]) -> Dict[str, Any]:
     if not isinstance(lock.get("tier"), str) or not lock["tier"].strip():
         raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p}: tier must be a non-empty string",
                                 lock=str(p))
+    _check_lock_table(lock, p)
     lock["_path"] = str(p)
     return lock
+
+
+def _check_lock_table(lock: Dict[str, Any], p: Path) -> None:
+    """The lock's (vec_table, dim) must be a pair this package builds.
+
+    Every caller that takes a table from a lock -- the reader, the stamp, the
+    loader, the doctor, the installers -- then searches or writes that table, so
+    a lock naming a table nothing creates (or a known table at another width) is
+    refused HERE, once, as LOCK_MALFORMED, instead of by each caller in turn.
+    `write_lock` only ever writes a catalogue tier's own pair, so a lock that
+    fails this was not written by this package. This is a fact about the lock's
+    shape, not a policy about its weights: whether the lock's weights_hash is a
+    shipped one is still decided later, after the rows and bytes are counted.
+    """
+    try:
+        tiers = catalogue_tiers()
+    except EmbedderLockError:
+        raise                                    # the catalogue's own typed refusal, as is
+    except Exception as e:                       # an unreadable catalogue is not a table check
+        raise EmbedderLockError("LOCK_MALFORMED",
+                                f"embedder lock at {p}: the package catalogue could not be read "
+                                f"to check the lock's table ({e})", lock=str(p))
+    table, dim = str(lock["vec_table"]), int(lock["dim"])
+    pairs = {(str(e["vec_table"]), int(e["dim"])) for e in tiers.values()}
+    own = tiers.get(lock["tier"])
+    if own is not None:
+        pairs = {(str(own["vec_table"]), int(own["dim"]))}
+    if (table, dim) not in pairs:
+        raise EmbedderLockError(
+            "LOCK_MALFORMED",
+            f"embedder lock at {p} names vec_table {table!r} at {dim} wide; this package builds "
+            + (f"tier {lock['tier']!r} as {sorted(pairs)[0][0]!r} at {sorted(pairs)[0][1]}"
+               if own is not None else f"only {sorted(pairs)}")
+            + ". A table nothing creates is not one any reader may search.",
+            lock=str(p), vec_table=table, dim=dim, tier=lock["tier"])
 
 
 def _fsync_dir(d: Path) -> None:

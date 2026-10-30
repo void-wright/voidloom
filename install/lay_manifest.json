@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 423,
+    "core": 424,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 378,
+    "all": 379,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 411,
+    "brain": 412,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "9f3717f",
+  "derived_at_head": "221bb7b",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 441,
+  "entries": 442,
   "platforms": [
    "all",
    "posix",
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "12ecbe53a53984be5751cf59023232dcfe87d9c2909f16dfc2e51e8e90f61d1e",
+   "sha256": "73e1e83e361c783eed70dfccd1202dbc81638a0f2e8302f6ef34236712987a38",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1715,13 +1715,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 52799,
+   "bytes": 54846,
    "component": "core",
    "dst": "organs/embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "bc1d865892bf43a8d1844b91e5532df2756b3f5682169f7f720e79573dfbff65",
+   "sha256": "5a146644d6163b680cebd26d38614d1744ff937695212dba50393642ed3aeb06",
    "src": "organs/embedder_lock.py"
   },
   {
@@ -3673,6 +3673,16 @@
    "root": "brain",
    "sha256": "85558a868799daee0c9b595d7cfb49831e65b90fc33572cf6543dfe33e5e059b",
    "src": "voidloom/tests/test_leak_gate.py"
+  },
+  {
+   "bytes": 7210,
+   "component": "core",
+   "dst": "voidloom/tests/test_lock_table_checked_once.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "49e62fa66d81eb92a004067a54e98ad58e62e6a704c877dc4a20c2691b5a720c",
+   "src": "voidloom/tests/test_lock_table_checked_once.py"
   },
   {
    "bytes": 4209,
