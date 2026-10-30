@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-29T23:26:56Z from the checkout at `388af7f`.
+> Generated 2026-10-30T00:07:11Z from the checkout at `86d4dd4`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -12,7 +12,7 @@
 |---|---|
 | files tracked | 430 |
 | files hashed | 430 |
-| total bytes | 10161641 |
+| total bytes | 10162842 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -97,7 +97,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  164 files, 2670942 bytes
+### `voidloom` — The CLI facade  ·  164 files, 2672143 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -203,7 +203,7 @@
 | `voidloom/tests/test_organ_yield_exit_codes.py` | 14391 | `82d92c7335c026a2` |
 | `voidloom/tests/test_outside_target_diff.py` | 54029 | `dd54d9313e19c1ba` |
 | `voidloom/tests/test_persona_forge.py` | 23899 | `38208ba2c18f0d9c` |
-| `voidloom/tests/test_preflight_model_cache_r2.py` | 5491 | `390226dfe6b1c487` |
+| `voidloom/tests/test_preflight_model_cache_r2.py` | 6692 | `a6eddcf21ffb2fbb` |
 | `voidloom/tests/test_preflight_upgrades_pip_r2.py` | 1738 | `5d0369a1088c1ebe` |
 | `voidloom/tests/test_preflight_verb.py` | 2694 | `fab053d8ac241306` |
 | `voidloom/tests/test_qwen_revision_pinned.py` | 3887 | `ad2c57e0c5c3551a` |
@@ -327,7 +327,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 125323 | `34dc11a3b61807a2` |
+| `install/lay_manifest.json` | 125323 | `55f0930cf1a20f5e` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -477,7 +477,7 @@
 | `docs/LAYOUT.md` | 8185 | `92624e985664191f` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 32627 | `450ebc5f403aa7d8` |
+| `docs/PACKAGE_MANIFEST.md` | 32627 | `e5f71c263ea7690d` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

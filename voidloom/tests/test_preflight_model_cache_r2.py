@@ -84,9 +84,39 @@ def test_a_model_load_never_prints_to_stdout(tmp_path):
     env = dict(os.environ, PYTHONPATH=str(fake), CUDA_VISIBLE_DEVICES="", PYTORCH_NVML_BASED_CUDA_CHECK="1",
                WIZARD_ACCELERATOR="cpu", HF_HUB_OFFLINE="1")
     p = subprocess.run([sys.executable, "-B", "-c", code], capture_output=True, text=True, env=env, timeout=300)
+    # The nomic load goes through the one loader, which hashes the pinned snapshot BEFORE instantiating anything. On a
+    # host with no snapshot (a stranger's empty HF cache, offline) it refuses, typed, and the claim under test -- a load
+    # prints nothing to stdout -- is then measured on the refusal path: stdout empty, the code on stderr.
+    sys.path.insert(0, str(ROOT / "organs"))
+    import embedder_lock as _el
+    _cpu = _el.catalogue_tiers()["cpu"]
+    with _patched_env({"HF_HUB_OFFLINE": "1"}):
+        _present = _el.snapshot_dir_for(_cpu["model_id"], _cpu["revision"]) is not None
+    if not _present:
+        assert p.returncode != 0, p.stdout
+        assert "SNAPSHOT_ABSENT" in p.stderr, p.stderr[-800:]
+        assert p.stdout.strip() == "", p.stdout
+        return
     assert p.returncode == 0, p.stderr[-800:]
     assert p.stdout.strip() == "ONLY-THIS", p.stdout
     assert "<All keys matched successfully>" in p.stderr
+
+
+class _patched_env:
+    def __init__(self, upd):
+        self.upd, self.old = upd, {}
+
+    def __enter__(self):
+        for k, v in self.upd.items():
+            self.old[k] = os.environ.get(k)
+            os.environ[k] = v
+
+    def __exit__(self, *exc):
+        for k, v in self.old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 @pytest.mark.skipif(os.environ.get("VOIDLOOM_NETWORK_TESTS") != "1",
