@@ -957,41 +957,55 @@ def _active_embedding_table(conn: sqlite3.Connection) -> Optional[str]:
         return None
 
 
+def _reader():
+    import sys as _s, os as _o
+    _d = _o.path.dirname(_o.path.abspath(__file__))
+    if _d not in _s.path:
+        _s.path.insert(0, _d)
+    import memory_write
+    return memory_write
+
+
 def _vector_search(
     conn: sqlite3.Connection,
     query_vec: bytes,
     top_k: int,
     exclude_archived: bool = True,
+    refusals: Optional[List[str]] = None,
 ) -> List[Tuple[int, float]]:
-    """Run sqlite-vec cosine search. Returns ``[(memory_id, neg_distance)]``.
+    """KNN over THE SEARCH SET. Returns ``[(memory_id, neg_distance)]``.
 
-    Negates the distance so higher = better, consistent with FTS path.
-    Filters out archived memories at the JOIN step (matches cmd_recall).
-    Queries the ACTIVE embedding table (Nomic 768 or Jina v2 1024) so the
-    recall side always matches whatever tier the store side wrote to.
-    """
-    emb_table = _active_embedding_table(conn)
-    if emb_table is None:
-        return []
-    sql = f"""
-        SELECT emb.memory_id, emb.distance
-        FROM {emb_table} AS emb
-    """
-    if exclude_archived:
-        sql += """
-        JOIN memories AS m ON m.id = emb.memory_id
-        WHERE emb.embedding MATCH ?
-          AND k = ?
-          AND m.is_archived = 0
-        """
-    else:
-        sql += "WHERE emb.embedding MATCH ? AND k = ?\n"
-    sql += "ORDER BY emb.distance"
+    The search set is memory_write's: on a locked brain the lock's table, its
+    verified and legacy rows (a row stamped under another checksum is never a
+    candidate); on a brain with no lock, the whole table it resolves to. The KNN
+    is memory_write.knn, which pushes the set INTO the KNN and drops archived
+    rows inside it, so k rows come back when k exist.
 
+    Negates the distance so higher = better, consistent with the FTS path.
+
+    This is a recall hot path: a refusal (the lock cannot be read, no row is in
+    the set, a stamp is inconsistent) turns the vector arm OFF for this call and
+    the keyword arm answers. It is never silent: it is logged at ERROR and its
+    code is appended to ``refusals``, which recall_hybrid_with_coverage reports
+    as ``degraded``. No other table is substituted.
+    """
+    mw = _reader()
     try:
-        rows = conn.execute(sql, (query_vec, top_k)).fetchall()
+        flt = mw.search_set(conn)
+        if flt is None:                 # an EMPTY brain: nothing to search, not a refusal
+            return []
+        rows = mw.knn(conn, query_vec, top_k, exclude_archived=exclude_archived, flt=flt)
     except sqlite3.OperationalError as e:
         logger.error("Vector search failed: %s", e)
+        if refusals is not None:
+            refusals.append("VECTOR_SEARCH_FAILED")
+        return []
+    except Exception as e:  # noqa: BLE001 -- the reader's typed refusals
+        code = getattr(e, "code", None) or type(e).__name__
+        logger.error("hybrid_retrieval: the vector arm is off for this call (%s: %s); "
+                     "lexical retrieval is unaffected.", code, e)
+        if refusals is not None:
+            refusals.append(str(code))
         return []
     return [(int(mid), -float(dist)) for mid, dist in rows]
 
@@ -1021,6 +1035,53 @@ def _arms_path(mode: str, vector_results: list, bm25_results: list) -> str:
     return mode
 
 
+_VECTOR_MODES = frozenset({"hybrid", "vector-only", "no-rerank"})
+
+
+def recall_hybrid_with_coverage(
+    conn: sqlite3.Connection,
+    query: str,
+    query_vec: bytes,
+    top_k: int = 10,
+    mode: str = "hybrid",
+    vec_candidates: int = _VEC_CANDIDATES,
+    bm25_candidates: int = _BM25_CANDIDATES,
+    rrf_candidates: int = _RRF_CANDIDATES,
+    rrf_k: int = _RRF_K,
+    exclude_archived: bool = True,
+    divert: Optional[Callable[[List[int]], Set[int]]] = None,
+    diverted_out: Optional[List[int]] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """recall_hybrid, plus THE READER'S COVERAGE FOR THIS CALL: (rows, coverage).
+
+    `coverage` is memory_write.coverage_envelope, derived on this connection for
+    this call whatever the mode (it never raises; a refusal is carried as figures
+    with its code, `matched` 0 when the set cannot be built). Beside it:
+      vector_arm   'ran' | 'refused' | 'off' (bm25-only) | 'empty' (no vectors at all)
+      degraded     True when a vector mode was asked for and the arm refused, so
+                   the rows are keyword rows only; `refusal` names the code.
+    Every row also carries it as ``row["coverage"]``. An EMPTY result set can
+    carry nothing per row, which is why it is returned beside the list."""
+    coverage = dict(_reader().coverage_envelope(conn))
+    refusals: List[str] = []
+    rows = _recall_hybrid_rows(
+        conn, query, query_vec, top_k=top_k, mode=mode, vec_candidates=vec_candidates,
+        bm25_candidates=bm25_candidates, rrf_candidates=rrf_candidates, rrf_k=rrf_k,
+        exclude_archived=exclude_archived, divert=divert, diverted_out=diverted_out,
+        vector_refusals=refusals)
+    if mode not in _VECTOR_MODES:
+        coverage["vector_arm"], coverage["degraded"] = "off", False
+    elif refusals:
+        coverage["vector_arm"], coverage["degraded"], coverage["refusal"] = "refused", True, refusals[0]
+    elif coverage.get("total", 0) == 0 and coverage.get("ok"):
+        coverage["vector_arm"], coverage["degraded"] = "empty", False
+    else:
+        coverage["vector_arm"], coverage["degraded"] = "ran", False
+    for r in rows:
+        r["coverage"] = coverage
+    return rows, coverage
+
+
 def recall_hybrid(
     conn: sqlite3.Connection,
     query: str,
@@ -1035,7 +1096,33 @@ def recall_hybrid(
     divert: Optional[Callable[[List[int]], Set[int]]] = None,
     diverted_out: Optional[List[int]] = None,
 ) -> List[Dict[str, Any]]:
-    """Orchestrate the 3-stage hybrid retrieval pipeline.
+    """The list form of recall_hybrid_with_coverage (its callers index it). Every
+    row carries ``coverage``; a caller that needs the figures for an EMPTY result
+    set uses recall_hybrid_with_coverage."""
+    rows, _cov = recall_hybrid_with_coverage(
+        conn, query, query_vec, top_k=top_k, mode=mode, vec_candidates=vec_candidates,
+        bm25_candidates=bm25_candidates, rrf_candidates=rrf_candidates, rrf_k=rrf_k,
+        exclude_archived=exclude_archived, divert=divert, diverted_out=diverted_out)
+    return rows
+
+
+def _recall_hybrid_rows(
+    conn: sqlite3.Connection,
+    query: str,
+    query_vec: bytes,
+    top_k: int = 10,
+    mode: str = "hybrid",
+    vec_candidates: int = _VEC_CANDIDATES,
+    bm25_candidates: int = _BM25_CANDIDATES,
+    rrf_candidates: int = _RRF_CANDIDATES,
+    rrf_k: int = _RRF_K,
+    exclude_archived: bool = True,
+    divert: Optional[Callable[[List[int]], Set[int]]] = None,
+    diverted_out: Optional[List[int]] = None,
+    vector_refusals: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Orchestrate the 3-stage hybrid retrieval pipeline (the rows; recall_hybrid
+    and recall_hybrid_with_coverage are the public forms).
 
     CHANNELLED RECALL (the dream fix, A3): ``divert`` names the ids that belong to a side channel (recall_channels);
     they are PARTITIONED OUT after RRF fusion and BEFORE the reranker -- the reranker scores fewer pairs, never more,
@@ -1087,7 +1174,8 @@ def recall_hybrid(
     # _REFILL_MAX_FACTOR x -- until the partitioned pool holds what the stage needs or the corpus has no more; the
     # fused pool is cut to ``rrf_candidates`` AFTER the partition, never before. ``divert=None``: byte-identical.
     def _vec(n: int) -> List[Tuple[int, float]]:
-        return _vector_search(conn, query_vec, n, exclude_archived=exclude_archived)
+        return _vector_search(conn, query_vec, n, exclude_archived=exclude_archived,
+                              refusals=vector_refusals)
 
     def _bm25(n: int) -> List[Tuple[int, float]]:
         return fts_match(conn, query, top_k=n, exclude_archived=exclude_archived)

@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 427,
+    "core": 428,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 382,
+    "all": 383,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 415,
+    "brain": 416,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "1ada7bf",
+  "derived_at_head": "1a35f3c",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 445,
+  "entries": 446,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 16064,
+   "bytes": 16979,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "6f3722d79ae95eb7e9d1ac57cdfd49fe30ea6c74463df79ba431fa2b74b98175",
+   "sha256": "eac8d2c7f6e8c493834787479b010eff904849bf0d431ddebb63ed1d1a614ae9",
    "src": "CHANGELOG.md"
   },
   {
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "01e2e1897f26d6b5f3f8154ab13df18403458a0087563190c6a0593ecc5d543a",
+   "sha256": "136abce45662c7119152253ef6c31084f11caa338728c88fa054a2e157d37180",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1605,13 +1605,13 @@
    "src": "organs/calibration_memory.py"
   },
   {
-   "bytes": 203066,
+   "bytes": 203829,
    "component": "core",
    "dst": "organs/claude_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ea6bdc51ec3d5c06735e8da9a471ce0cb0a4e326b861b349b4e4dd7d01cfb260",
+   "sha256": "e30d214dd6693733049e53ccac27ef310feb9094159a1635c8332a609ef7e1d2",
    "src": "organs/claude_memory.py"
   },
   {
@@ -1775,13 +1775,13 @@
    "src": "organs/gpu_guard.py"
   },
   {
-   "bytes": 81001,
+   "bytes": 85331,
    "component": "core",
    "dst": "organs/hybrid_retrieval.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "738274b679224ae8bf99fc2fe82b50c812ddf98a9515d07e30b53c3dc602fdc2",
+   "sha256": "888e365e70b0856613ed9d2eb8f2a1860344a55487b93425fbf82251974f31c1",
    "src": "organs/hybrid_retrieval.py"
   },
   {
@@ -1815,13 +1815,13 @@
    "src": "organs/memory_dreaming.py"
   },
   {
-   "bytes": 89952,
+   "bytes": 89844,
    "component": "core",
    "dst": "organs/memory_write.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1bd37e1034d134e34f3a8101191b5925b7150e70028c603f2d56974658b1f807",
+   "sha256": "80b3d09871d295d4ca15ef088225d2581e10aa73e2c9ea82316d1a1e6bfe27b6",
    "src": "organs/memory_write.py"
   },
   {
@@ -2795,13 +2795,13 @@
    "src": "voidloom/_approvals_faces.py"
   },
   {
-   "bytes": 14033,
+   "bytes": 14186,
    "component": "core",
    "dst": "voidloom/_batch.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7207e72ebeaba2ed40c5b4214073011f6ca98df192ef41b080c78834598aea86",
+   "sha256": "e01b2df0460834f01a485fd1332676e8e688176a929530c71f86e9fe9ebff504",
    "src": "voidloom/_batch.py"
   },
   {
@@ -3873,6 +3873,16 @@
    "root": "brain",
    "sha256": "40f26b13d3679f926a2de1fd0093fd0e58b7a66cb884f866782b4b7610ca485e",
    "src": "voidloom/tests/test_readers_lock_first.py"
+  },
+  {
+   "bytes": 7926,
+   "component": "core",
+   "dst": "voidloom/tests/test_recall_carries_coverage.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "27ca5bae407fec0cd4984beaa5687d949361cd17a4812d2b7f3778c5fdd19541",
+   "src": "voidloom/tests/test_recall_carries_coverage.py"
   },
   {
    "bytes": 3824,

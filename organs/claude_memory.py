@@ -1747,7 +1747,7 @@ def cmd_recall(args):
     _leads_on = not (_leads is not None and _leads <= 0)
     _diverted: List[int] = []
     _divert, _chan_reg = _lane_divert(conn, _leads_on)          # R2-08: never fails open
-    results = hybrid_retrieval.recall_hybrid(
+    results, _coverage = hybrid_retrieval.recall_hybrid_with_coverage(
         conn,
         query=args.query,
         query_vec=query_vec,
@@ -1756,6 +1756,8 @@ def cmd_recall(args):
         divert=_divert,
         diverted_out=_diverted,
     )
+    for _r in results:                  # once, on the envelope below; not repeated on every row
+        _r.pop("coverage", None)
 
     # L2 Kind Taxonomy — enrich results with the `kind` field.
     # hybrid_retrieval._hydrate_memory_rows does not include `kind` (C1 domain),
@@ -2207,6 +2209,10 @@ def cmd_recall(args):
         "mode": mode,
         "results": filtered,
         "result_count": len(filtered),
+        # The reader's figures for THIS call, on every answer (an empty one too):
+        # basis / search_rule, matched of total, legacy_unverified on a locked
+        # brain, and `degraded` when the vector arm refused.
+        "coverage": _coverage,
         "time_ms": int((time.time() - t0) * 1000),
     }
     # Every ON channel's key is present (possibly an empty list) so presence means "the channel ran"; with
@@ -3527,6 +3533,11 @@ def cmd_anticipate(args):
     conn.commit()
 
     # 7. Optionally log the anticipation.
+    try:                                # never raises by contract; the guard is for an import failure
+        import memory_write as _mw_cov
+        _coverage = _mw_cov.coverage_envelope(conn)
+    except Exception as _e:  # noqa: BLE001
+        _coverage = {"ok": False, "error": type(_e).__name__, "message": str(_e)}
     log_id = None
     if getattr(args, 'log', False):
         log_id = pre_cognitive_recall.log_anticipation(
@@ -3547,6 +3558,7 @@ def cmd_anticipate(args):
         _output({
             "status": "ok",
             "action": "anticipate",
+            "coverage": _coverage,
             "memories_loaded": result["memories_loaded"],
             "ambiguous": result["ambiguous"],
             "tiers": result["tiers"],

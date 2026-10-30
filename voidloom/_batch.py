@@ -126,6 +126,8 @@ def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
                 if not isinstance(hits, list):
                     hits = []
                 rec = {"index": i, "query": q, "top_k": k, "status": "ok", "results": hits}
+                if isinstance(res.get("coverage"), dict):   # carried even when `results` is empty
+                    rec["coverage"] = res["coverage"]
                 # The side channels ride beside `results` (memories only); the batch-recall default verb used to
                 # lift `results` alone and would have silently dropped them (VAEL).
                 for ck in channel_keys(res):

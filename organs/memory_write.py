@@ -1305,14 +1305,14 @@ def provenance_coverage(conn: sqlite3.Connection):
     covered = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p "
         f"WHERE p.vec_table = ? AND p.model_id = ? "
-        f"  AND EXISTS (SELECT 1 FROM {table} v WHERE v.memory_id = p.memory_id)",
+        f"  AND p.memory_id IN (SELECT memory_id FROM {table})",
         (table, model_id)).fetchone()[0]
     foreign = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p WHERE p.vec_table = ? AND p.model_id <> ?",
         (table, model_id)).fetchone()[0]
     stamp_no_vec = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p WHERE p.vec_table = ? "
-        f"  AND NOT EXISTS (SELECT 1 FROM {table} v WHERE v.memory_id = p.memory_id)",
+        f"  AND p.memory_id NOT IN (SELECT memory_id FROM {table})",
         (table,)).fetchone()[0]
     vec_no_stamp = conn.execute(
         f"SELECT COUNT(*) FROM {table} v WHERE NOT EXISTS "
@@ -1323,7 +1323,7 @@ def provenance_coverage(conn: sqlite3.Connection):
     stale = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p JOIN memories m ON m.id = p.memory_id "
         f"WHERE p.vec_table = ? AND p.model_id = ? "
-        f"  AND EXISTS (SELECT 1 FROM {table} v WHERE v.memory_id = p.memory_id) "
+        f"  AND p.memory_id IN (SELECT memory_id FROM {table}) "
         f"  AND p.content_hash <> vl_sha256(m.content)",
         (table, model_id)).fetchone()[0]
 
@@ -1575,7 +1575,7 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
         f"  AND (p.weights_hash IS NULL OR p.weights_hash <> ?)", (table, whash)).fetchone()[0]
     stamp_no_vec = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p WHERE p.vec_table = ? "
-        f"  AND NOT EXISTS (SELECT 1 FROM {table} v WHERE v.memory_id = p.memory_id)",
+        f"  AND p.memory_id NOT IN (SELECT memory_id FROM {table})",
         (table,)).fetchone()[0]
     vec_no_stamp = conn.execute(
         f"SELECT COUNT(*) FROM {table} v WHERE NOT EXISTS "
@@ -1591,7 +1591,7 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
     stale = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p JOIN memories m ON m.id = p.memory_id "
         f"WHERE p.vec_table = ? AND p.weights_hash = ? AND p.input_kind = 'text' "
-        f"  AND EXISTS (SELECT 1 FROM {table} v WHERE v.memory_id = p.memory_id) "
+        f"  AND p.memory_id IN (SELECT memory_id FROM {table}) "
         f"  AND p.content_hash <> vl_sha256(m.content)", (table, whash)).fetchone()[0]
     cov = LockCoverage(
         filter=flt, denominator=denominator, active_memories=int(active), vectors=int(vectors),
@@ -1789,7 +1789,7 @@ def needs_embedding_sql(flt: ProvenanceFilter, mem_alias: str = "m", scope: str 
             f"SELECT 1 FROM {PROVENANCE_TABLE} p WHERE p.memory_id = {mem_alias}.id "
             f"AND p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? "
             f"AND p.input_kind = 'text' AND p.content_hash = vl_sha256({mem_alias}.content) "
-            f"AND EXISTS (SELECT 1 FROM {flt.vec_table} v WHERE v.memory_id = p.memory_id))")
+            f"AND p.memory_id IN (SELECT memory_id FROM {flt.vec_table}))")
 
 
 def count_pending_embeddings(conn: sqlite3.Connection, *, flt: Optional[ProvenanceFilter] = None,

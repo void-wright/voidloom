@@ -36,6 +36,8 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ### Fixed
 
+- Measuring coverage took 13 to 14 seconds on a brain with 28,063 vectors, because each count
+  looked up the vector table once per row. The same counts now take about 0.1 seconds.
 - The belief engine read its neighbours' vectors from the jina table by name, whatever model the
   brain used, so on a nomic or qwen brain its similarity gate compared vectors from another
   model's table. It now reads through the search set.
@@ -93,6 +95,14 @@ All notable changes to Voidloom are recorded here. The format follows
   engine's neighbour scan, temporal edges (Tier-3 candidates and the LLM candidate search), the
   anticipation fallback, and the three memory-dreaming pair selectors. On a locked brain none of
   them can read a vector stamped under another model's checksum.
+- Every recall answer now carries `coverage`: the reader's figures for that call (`basis`,
+  `search_rule`, `matched` of `total` active memories and, on a locked brain,
+  `legacy_unverified`), plus `vector_arm` (`ran`, `refused`, `off` or `empty`) and `degraded`. It
+  is on the `recall` envelope, on each `batch-recall` record (an empty one too) and on
+  `anticipate`. When the vector arm cannot run (the lock cannot be read, its table is gone, or
+  nothing in it can be searched), recall answers from keywords with `degraded: true` and the
+  refusal's code instead of failing or looking normal. In Python, `recall_hybrid_with_coverage`
+  returns `(rows, coverage)`; `recall_hybrid` still returns the rows, each carrying `coverage`.
 - The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned
   HuggingFace commit, as nomic and jina already did. Results no longer depend on when the
   model was downloaded, and a warm cache loads offline. A test fails if either pin is removed.
