@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "02810c7",
+  "derived_at_head": "b13bfa3",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 444,
   "platforms": [
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 14684,
+   "bytes": 15378,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "f20fb45141ce1b078baa09d786ef0fb13b659c46d8c9e8b6c82aeb16cf38e342",
+   "sha256": "2921391b146d93de0caf90a5c5b56dd0b359ff99885a660cd453374de9510ecc",
    "src": "CHANGELOG.md"
   },
   {
@@ -1815,13 +1815,13 @@
    "src": "organs/memory_dreaming.py"
   },
   {
-   "bytes": 84580,
+   "bytes": 89952,
    "component": "core",
    "dst": "organs/memory_write.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "19a42eed04333231a59ebb914c45f06649e891af006008016a61c73663105cc0",
+   "sha256": "1bd37e1034d134e34f3a8101191b5925b7150e70028c603f2d56974658b1f807",
    "src": "organs/memory_write.py"
   },
   {
@@ -3425,13 +3425,13 @@
    "src": "voidloom/tests/test_embedder_lock.py"
   },
   {
-   "bytes": 39679,
+   "bytes": 46551,
    "component": "core",
    "dst": "voidloom/tests/test_embedding_provenance.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6cc74898597500a029b66708a81d97ef6aa175ec31f8cc746927f611f6d73d89",
+   "sha256": "8497c13ab252e60c1dfba96391899adcf5ebf8171be66694655fe5b795148e7d",
    "src": "voidloom/tests/test_embedding_provenance.py"
   },
   {

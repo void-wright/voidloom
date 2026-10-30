@@ -75,9 +75,16 @@ All notable changes to Voidloom are recorded here. The format follows
   `(table, model, dim)` tuple), and `memory_write` gains the reader the vector readers can take:
   `search_set`, `read_vector`, `read_vectors`, `knn`, `coverage_envelope`, and one count of the
   memories still to embed (`pending_embeddings`). On a brain with an install lock the searchable
-  set is the vectors whose provenance stamp carries the lock's checksum; vectors without one are
-  left out and the reader says how many. A brain with no lock is searched as before, whole. Each
-  answer names which of the two it used.
+  set is the vectors in the lock's table whose provenance stamp carries the lock's checksum, plus
+  the brain's **legacy** vectors: those written before the lock existed, whose stamp reads
+  `unresolved` or which have no stamp. A vector stamped under a different checksum, or kept in
+  another model's table, is never searched. Every answer carries `legacy_unverified: N of M` (how
+  many of the M searchable vectors have not been checked against the lock) and, when N is above
+  zero, the command that checks them: `python3 organs/embedding_upgrade.py --db-path
+  <brain>/claude_memory.db re-embed`, or `voidloom tier set` with the tier the brain already
+  uses. This matters for a brain that `init` pins after it already holds vectors: without the
+  legacy rule its vector recall would have gone empty until a re-embed. A brain with no lock is
+  searched as before, whole. Each answer names which rule it used (`search_rule`).
 - The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned
   HuggingFace commit, as nomic and jina already did. Results no longer depend on when the
   model was downloaded, and a warm cache loads offline. A test fails if either pin is removed.

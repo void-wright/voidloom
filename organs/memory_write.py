@@ -1004,15 +1004,25 @@ def attach_under_lock(conn: sqlite3.Connection, memory_id: int, text: str, vec: 
 # --------------------------------------------------------------------------
 # THE SEARCH SET -- the one filter every vector reader takes.
 #
-# THE INSTALL LOCK FIRST (owner decision D2). A LOCKED brain made a promise about
-# bytes: its search set is the rows in the lock's table whose stamp carries the
-# lock's computed checksum at the lock's width -- an unstamped vector, a stamp
-# under other weights, and a legacy 'unresolved' stamp are all outside it. A brain
-# with NO lock (every brain installed before the lock existed, and the jina tier,
-# which the catalogue does not ship) made no such promise: its search set is the
-# whole table it resolves to, exactly as before the lock, and every answer says
-# which basis it used. A malformed lock refuses; it is never read as absent.
+# THE INSTALL LOCK FIRST (owner decision D2). A LOCKED brain's search set has two
+# parts, both in the lock's own vector table:
+#   VERIFIED  rows whose stamp carries the lock's computed checksum at its width;
+#   LEGACY    rows whose stamp is the declared absence 'unresolved', and rows with
+#             no stamp on that table at all.
+# A stamp naming a DIFFERENT checksum is outside the set, and so is every vector
+# in another table. Legacy rows exist because `init` pins a brain that already
+# has vectors (written before any lock); dropping them would silently empty that
+# brain's vector recall until a re-embed. They are counted on every answer
+# (`legacy_unverified: N of M`), and a re-embed or `tier set` turns them into
+# verified rows: the unit of work below still counts every legacy row as work.
+# A brain with NO lock (every brain installed before the lock existed, and the
+# jina tier, which the catalogue does not ship) made no promise about bytes: its
+# search set is the whole table it resolves to, exactly as before the lock. Every
+# answer says which rule it used. A malformed lock refuses; never read as absent.
 # --------------------------------------------------------------------------
+
+SEARCH_RULE_LOCKED = "lock: verified + legacy"
+SEARCH_RULE_LOCKLESS = "lockless: whole table"
 
 def lock_identity(conn: sqlite3.Connection) -> Dict[str, Any]:
     """{tier, model_id, revision, weights_hash, vec_table, dim, lock_path} for the
@@ -1049,15 +1059,38 @@ class ProvenanceFilter:
         return "lock" if self.locked else "lockless"
 
     @property
+    def search_rule(self) -> str:
+        return SEARCH_RULE_LOCKED if self.locked else SEARCH_RULE_LOCKLESS
+
+    def member_sql(self, mem_alias: str = "m") -> str:
+        """A predicate over `memories {mem_alias}` that is true when the memory's
+        vector, if it has one in this table, is in the search set. Locked: no stamp
+        on the lock's table names anything but the lock's checksum at its width or
+        'unresolved' (one stamp per memory per table: the sidecar's key). Bind
+        `search_set_params` for its three `?`. Lockless: always true."""
+        if not self.locked:
+            return "1"
+        return (f"NOT EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p WHERE p.memory_id = {mem_alias}.id "
+                f"AND p.vec_table = ? AND NOT ((p.weights_hash = ? AND p.dim = ?) "
+                f"OR p.weights_hash = '{WEIGHTS_HASH_UNRESOLVED}'))")
+
+    def verified_sql(self, vec_alias: str = "v") -> str:
+        """True when the vector row `{vec_alias}` is VERIFIED (its stamp carries the
+        lock's checksum at its width). Bind `search_set_params`. Locked only."""
+        if not self.locked:
+            raise ValueError("verified_sql needs a locked filter")
+        return (f"EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p WHERE p.memory_id = {vec_alias}.memory_id "
+                f"AND p.vec_table = ? AND p.weights_hash = ? AND p.dim = ?)")
+
+    @property
     def search_set_sql(self) -> str:
-        """A `memory_id IN (...)` predicate for the vector table. On a locked brain
-        it is the join of the table with the stamps carrying the lock's checksum;
-        sqlite-vec pushes a `rowid IN (subquery)` constraint INTO the KNN (a
-        pre-filter: with the nearest row outside the set, the next one is
-        returned), so the set is the join, not the top-k afterwards."""
+        """A `memory_id IN (...)` predicate for the vector table. sqlite-vec pushes
+        a `rowid IN (subquery)` constraint INTO the KNN (a pre-filter: with the
+        nearest row outside the set, the next one is returned), so the set is the
+        subquery, not the top-k afterwards. Locked: the memories whose stamp on the
+        lock's table is verified or legacy (member_sql)."""
         if self.locked:
-            return (f"memory_id IN (SELECT p.memory_id FROM {PROVENANCE_TABLE} p "
-                    f"WHERE p.vec_table = ? AND p.weights_hash = ? AND p.dim = ?)")
+            return f"memory_id IN (SELECT m.id FROM memories m WHERE {self.member_sql('m')})"
         return "memory_id IN (SELECT m.id FROM memories m)"
 
     @property
@@ -1071,23 +1104,22 @@ class ProvenanceFilter:
         filter applied afterwards would return k minus every archived neighbour,
         and vec0 admits exactly one IN constraint. Bind `search_set_params`."""
         if self.locked:
-            return (f"memory_id IN (SELECT p.memory_id FROM {PROVENANCE_TABLE} p "
-                    f"JOIN memories m ON m.id = p.memory_id "
-                    f"WHERE p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? "
-                    f"AND COALESCE(m.is_archived, 0) = 0)")
+            return (f"memory_id IN (SELECT m.id FROM memories m WHERE "
+                    f"COALESCE(m.is_archived, 0) = 0 AND {self.member_sql('m')})")
         return "memory_id IN (SELECT m.id FROM memories m WHERE COALESCE(m.is_archived, 0) = 0)"
 
     def stamped_join_sql(self, vec_alias: str = "e", mem_alias: str = "m") -> str:
         """For a reader that starts from `memories {mem_alias}`: the JOIN to the
-        search set. Bind `search_set_params` BEFORE the caller's own parameters."""
+        search set, as `JOIN ... ON ...`. Bind `search_set_params` BEFORE the
+        caller's own parameters."""
         join = f"JOIN {self.vec_table} {vec_alias} ON {vec_alias}.memory_id = {mem_alias}.id"
         if not self.locked:
             return join
-        return (f"{join} JOIN {PROVENANCE_TABLE} p ON p.memory_id = {vec_alias}.memory_id "
-                f"AND p.vec_table = ? AND p.weights_hash = ? AND p.dim = ?")
+        return f"{join} AND {self.member_sql(mem_alias)}"
 
     def as_dict(self) -> Dict[str, Any]:
-        return {"basis": self.basis, "vec_table": self.vec_table, "dim": self.dim,
+        return {"basis": self.basis, "search_rule": self.search_rule,
+                "vec_table": self.vec_table, "dim": self.dim,
                 "weights_hash": self.weights_hash, "model_id": self.model_id,
                 "revision": self.revision, "tier": self.tier, "lock_path": self.lock_path}
 
@@ -1160,6 +1192,7 @@ class ProvenanceCoverage:
     stale_content_hash: int
 
     basis = "lockless"
+    search_rule = SEARCH_RULE_LOCKLESS
 
     @property
     def matched(self) -> int:
@@ -1208,7 +1241,11 @@ class ProvenanceCoverage:
             "coverage_of_active": frac(self.covered, self.active_memories),
             "coverage_of_vectors": frac(self.covered, self.vectors),
             "defects": self.defects, "clean": self.clean,
-            "basis": self.basis, "matched": self.matched, "total": self.total,
+            "basis": self.basis, "search_rule": self.search_rule,
+            # No lock, no checksum to verify against: the whole table is searched
+            # and "legacy" has no meaning here (None, never 0).
+            "legacy_unverified": None,
+            "matched": self.matched, "total": self.total,
             "coverage": self.coverage,
         }
 
@@ -1218,8 +1255,8 @@ def provenance_coverage(conn: sqlite3.Connection):
     carrying the same coverage, when the search set would be empty or lying.
     There is no fallback path and no flag.
 
-    A LOCKED brain is measured under the lock's checksum (LockCoverage; the
-    refusals are listed on _lock_coverage). A brain with NO lock is measured
+    A LOCKED brain is measured under the lock's search set, verified + legacy
+    (LockCoverage; the refusals are listed on _lock_coverage). A brain with NO lock is measured
     under the producer the bijection names for its table (ProvenanceCoverage),
     and refuses NO_ROWS_FOR_MODEL when zero rows are stamped under it.
     LOCK_MALFORMED raises, typed, with the coverage the memories table still
@@ -1307,6 +1344,40 @@ def provenance_coverage(conn: sqlite3.Connection):
     return cov
 
 
+# The catalogue tier a lock names -> the name `voidloom tier set` takes. The same
+# pairs as tier_set.SHIPPED_TARGETS (inverted); a test holds the two equal, so this
+# module need not import the verb.
+LOCK_TIER_TO_TIER_SET = {"cpu": "nomic", "gpu": "qwen"}
+
+
+def _db_file(conn: sqlite3.Connection) -> Optional[str]:
+    """The main database file on this connection, or None (in-memory / unreadable)."""
+    try:
+        for _seq, name, path in conn.execute("PRAGMA database_list").fetchall():
+            if name == "main" and path:
+                return str(path)
+    except sqlite3.Error:
+        pass
+    return None
+
+
+def re_embed_command(db_path: Optional[str]) -> str:
+    """The shipped command that embeds a locked brain's work under its own lock.
+    It always names the database: without `--db-path` the command acts on its
+    default test database, not on this brain."""
+    return (f"python3 organs/embedding_upgrade.py --db-path {db_path or '<brain>/claude_memory.db'} "
+            f"re-embed")
+
+
+def re_embed_hint(n: int, db_path: Optional[str], lock_tier: Optional[str]) -> str:
+    """The words beside `legacy_unverified` when N > 0."""
+    name = LOCK_TIER_TO_TIER_SET.get(lock_tier or "")
+    alt = f" (or `voidloom tier set {name}`)" if name else ""
+    return (f"run `{re_embed_command(db_path)}`{alt} to verify {n} legacy vector(s): "
+            f"they were written before this brain's lock and are searched, but their "
+            f"bytes are not yet checked against it")
+
+
 def _three_numbers(num: int, den: int) -> Dict[str, Any]:
     # RAW counts, never the reduced ratio: Fraction(5, 10) prints as 1/2, and a
     # reader of "1 of 2" would believe the population is two. 0/0 is 0.0 and is
@@ -1318,12 +1389,16 @@ def _three_numbers(num: int, den: int) -> Dict[str, Any]:
 class LockCoverage:
     """What the sidecar says about a LOCKED brain, under the lock's filter.
 
-    matched           active memories with a vector in the lock's table AND a stamp
-                      carrying the lock's weights_hash. The search set's active part.
+    matched           active memories whose vector is in the SEARCH SET: verified
+                      plus legacy (see the search-set comment above).
+    verified          of those, the rows whose stamp carries the lock's checksum.
+    legacy_unverified of those, the rows whose stamp is 'unresolved' or absent.
+                      Reported as `legacy_unverified: N of M` (M = matched).
     total             active memories: an unembedded row is visible as uncovered.
     coverage          {matched, total, value} -- three numbers, never reduced.
     stamped_other_hash   stamps on the table whose checksum is not the lock's:
-                      another model's rows, or 'unresolved' (both unmatched).
+                      another model's rows, or 'unresolved'. (The foreign ones,
+                      outside the set, are `stamped_foreign_hash`.)
     stamped_without_vector / vectors_without_stamp / stale_content_hash
                       as for ProvenanceCoverage.
     histogram         {weights_hash: count} over the table -- what is actually
@@ -1341,8 +1416,24 @@ class LockCoverage:
     stale_content_hash: int
     histogram: Dict[str, int] = field(default_factory=dict)
     inconsistent: List[Dict[str, Any]] = field(default_factory=list)
+    verified: int = 0
+    legacy_unverified: int = 0
+    stamped_foreign_hash: int = 0
+    db_path: Optional[str] = None
 
     basis = "lock"
+    search_rule = SEARCH_RULE_LOCKED
+
+    @property
+    def legacy(self) -> Dict[str, Any]:
+        """`legacy_unverified: N of M`, as numbers and as the words a user reads,
+        with the command that verifies them when N > 0."""
+        n, m = self.legacy_unverified, self.matched
+        out: Dict[str, Any] = {"legacy": n, "of": m, "text": f"{n} of {m}"}
+        if n:
+            out["hint"] = re_embed_hint(n, self.db_path, self.filter.tier)
+            out["retry"] = [re_embed_command(self.db_path)]
+        return out
 
     @property
     def total(self) -> int:
@@ -1391,7 +1482,9 @@ class LockCoverage:
 
     def as_dict(self) -> Dict[str, Any]:
         return {
-            "basis": self.basis, "filter": self.filter.as_dict(),
+            "basis": self.basis, "search_rule": self.search_rule, "filter": self.filter.as_dict(),
+            "verified": self.verified, "legacy_unverified": self.legacy,
+            "stamped_foreign_hash": self.stamped_foreign_hash,
             "vec_table": self.filter.vec_table, "model_id": self.filter.model_id,
             "weights_hash": self.filter.weights_hash, "dim": self.filter.dim,
             "tier": self.filter.tier, "denominator": self.denominator,
@@ -1459,14 +1552,24 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
         denominator = "memories (schema has no is_archived column)"
         active = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
         archived_pred = ""
-    # matched is by checksum AND reachable by the search: an archived memory is
-    # outside every search, so it is outside this count too (one population).
+    # matched is the SEARCH SET's active part (verified + legacy) and reachable by
+    # the search: an archived memory is outside every search, so it is outside
+    # this count too (one population). Two queries, the second a subset of the
+    # first, so `legacy_unverified` is their difference and can never go negative.
+    params = flt.search_set_params
+    vec_ids = f"SELECT v.memory_id FROM {table} v"
     matched = conn.execute(
-        f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p "
-        f"JOIN memories m ON m.id = p.memory_id {archived_pred} "
-        f"WHERE p.vec_table = ? AND p.weights_hash = ? "
-        f"  AND EXISTS (SELECT 1 FROM {table} v WHERE v.memory_id = p.memory_id)",
-        (table, whash)).fetchone()[0]
+        f"SELECT COUNT(*) FROM memories m WHERE m.id IN ({vec_ids}) {archived_pred} "
+        f"AND {flt.member_sql('m')}", params).fetchone()[0]
+    verified = conn.execute(
+        f"SELECT COUNT(*) FROM memories m WHERE m.id IN ({vec_ids}) {archived_pred} "
+        f"AND {flt.member_sql('m')} AND EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p "
+        f"WHERE p.memory_id = m.id AND p.vec_table = ? AND p.weights_hash = ? AND p.dim = ?)",
+        (*params, *params)).fetchone()[0]
+    foreign = conn.execute(
+        f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p WHERE p.vec_table = ? "
+        f"  AND NOT ((p.weights_hash = ? AND p.dim = ?) OR p.weights_hash = ?)",
+        (table, whash, dim, WEIGHTS_HASH_UNRESOLVED)).fetchone()[0]
     other = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p WHERE p.vec_table = ? "
         f"  AND (p.weights_hash IS NULL OR p.weights_hash <> ?)", (table, whash)).fetchone()[0]
@@ -1494,7 +1597,9 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
         filter=flt, denominator=denominator, active_memories=int(active), vectors=int(vectors),
         matched=int(matched), stamped_other_hash=int(other),
         stamped_without_vector=int(stamp_no_vec), vectors_without_stamp=int(vec_no_stamp),
-        stale_content_hash=int(stale), histogram=histogram, inconsistent=inconsistent)
+        stale_content_hash=int(stale), histogram=histogram, inconsistent=inconsistent,
+        verified=int(verified), legacy_unverified=int(matched) - int(verified),
+        stamped_foreign_hash=int(foreign), db_path=_db_file(conn))
     shipped = el.is_shipped_hash(whash)
     if cov.empty:
         if not shipped:
@@ -1504,11 +1609,11 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
         return cov
     if cov.matched == 0:
         raise ProvenanceUnmatched(
-            f"REFUSED: zero active memories are stamped in {PROVENANCE_TABLE} under the lock's "
-            f"weights_hash {whash[:12]}… on {table!r} while {cov.active_memories} active memories "
-            f"exist ({cov.vectors} vector(s), {cov.vectors_without_stamp} unstamped, "
-            f"{cov.stamped_other_hash} stamped under another checksum; present: {histogram}). A "
-            f"search filtered on this lock would search nothing; `python3 organs/embedding_upgrade.py re-embed` "
+            f"REFUSED: no active memory has a vector in {table!r} that the lock's search set "
+            f"admits (stamped {whash[:12]}…, 'unresolved', or unstamped) while "
+            f"{cov.active_memories} active memories exist ({cov.vectors} vector(s), "
+            f"{cov.stamped_foreign_hash} stamped under a different checksum; present: {histogram}). "
+            f"A search filtered on this lock would search nothing; `{re_embed_command(cov.db_path)}` "
             f"embeds them under the lock. Coverage {cov.matched}/{cov.total} of {denominator}.", cov)
     if not shipped:
         raise el.EmbedderLockError(
@@ -1570,21 +1675,20 @@ def search_set(conn: sqlite3.Connection) -> Optional[ProvenanceFilter]:
 def read_vector(conn: sqlite3.Connection, memory_id: int, *,
                 flt: Optional[ProvenanceFilter] = None) -> Optional[bytes]:
     """The vector for `memory_id` IF it is in the search set, else None. On a
-    locked brain an unstamped, other-checksum or 'unresolved' row reads as absent.
-    The stamp drives the join (vec0 admits one `rowid IN (...)` per query)."""
+    locked brain a row stamped under a different checksum reads as absent; a
+    legacy row ('unresolved' or unstamped) is read. Membership is decided on the
+    memories table first, then the vector is fetched by id: vec0 is never asked
+    to combine a point lookup with a second constraint."""
     if flt is None:
         flt = search_set(conn)
         if flt is None:
             return None
-    if flt.locked:
-        row = conn.execute(
-            f"SELECT v.embedding FROM {PROVENANCE_TABLE} p "
-            f"JOIN {flt.vec_table} v ON v.memory_id = p.memory_id "
-            f"WHERE p.memory_id = ? AND p.vec_table = ? AND p.weights_hash = ? AND p.dim = ?",
-            (int(memory_id), *flt.search_set_params)).fetchone()
-    else:
-        row = conn.execute(f"SELECT embedding FROM {flt.vec_table} WHERE memory_id = ?",
-                           (int(memory_id),)).fetchone()
+    if flt.locked and conn.execute(
+            f"SELECT 1 FROM memories m WHERE m.id = ? AND {flt.member_sql('m')}",
+            (int(memory_id), *flt.search_set_params)).fetchone() is None:
+        return None
+    row = conn.execute(f"SELECT embedding FROM {flt.vec_table} WHERE memory_id = ?",
+                       (int(memory_id),)).fetchone()
     if row is None or row[0] is None:
         return None
     return bytes(row[0])
@@ -1604,17 +1708,17 @@ def read_vectors(conn: sqlite3.Connection, memory_ids: Iterable[int], *,
     out: Dict[int, bytes] = {}
     for start in range(0, len(ids), 500):
         chunk = ids[start:start + 500]
-        ph = ",".join("?" * len(chunk))
         if flt.locked:
-            rows = conn.execute(
-                f"SELECT p.memory_id, v.embedding FROM {PROVENANCE_TABLE} p "
-                f"JOIN {flt.vec_table} v ON v.memory_id = p.memory_id "
-                f"WHERE p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? AND p.memory_id IN ({ph})",
-                (*flt.search_set_params, *chunk)).fetchall()
-        else:
-            rows = conn.execute(
-                f"SELECT memory_id, embedding FROM {flt.vec_table} WHERE memory_id IN ({ph})",
-                chunk).fetchall()
+            ph = ",".join("?" * len(chunk))
+            chunk = [int(r[0]) for r in conn.execute(
+                f"SELECT m.id FROM memories m WHERE m.id IN ({ph}) AND {flt.member_sql('m')}",
+                (*chunk, *flt.search_set_params)).fetchall()]
+            if not chunk:
+                continue
+        ph = ",".join("?" * len(chunk))
+        rows = conn.execute(
+            f"SELECT memory_id, embedding FROM {flt.vec_table} WHERE memory_id IN ({ph})",
+            chunk).fetchall()
         for mid, blob in rows:
             if blob is not None:
                 out[int(mid)] = bytes(blob)

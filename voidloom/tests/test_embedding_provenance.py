@@ -632,17 +632,32 @@ class L1_OtherChecksumIsOutsideTheSearchSet(_LockedCase):
         cov = self.mw.provenance_coverage(self.conn)
         self.assertEqual((cov.basis, cov.matched, cov.total, cov.clean), ("lock", 3, 3, True))
 
-    def test_saboteur_an_unresolved_stamp_is_absent_from_every_reader_and_is_work(self):
+    def test_saboteur_a_foreign_checksum_is_absent_from_every_reader_and_is_work(self):
+        ids = [self.write(f"memory {i}") for i in range(3)]
+        self.conn.execute("UPDATE embedding_provenance SET weights_hash = ? WHERE memory_id = ?",
+                          ("b" * 64, ids[1]))
+        self.conn.commit()
+        cov = self.mw.provenance_coverage(self.conn)
+        self.assertEqual((cov.matched, cov.verified, cov.legacy_unverified, cov.stamped_foreign_hash),
+                         (2, 2, 0, 1))
+        self.assertIsNone(self.mw.read_vector(self.conn, ids[1]))
+        self.assertNotIn(ids[1], self.mw.read_vectors(self.conn, ids))
+        q = _l_encoder("memory 1")                  # the foreign row's own text: its nearest
+        self.assertNotIn(ids[1], [m for m, _ in self.mw.knn(self.conn, q, 3)])
+        self.assertIn(ids[1], [m for m, _ in self.mw.pending_embeddings(self.conn)])
+
+    def test_control_an_unresolved_stamp_is_legacy_in_every_reader_and_still_work(self):
         ids = [self.write(f"memory {i}") for i in range(3)]
         self.conn.execute("UPDATE embedding_provenance SET weights_hash = 'unresolved' WHERE memory_id = ?",
                           (ids[1],))
         self.conn.commit()
         cov = self.mw.provenance_coverage(self.conn)
-        self.assertEqual((cov.matched, cov.stamped_other_hash), (2, 1))
-        self.assertIsNone(self.mw.read_vector(self.conn, ids[1]))
-        self.assertNotIn(ids[1], self.mw.read_vectors(self.conn, ids))
-        q = _l_encoder("memory 1")                  # the unresolved row's own text: its nearest
-        self.assertNotIn(ids[1], [m for m, _ in self.mw.knn(self.conn, q, 3)])
+        self.assertEqual((cov.matched, cov.verified, cov.legacy_unverified, cov.stamped_foreign_hash),
+                         (3, 2, 1, 0))
+        self.assertEqual(cov.as_dict()["legacy_unverified"]["text"], "1 of 3")
+        self.assertEqual(self.mw.read_vector(self.conn, ids[1]), _l_encoder("memory 1"))
+        self.assertIn(ids[1], self.mw.read_vectors(self.conn, ids))
+        self.assertEqual(self.mw.knn(self.conn, _l_encoder("memory 1"), 1)[0][0], ids[1])
         self.assertIn(ids[1], [m for m, _ in self.mw.pending_embeddings(self.conn)])
 
 
@@ -700,10 +715,20 @@ class L2_LockedReaderRefusesTyped(_LockedCase):
         self.assertIsNone(self.mw.search_set(self.conn))
         self.assertEqual(self.mw.knn(self.conn, _l_axis(0), 3), [])
 
-    def test_saboteur_memories_with_only_unstamped_vectors_refuse_rather_than_answer(self):
-        self.bare_vector("a", _l_axis(0))
-        with self.assertRaises(self.mw.ProvenanceUnmatched):
+    def test_saboteur_memories_with_only_foreign_vectors_refuse_rather_than_answer(self):
+        a = self.write("a", vec=_l_axis(0))
+        self.conn.execute("UPDATE embedding_provenance SET weights_hash = ? WHERE memory_id = ?", ("b" * 64, a))
+        self.conn.commit()
+        with self.assertRaises(self.mw.ProvenanceUnmatched) as cm:
             self.mw.knn(self.conn, _l_axis(0), 1)
+        self.assertEqual(cm.exception.code, "NO_ROWS_FOR_LOCK")
+        self.assertIn("--db-path", str(cm.exception))   # the command acts on THIS brain
+
+    def test_control_memories_with_only_unstamped_vectors_answer_as_legacy(self):
+        a = self.bare_vector("a", _l_axis(0))
+        self.assertEqual(self.mw.knn(self.conn, _l_axis(0), 1)[0][0], a)
+        leg = self.mw.coverage_envelope(self.conn)["legacy_unverified"]
+        self.assertEqual((leg["legacy"], leg["of"], leg["text"]), (1, 1, "1 of 1"))
 
 
 class L3_CoverageIsThreeRawNumbers(_LockedCase):
@@ -748,8 +773,10 @@ class L4_OneUnitOfWork(_LockedCase):
 
 
 class L5_KnnIsAPreFilter(_LockedCase):
-    def test_control_the_nearest_unstamped_row_is_skipped_not_returned_as_a_gap(self):
-        near = self.bare_vector("nearest, unstamped", _l_axis(0))
+    def test_control_the_nearest_foreign_row_is_skipped_not_returned_as_a_gap(self):
+        near = self.write("nearest, foreign", vec=_l_axis(0))
+        self.conn.execute("UPDATE embedding_provenance SET weights_hash = ? WHERE memory_id = ?", ("b" * 64, near))
+        self.conn.commit()
         stamped = self.write("stamped", vec=_l_axis(1))
         self.assertEqual([m for m, _ in self.mw.knn(self.conn, _l_axis(0), 1)], [stamped])
         self.assertNotEqual(near, stamped)
@@ -758,6 +785,92 @@ class L5_KnnIsAPreFilter(_LockedCase):
         a = self.write("a", vec=_l_axis(0))
         b = self.write("b", vec=_l_axis(1))
         self.assertEqual([m for m, _ in self.mw.knn(self.conn, _l_axis(0), 1, exclude_id=a)], [b])
+
+
+class L6_InitPinnedOlderBrainKeepsItsLegacyVectors(_LockedCase):
+    """A brain written before the lock existed (stamps 'unresolved' after
+    migration_042, or none at all), then pinned by `init` (whose lock writer is
+    embedder_lock.write_lock, as setUp calls it). Its old vectors stay searchable
+    as LEGACY, counted on every answer, until a re-embed verifies them."""
+
+    def setUp(self):
+        super().setUp()
+        # setUp already wrote the lock; build the v1.0-shaped rows under it, as
+        # they were before `init` pinned the brain.
+        self.unres = self.bare_vector("written by v1.0, stamped before the lock", _l_axis(0))
+        row = {"memory_id": self.unres, "vec_table": L_TABLE, "model_id": self.cpu["model_id"],
+               "model_ref": "unresolved", "weights_hash": "unresolved", "dim": L_DIM,
+               "content_hash": self.mw.content_hash("written by v1.0, stamped before the lock"),
+               "embedded_at": "2026-01-01T00:00:00+00:00", "organ": "claude_memory.store",
+               "input_kind": "text", "inputs": None}
+        self.assertEqual(set(row), set(self.mw.PROVENANCE_COLUMNS))
+        self.conn.execute(f"INSERT INTO embedding_provenance ({', '.join(row)}) "
+                          f"VALUES ({', '.join('?' * len(row))})", list(row.values()))
+        self.bare = self.bare_vector("written by v1.0, never stamped", _l_axis(1))
+        self.conn.commit()
+
+    def test_control_the_pinned_brain_recalls_its_old_memories_by_vector(self):
+        self.assertEqual(self.mw.knn(self.conn, _l_axis(0), 1)[0][0], self.unres)
+        self.assertEqual(self.mw.knn(self.conn, _l_axis(1), 1)[0][0], self.bare)
+        self.assertEqual(sorted(self.mw.read_vectors(self.conn, [self.unres, self.bare])),
+                         sorted([self.unres, self.bare]))
+        env = self.mw.coverage_envelope(self.conn)
+        self.assertEqual((env["ok"], env["basis"], env["search_rule"]),
+                         (True, "lock", self.mw.SEARCH_RULE_LOCKED))
+        leg = env["legacy_unverified"]
+        self.assertEqual((leg["legacy"], leg["of"], leg["text"]), (2, 2, "2 of 2"))
+        self.assertGreater(leg["legacy"], 0)
+        self.assertIn(f"--db-path {self.db}", leg["hint"])
+        self.assertIn("voidloom tier set nomic", leg["hint"])
+        self.assertEqual(leg["retry"], [f"python3 organs/embedding_upgrade.py --db-path {self.db} re-embed"])
+
+    def test_saboteur_a_vector_stamped_with_a_foreign_checksum_is_never_returned(self):
+        foreign = self.write("another model's row", vec=_l_axis(2))
+        self.conn.execute("UPDATE embedding_provenance SET weights_hash = ? WHERE memory_id = ?",
+                          (self.el.catalogue_tiers()["gpu"]["weights_hash"], foreign))
+        self.conn.commit()
+        self.assertNotIn(foreign, [m for m, _ in self.mw.knn(self.conn, _l_axis(2), 3)])
+        self.assertIsNone(self.mw.read_vector(self.conn, foreign))
+        self.assertNotIn(foreign, self.mw.read_vectors(self.conn, [self.unres, self.bare, foreign]))
+        cov = self.mw.provenance_coverage(self.conn)
+        self.assertEqual((cov.matched, cov.legacy_unverified, cov.stamped_foreign_hash), (2, 2, 1))
+
+    def test_control_after_re_embed_legacy_unverified_reads_zero(self):
+        import tier_set
+        el = self.el
+
+        def fake_load(lock):                 # the lock's own checksum, registered: no model loaded
+            el.clear_loaded()
+            el.register_loaded(model_id=lock["model_id"], revision=lock["revision"],
+                               weights_hash=lock["weights_hash"], dim=int(lock["dim"]),
+                               vec_table=lock["vec_table"], tier=lock.get("tier"))
+
+        def fake_encode(texts, lock):
+            return [_l_encoder(t) for t in texts]
+
+        before = self.mw.coverage_envelope(self.conn)["legacy_unverified"]
+        self.assertEqual(before["legacy"], 2)
+        self.conn.close()
+        seams = (tier_set._load, tier_set._encode)
+        tier_set._load, tier_set._encode = fake_load, fake_encode
+        try:
+            receipt = tier_set.re_embed_under_lock(self.db)
+        finally:
+            tier_set._load, tier_set._encode = seams
+        self.assertIsNotNone(receipt)
+        self.conn = _connect(self.db)
+        cov = self.mw.provenance_coverage(self.conn)
+        self.assertEqual((cov.matched, cov.verified, cov.legacy_unverified), (2, 2, 0))
+        leg = cov.as_dict()["legacy_unverified"]
+        self.assertEqual((leg["text"], "hint" in leg), ("0 of 2", False))
+        self.assertEqual(self.mw.count_pending_embeddings(self.conn), 0)
+
+    def test_control_the_hint_names_commands_that_exist(self):
+        import tier_set
+        self.assertEqual(self.mw.LOCK_TIER_TO_TIER_SET, {v: k for k, v in tier_set.SHIPPED_TARGETS.items()})
+        src = (ROOT / "organs" / "embedding_upgrade.py").read_text(encoding="utf-8")
+        self.assertIn('add_parser("re-embed"', src)
+        self.assertIn('"--db-path"', src)
 
 
 class D2_LocklessBrainSearchesItsWholeTable(_BrainCase):
@@ -791,6 +904,7 @@ class D2_LocklessBrainSearchesItsWholeTable(_BrainCase):
         env = self.mw.coverage_envelope(self.conn)
         self.assertEqual((env["ok"], env["basis"], env["coverage"]),
                          (True, "lockless", {"matched": 1, "total": 1, "value": 1.0}))
+        self.assertEqual((env["search_rule"], env["legacy_unverified"]), (self.mw.SEARCH_RULE_LOCKLESS, None))
 
 
 if __name__ == "__main__":

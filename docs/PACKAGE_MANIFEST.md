@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-30T20:11:57Z from the checkout at `02810c7`.
+> Generated 2026-10-30T21:10:12Z from the checkout at `b13bfa3`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -12,12 +12,12 @@
 |---|---|
 | files tracked | 444 |
 | files hashed | 444 |
-| total bytes | 10398411 |
+| total bytes | 10411422 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4624227 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4629599 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -52,7 +52,7 @@
 | `organs/kind_taxonomy.py` | 30780 | `042ae8556f4600df` |
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
 | `organs/memory_dreaming.py` | 106512 | `198f5f75c6931c5b` |
-| `organs/memory_write.py` | 84580 | `19a42eed04333231` |
+| `organs/memory_write.py` | 89952 | `1bd37e1034d134e3` |
 | `organs/model_fetch.py` | 4644 | `d16b05711b1b49aa` |
 | `organs/model_garden.py` | 41541 | `bb6d3edf1a5b54bc` |
 | `organs/monthly_self_eval.py` | 203955 | `ab6970a8dfcd4c5e` |
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  174 files, 2772677 bytes
+### `voidloom` — The CLI facade  ·  174 files, 2779549 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -171,7 +171,7 @@
 | `voidloom/tests/test_edge_decay_retires_r2d.py` | 8536 | `e02347b289a12a4c` |
 | `voidloom/tests/test_edge_retire_readers_writers_r2d.py` | 12353 | `d6752d4b2e2d7720` |
 | `voidloom/tests/test_embedder_lock.py` | 41106 | `888fc2dd29c3f594` |
-| `voidloom/tests/test_embedding_provenance.py` | 39679 | `6cc74898597500a0` |
+| `voidloom/tests/test_embedding_provenance.py` | 46551 | `8497c13ab252e60c` |
 | `voidloom/tests/test_encoder_tier_is_bijective.py` | 9285 | `e08d4e89b254ee18` |
 | `voidloom/tests/test_env_file_mode_follows_symlink.py` | 5084 | `d5df32f5ac8290f7` |
 | `voidloom/tests/test_env_file_path_is_curated.py` | 4651 | `f7d4f5258ebd5cf6` |
@@ -339,7 +339,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 129414 | `322c1be2a387cf32` |
+| `install/lay_manifest.json` | 129414 | `52e79891cbaa8add` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -480,7 +480,7 @@
 | `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 217574 bytes
+### `docs` — Documentation  ·  12 files, 217647 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -491,18 +491,18 @@
 | `docs/LAYOUT.md` | 8356 | `e7c1c0982df8901f` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 33559 | `15b1c05ea2799b8d` |
+| `docs/PACKAGE_MANIFEST.md` | 33632 | `5e0648b632916a49` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  10 files, 417487 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  10 files, 418181 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 14684 | `f20fb45141ce1b07` |
+| `CHANGELOG.md` | 15378 | `2921391b146d93de` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `CONTRIBUTING.md` | 6709 | `475e8fbc09ff909e` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
