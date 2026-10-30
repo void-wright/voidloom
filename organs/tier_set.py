@@ -73,6 +73,23 @@ import embedder_lock  # noqa: E402  (stdlib-only; imports nothing from the packa
 # The engine's tier keys (claude_memory.EMBED_TIERS) that the catalogue ships, and
 # the catalogue tier each one is.
 SHIPPED_TARGETS = {"nomic": "cpu", "qwen": "gpu"}
+CATALOGUE_TO_ENGINE = {v: k for k, v in SHIPPED_TARGETS.items()}
+
+
+def re_embed_under_lock(db: Path, *, batch_size: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """`re-embed` on a LOCKED brain: embed every memory that lacks a vector stamped under
+    the brain's OWN lock (new, edited, legacy 'unresolved', or missing rows) and change
+    nothing else -- the same core as `tier set` with the target equal to the lock.
+    Returns None for a brain with no lock (its tier is not a shipped one, e.g. jina):
+    the caller keeps its own path for that tier."""
+    lock = _installed_lock(Path(db).resolve())
+    if lock is None:
+        return None
+    engine_tier = CATALOGUE_TO_ENGINE.get(lock["tier"])
+    if engine_tier is None:
+        raise TierRefused("LOCK_NOT_SHIPPED", f"the install lock names tier {lock['tier']!r}, which this "
+                          f"package does not ship ({sorted(CATALOGUE_TO_ENGINE)})")
+    return set_tier(db, engine_tier, batch_size=batch_size or BATCH_SIZE)
 # Every vector table the engine knows (claude_memory.EMBED_TIERS), for cleanup.
 KNOWN_TABLES = ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3")
 METADATA_KEYS = ("active_embedding_table", "active_embedding_model", "active_embedding_dim")
@@ -521,7 +538,10 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                 conn.execute("UPDATE embedding_upgrade_log SET completed_at = ?, memories_processed = ?, "
                              "status = 'completed' WHERE started_at = ? AND notes = 'tier set'",
                              (_now(), built + gap, started))
-            written = embedder_lock.write_lock(data_dir, lock["tier"], replace=True, locked_by="tier set")
+            if already:
+                written = embedder_lock.resolve(db)     # nothing moves: the lock file is left byte for byte
+            else:
+                written = embedder_lock.write_lock(data_dir, lock["tier"], replace=True, locked_by="tier set")
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")

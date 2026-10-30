@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-30T13:10:18Z from the checkout at `f91687b`.
+> Generated 2026-10-30T13:36:10Z from the checkout at `7a12dfb`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -12,12 +12,12 @@
 |---|---|
 | files tracked | 438 |
 | files hashed | 438 |
-| total bytes | 10299945 |
+| total bytes | 10303941 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4588193 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4590232 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -44,7 +44,7 @@
 | `organs/embed_resolver.py` | 7841 | `1e1546aa4fafe9fe` |
 | `organs/embedder_lock.py` | 52799 | `bc1d865892bf43a8` |
 | `organs/embedders.lock.json` | 2557 | `6247a9cbb5988828` |
-| `organs/embedding_upgrade.py` | 65081 | `94959a7d28ca07cb` |
+| `organs/embedding_upgrade.py` | 65962 | `e2dde0e7e49805c4` |
 | `organs/gap_mapping.py` | 107155 | `9e659adec01af772` |
 | `organs/governance.py` | 46295 | `ea70b57a2ff92acf` |
 | `organs/gpu_guard.py` | 57313 | `412bd1d077eab846` |
@@ -78,7 +78,7 @@
 | `organs/thinker.py` | 297015 | `2a024ad4fe640c9d` |
 | `organs/thinker_get.py` | 13627 | `861dd7ea05bcbd8e` |
 | `organs/thinkers.json` | 29573 | `9e7667bcc743ab87` |
-| `organs/tier_set.py` | 36251 | `f34382c95805e9a9` |
+| `organs/tier_set.py` | 37409 | `e53e15a820ae63cb` |
 | `organs/trust_tier.py` | 29857 | `63e5ceb90896745f` |
 | `organs/trust_tier_cli.py` | 10084 | `dc33064ca979f61f` |
 | `organs/void_render.py` | 37317 | `09187627e039a1e7` |
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  168 files, 2723377 bytes
+### `voidloom` — The CLI facade  ·  168 files, 2725334 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -266,7 +266,7 @@
 | `voidloom/tests/test_tier0_degrade_on_model_absent.py` | 8394 | `5cc3315ecb4036ef` |
 | `voidloom/tests/test_tier0_only_binds_the_runtime.py` | 3394 | `287f82c8bf876711` |
 | `voidloom/tests/test_tier1_ambient.py` | 151502 | `4b3d0b7b8cd8c596` |
-| `voidloom/tests/test_tier_set.py` | 27759 | `64316c5960a7a1a4` |
+| `voidloom/tests/test_tier_set.py` | 29716 | `fb9cb8647c7c205d` |
 | `voidloom/tests/test_voidloom.py` | 37673 | `5d61f515bedb1859` |
 | `voidloom/tests/test_windows_scripts_encoding.py` | 3585 | `7407c0787dd07272` |
 | `voidloom/voidloom` | 3353 | `3c657f4401579380` |
@@ -333,7 +333,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 127603 | `3bbf72f53056306f` |
+| `install/lay_manifest.json` | 127603 | `5e142811ced176b0` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -485,7 +485,7 @@
 | `docs/LAYOUT.md` | 8356 | `edd29de5002f8c6a` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 33173 | `6dda19fa8f6a7822` |
+| `docs/PACKAGE_MANIFEST.md` | 33173 | `0faf3d3c2b2e4b20` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

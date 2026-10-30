@@ -437,7 +437,9 @@ class TestTierSet(unittest.TestCase):
         self.assertEqual(env["error"], "SAME_TABLE_REVISION_CHANGE", env)
         self.assertEqual(db.read_bytes(), file0)
         lp.write_text(good)
+        lock_good = lock_bytes(self.dir)
         env = self.ts.set_tier(db, "nomic")
+        self.assertEqual(lock_bytes(self.dir), lock_good, "a same-tier run leaves the lock byte for byte")
         self.assertEqual((env["status"], env["receipt"]["embedded"], env["receipt"]["already_on_target"]),
                          ("ok", 0, True), env)
 
@@ -512,6 +514,39 @@ class TestTierSet(unittest.TestCase):
             self.assertEqual(env["status"], "ok", env)
         finally:
             self.ts.FLIP_GAP_CAP = keep
+
+    # --- re-embed under the brain's own lock -------------------------------------
+    def test_re_embed_control_locked_brain_embeds_only_stale_rows_and_moves_nothing(self):
+        import embedding_upgrade as eu
+        db = make_brain(self.dir, "nomic")
+        lock0 = lock_bytes(self.dir)
+        c = _connect(db)
+        c.execute("UPDATE memories SET content = 'rewritten' WHERE id = 2")
+        c.execute("UPDATE embedding_provenance SET weights_hash = 'unresolved' WHERE memory_id = 4")
+        c.commit(); c.close()
+        keep = eu._get_jina_model
+
+        def no_jina():
+            raise AssertionError("the jina loader must never run on a locked brain")
+        eu._get_jina_model = no_jina
+        try:
+            env = eu.cmd_re_embed(type("A", (), {"db_path": str(db), "batch_size": 4})())
+        finally:
+            eu._get_jina_model = keep
+        self.assertEqual((env["status"], env["receipt"]["embedded"], env["receipt"]["already_on_target"]),
+                         ("ok", 2, True), env)
+        self.assertEqual(lock_bytes(self.dir), lock0, "a re-embed under the lock leaves the lock byte for byte")
+        self._assert_switched(db, "nomic", 7)
+
+    def test_re_embed_saboteur_lockless_brain_is_not_taken_by_the_lock_path(self):
+        db = make_brain(self.dir, "jina")
+        self.assertIsNone(self.ts.re_embed_under_lock(db))
+        self.assertIsNone(lock_bytes(self.dir), "no lock is written for a brain that had none")
+        bad = make_brain(Path(tempfile.mkdtemp(dir=self.dir)), "nomic")
+        (bad.parent / "embedder.lock.json").write_text("{not json")
+        with self.assertRaises(self.ts.TierRefused) as cm:
+            self.ts.re_embed_under_lock(bad)
+        self.assertEqual(cm.exception.code, "LOCK_MALFORMED", "a malformed lock is never read as absent")
 
     # --- the old verbs name the route ------------------------------------------
     def test_swap_control_names_tier_set_as_built(self):

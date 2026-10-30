@@ -707,13 +707,29 @@ def cmd_migrate(args) -> Dict[str, Any]:
 # ============================================================
 
 def cmd_re_embed(args) -> Dict[str, Any]:
-    """Re-embed all memories using Jina v5 into memory_embeddings_v2.
+    """Re-embed the memories that need it, under the brain's OWN model.
 
-    Processes in batches of BATCH_SIZE. Checkpoint-safe: skips already-embedded
-    memories (checks v2 table for existing rowid).
+    A brain with an install lock (nomic or qwen): every memory without a vector
+    stamped under the lock's checksum for its current text is embedded with the
+    locked model, through the same core as `tier set` (organs/tier_set.py) with the
+    target equal to the lock -- the lock and the tier do not move. The jina loader is
+    never touched on that path.
+
+    A brain with NO lock (the jina tier, kept for personal installs): the original
+    behaviour -- Jina v5 into memory_embeddings_v2, in batches of BATCH_SIZE,
+    skipping memories that already have a v2 row.
     """
     db_path = args.db_path
     batch_size = getattr(args, "batch_size", BATCH_SIZE)
+    import tier_set
+    try:
+        locked = tier_set.re_embed_under_lock(Path(db_path), batch_size=batch_size)
+    except tier_set.TierRefused as e:
+        raise VerbRefused(e.code, e.message, **e.detail)
+    except _lock_module().EmbedderLockError as e:
+        raise VerbRefused(e.code, str(e), **{k: v for k, v in e.detail.items()})
+    if locked is not None:
+        return locked
     logger.info("Re-embedding all memories with Jina v5 (batch_size=%d)", batch_size)
 
     conn = _get_conn(db_path)
@@ -1485,7 +1501,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("download", help="Download Jina v5 model")
     subparsers.add_parser("migrate", help="Apply migration SQL")
-    subparsers.add_parser("re-embed", help="Re-embed all memories")
+    subparsers.add_parser("re-embed", help="Re-embed what needs it under the brain's own lock (jina: the v2 path)")
     subparsers.add_parser("ab-compare", help="Run A/B comparison")
     subparsers.add_parser("swap", help="REFUSED: re-pointing without re-embedding (exit 1); use `voidloom tier set`")
     subparsers.add_parser("stats", help="Show embedding stats")

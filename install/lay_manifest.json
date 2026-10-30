@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "f91687b",
+  "derived_at_head": "7a12dfb",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 438,
   "platforms": [
@@ -1735,13 +1735,13 @@
    "src": "organs/embedders.lock.json"
   },
   {
-   "bytes": 65081,
+   "bytes": 65962,
    "component": "core",
    "dst": "organs/embedding_upgrade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "94959a7d28ca07cb872d4f8737a6bc6d46551a922c1dd8f1b4d49afa7dc0fedf",
+   "sha256": "e2dde0e7e49805c42de6ade633e2825f79fb775a5170fe2cc64d440d84974fb7",
    "src": "organs/embedding_upgrade.py"
   },
   {
@@ -2075,13 +2075,13 @@
    "src": "organs/thinkers.json"
   },
   {
-   "bytes": 36251,
+   "bytes": 37409,
    "component": "core",
    "dst": "organs/tier_set.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f34382c95805e9a90d352dd45ee792d52001d65d6991136ed06f3cb69f85c187",
+   "sha256": "e53e15a820ae63cb4efdd55fd744676d35addcd096a3cee4dfb865e17ba047d0",
    "src": "organs/tier_set.py"
   },
   {
@@ -4375,13 +4375,13 @@
    "src": "voidloom/tests/test_tier1_ambient.py"
   },
   {
-   "bytes": 27759,
+   "bytes": 29716,
    "component": "core",
    "dst": "voidloom/tests/test_tier_set.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "64316c5960a7a1a455d1a712ac15cc08c2f234e24b638a49c27251102c7983f8",
+   "sha256": "fb9cb8647c7c205d658537ebf9d3ade0ad827d668975e865b8de4e8b1fd12e0a",
    "src": "voidloom/tests/test_tier_set.py"
   },
   {
