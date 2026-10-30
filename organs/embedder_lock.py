@@ -526,8 +526,8 @@ def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Uni
     temp -> fsync -> rename, so a crash leaves either the old lock or the new one
     and never a torn file; a receipt line is appended to the history file on every
     write. An existing lock is NEVER silently replaced (an init re-run must not
-    re-point a brain); `replace=True` is for `tier set` (Amendment 4 L1, not
-    built this round) and is not reachable from any shipped verb today.
+    re-point a brain); `replace=True` is used by `tier set` (organs/tier_set.py)
+    alone, and only after every memory is embedded under the new tier.
     """
     d = Path(data_dir)
     tiers = catalogue_tiers(catalogue)
@@ -547,7 +547,7 @@ def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Uni
                     f"{target} already locks tier {previous['tier']!r} "
                     f"({previous['weights_hash'][:12]}…); refusing to re-point it to {tier!r}. "
                     "Re-pointing an install without re-embedding is the defect this file exists "
-                    "to make impossible; `tier set` (not built) is the path that re-embeds.",
+                    "to make impossible; `voidloom tier set <tier>` is the path that re-embeds.",
                     lock=str(target), existing_tier=previous["tier"], requested_tier=tier)
             return previous                     # same tier: idempotent, nothing written
     entry = tiers[tier]

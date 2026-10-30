@@ -345,6 +345,9 @@ class TestAgentContext(unittest.TestCase):
         "dream",
         # 2026-10-12, the Persona Forge: status / forge / declare / decline. Admitted deliberately.
         "persona",
+        # 2026-10-30, tier set: the one route that changes a brain's embedding model (re-embeds every memory, keeps
+        # the old vectors until cleanup). Admitted deliberately.
+        "tier",
     }
 
     def test_manifest_valid_json_all_verbs(self):

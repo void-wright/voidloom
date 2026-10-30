@@ -926,6 +926,62 @@ def stamp_after_vector_insert(conn: sqlite3.Connection, memory_id: int, text: st
     return _stamp_provenance(conn, memory_id, table, dim, text, organ)
 
 
+def attach_under_lock(conn: sqlite3.Connection, memory_id: int, text: str, vec: bytes,
+                      *, lock: Dict[str, Any], organ: str) -> Dict[str, Any]:
+    """Write ONE vector and its stamp into the table `lock` names -- which need NOT
+    be the table the brain's installed lock names. This is the build path of
+    `tier set` (organs/tier_set.py): the target tier is embedded while the brain
+    still serves the old one, so the installed lock cannot be the authority here;
+    the TARGET lock, resolved from the shipped catalogue, is.
+
+    The stamp is held to the same standard as every other stamp: its weights_hash
+    is the checksum the resident embedder COMPUTED (embedder_lock.require_loaded_hash,
+    which also refuses a resident embedder that writes another table or width), and
+    that checksum must equal the target lock's. Any existing vector for the memory
+    in that table is replaced, with its stamp, in one SAVEPOINT: both rows or
+    neither. The caller owns the transaction (it commits per batch).
+    """
+    el = _embedder_lock()
+    table, dim = lock["vec_table"], int(lock["dim"])
+    vec = bytes(vec)
+    assert_width(vec, dim)
+    computed = el.require_loaded_hash(vec_table=table, dim=dim)
+    if computed != lock["weights_hash"]:
+        raise el.EmbedderLockError(
+            "WEIGHTS_MISMATCH",
+            f"the vector was produced by weights {computed[:12]}… but the target lock promises "
+            f"{lock['weights_hash'][:12]}… for {table!r}; refusing to write it",
+            computed=computed, lock_hash=lock["weights_hash"])
+    ident = model_identity(table)
+    if ident["model_id"] != lock["model_id"]:
+        raise el.EmbedderLockError(
+            "STAMP_INCONSISTENT",
+            f"{table!r} belongs to {ident['model_id']} in this engine, but the target lock names "
+            f"{lock['model_id']}", vec_table=table)
+    row = {
+        "memory_id": int(memory_id), "vec_table": table,
+        "model_id": ident["model_id"], "model_ref": ident["model_ref"],
+        "weights_hash": computed, "dim": dim, "content_hash": content_hash(text),
+        "embedded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "organ": organ or "?", "input_kind": "text", "inputs": None,
+    }
+    sp = "vec_under_lock"
+    conn.execute(f"SAVEPOINT {sp}")
+    try:
+        conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (int(memory_id),))
+        conn.execute(f"INSERT INTO {table} (memory_id, embedding) VALUES (?, ?)",
+                     (int(memory_id), vec))
+        conn.execute(
+            f"INSERT OR REPLACE INTO {PROVENANCE_TABLE} ({', '.join(PROVENANCE_COLUMNS)}) "
+            f"VALUES ({', '.join(':' + c for c in PROVENANCE_COLUMNS)})", row)
+        conn.execute(f"RELEASE SAVEPOINT {sp}")
+    except Exception:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+        conn.execute(f"RELEASE SAVEPOINT {sp}")
+        raise
+    return row
+
+
 # --------------------------------------------------------------------------
 # THE READER. Filter from the bijection, refuse on zero match, coverage always.
 # --------------------------------------------------------------------------

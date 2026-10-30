@@ -103,6 +103,10 @@ voidloom dream      backfill --plan | --apply --restamp|--backfill|--playbooks [
                     the brain's dreams: born at 0.40, faded at read time, raised only by evidence
 voidloom persona    status [--json] | forge | declare --name NAME [--skill FOLDER] [--blurb T] | decline [--undo]
                     the Persona Forge: is there a persona yet (forged | declared-missing-skill | declined | absent)
+voidloom tier       set <nomic|qwen> [--plan] [--batch-size N] | status | rollback | cleanup --confirm <old table>
+                    change the embedding model: re-embeds EVERY memory under the new model while the old one serves,
+                    switches the lock and the metadata rows together only when every memory is covered, and keeps
+                    the old vectors until `cleanup` (so `rollback` can restore the previous lock and rows)
 ```
 
 `recall` and `batch-recall` return memories in `results` (per query in batch-recall) and, beside them, a `dreams`

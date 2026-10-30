@@ -552,7 +552,8 @@ class L8_SwapIsRefused(_Tmp):
             eu.cmd_swap(A())
         env = cm.exception.as_dict()
         self.assertEqual((env["status"], env["error"], env["replacement"], env["built"]),
-                         ("error", "SWAP_REFUSED", "tier set", False))
+                         ("error", "SWAP_REFUSED", "tier set", True))
+        self.assertIn("voidloom tier set", env["usage"])     # the refusal names the BUILT route
         c = sqlite3.connect(str(db))
         self.assertEqual(c.execute("SELECT COUNT(*) FROM metadata").fetchone()[0], 0)
         c.close()

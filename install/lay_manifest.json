@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 418,
+    "core": 420,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 373,
+    "all": 375,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 406,
+    "brain": 408,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "cf36963",
+  "derived_at_head": "f91687b",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 436,
+  "entries": 438,
   "platforms": [
    "all",
    "posix",
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "3317aee3a963694110274f74237e84f7c964b9bdc14bcdd25dec33a5d6e621be",
+   "sha256": "edd29de5002f8c6a5b1c7a2fcc8292ae4a18ae100b8f30a0e43057b9aae87cd5",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1715,13 +1715,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 52792,
+   "bytes": 52799,
    "component": "core",
    "dst": "organs/embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "de1a1a833ef931f82eaa273a02852ab97a26440e0ac960b07ce0b2aac0b0d9b1",
+   "sha256": "bc1d865892bf43a8d1844b91e5532df2756b3f5682169f7f720e79573dfbff65",
    "src": "organs/embedder_lock.py"
   },
   {
@@ -1735,13 +1735,13 @@
    "src": "organs/embedders.lock.json"
   },
   {
-   "bytes": 64794,
+   "bytes": 65081,
    "component": "core",
    "dst": "organs/embedding_upgrade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "78c7eea88fa571d08c54fe9f084651e15f04192c127b8e82257331bf7ac900db",
+   "sha256": "94959a7d28ca07cb872d4f8737a6bc6d46551a922c1dd8f1b4d49afa7dc0fedf",
    "src": "organs/embedding_upgrade.py"
   },
   {
@@ -1815,13 +1815,13 @@
    "src": "organs/memory_dreaming.py"
   },
   {
-   "bytes": 53483,
+   "bytes": 56426,
    "component": "core",
    "dst": "organs/memory_write.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "b0848d8b2d19e8e5f64eed36ed8ac04fefbae5db31a20137b8f412b942f4dd53",
+   "sha256": "b08d49fcab9e354eacaffb3c465323a7a0c6b5e3d44bb58492c460bba0e9dad4",
    "src": "organs/memory_write.py"
   },
   {
@@ -2073,6 +2073,16 @@
    "root": "brain",
    "sha256": "9e7667bcc743ab8797d52ac139c579ff13821c8c9fdb331539806487857a36d2",
    "src": "organs/thinkers.json"
+  },
+  {
+   "bytes": 36251,
+   "component": "core",
+   "dst": "organs/tier_set.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "f34382c95805e9a90d352dd45ee792d52001d65d6991136ed06f3cb69f85c187",
+   "src": "organs/tier_set.py"
   },
   {
    "bytes": 29857,
@@ -2735,13 +2745,13 @@
    "src": "uninstall.sh"
   },
   {
-   "bytes": 11011,
+   "bytes": 11464,
    "component": "core",
    "dst": "voidloom/README.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "9caf4360ef99ad2e0e4614b07390356fd57aadea145ca249ff2f0ddebd800347",
+   "sha256": "a044cf96d0be6491ae16ed45e296e2f28f0d7c5157277855e47f7c93dcc49dd4",
    "src": "voidloom/README.md"
   },
   {
@@ -2765,13 +2775,13 @@
    "src": "voidloom/__main__.py"
   },
   {
-   "bytes": 19008,
+   "bytes": 19981,
    "component": "core",
    "dst": "voidloom/_agent_context.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1f9bfca833c78057db6beb0548d69b942509844311542a68c22f6b12b937f8b2",
+   "sha256": "26694ec7f68f6c098c34a09e215507e66d365879bf9ab060a1ddda618aa131a2",
    "src": "voidloom/_agent_context.py"
   },
   {
@@ -2835,13 +2845,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 141063,
+   "bytes": 141628,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7fc4fad70fca62fa5a6dac7ef77e478da9b111b7229c3f8e8269601801bedec7",
+   "sha256": "1190c031b969f026142e1d329637ae8e863e428306fba744783c902cb386f5dc",
    "src": "voidloom/cli.py"
   },
   {
@@ -3395,13 +3405,13 @@
    "src": "voidloom/tests/test_edge_retire_readers_writers_r2d.py"
   },
   {
-   "bytes": 41010,
+   "bytes": 41106,
    "component": "core",
    "dst": "voidloom/tests/test_embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "36f1b4270bb1a2266ae9214c937d49826cf3941000cd0ff92b8cc8fe2692563d",
+   "sha256": "888fc2dd29c3f5946d7faf58a5f99accbfa806777efa57487709fb0929e0018f",
    "src": "voidloom/tests/test_embedder_lock.py"
   },
   {
@@ -4365,13 +4375,23 @@
    "src": "voidloom/tests/test_tier1_ambient.py"
   },
   {
-   "bytes": 37476,
+   "bytes": 27759,
+   "component": "core",
+   "dst": "voidloom/tests/test_tier_set.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "64316c5960a7a1a455d1a712ac15cc08c2f234e24b638a49c27251102c7983f8",
+   "src": "voidloom/tests/test_tier_set.py"
+  },
+  {
+   "bytes": 37673,
    "component": "core",
    "dst": "voidloom/tests/test_voidloom.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "3672c97213bdef80b11b79f0842fb3c081021309a9e2c7030edec191a19bb6d9",
+   "sha256": "5d61f515bedb1859dca5409335940a29ee52b81217de1dc0947ae7783eb2c7cf",
    "src": "voidloom/tests/test_voidloom.py"
   },
   {

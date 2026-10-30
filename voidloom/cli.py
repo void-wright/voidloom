@@ -1732,6 +1732,9 @@ ORGAN_VERBS: Dict[str, Dict[str, Any]] = {
     "dream": {"module": "dream_ledger", "accepts_db": True},
     # the Persona Forge: is there a persona yet? status | forge | declare | decline [--undo]. Stdlib, never raises.
     "persona": {"module": "voidloom_persona", "accepts_db": False},
+    # tier set: move the brain to another embedding model by re-embedding every memory; the old vectors are kept
+    # until `tier cleanup`. The organ owns its grammar (set <nomic|qwen> [--plan] | status | rollback | cleanup).
+    "tier": {"module": "tier_set", "accepts_db": True},
 }
 
 
@@ -1796,6 +1799,10 @@ def verb_dream(args) -> Dict[str, Any]:
 
 def verb_persona(args) -> Dict[str, Any]:
     return _run_organ("persona", args)
+
+
+def verb_tier(args) -> Dict[str, Any]:
+    return _run_organ("tier", args)
 
 
 def verb_thinker(args) -> Dict[str, Any]:
@@ -2433,7 +2440,9 @@ def build_parser() -> argparse.ArgumentParser:
             ("dream", "the dreams: backfill --plan | --apply --restamp|--backfill|--playbooks | "
                       "--rollback PREIMAGE ; confirm <id> ; show <id> ; watch"),
             ("persona", "the Persona Forge: status [--json] | forge | declare --name NAME "
-                        "[--skill FOLDER] [--blurb TEXT] | decline [--undo]")):
+                        "[--skill FOLDER] [--blurb TEXT] | decline [--undo]"),
+            ("tier", "the embedding model: set <nomic|qwen> [--plan] re-embeds every memory, then switches | "
+                     "status | rollback | cleanup --confirm <old table>")):
         sp = sub.add_parser(_verb, help=_help)
         sp.add_argument("--json", action="store_true", help="structured envelope")
         sp.add_argument("organ_args", nargs=argparse.REMAINDER,
@@ -2442,7 +2451,7 @@ def build_parser() -> argparse.ArgumentParser:
         sp.set_defaults(_fn={"hooks": verb_hooks, "instructions": verb_instructions,
                              "preamble": verb_preamble, "canary": verb_canary,
                              "thinker": verb_thinker, "dream": verb_dream,
-                             "persona": verb_persona}[_verb])
+                             "persona": verb_persona, "tier": verb_tier}[_verb])
 
     # recall
     sp = sub.add_parser("recall", help="hybrid retrieval over the brain.")

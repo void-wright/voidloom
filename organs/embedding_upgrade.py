@@ -1093,8 +1093,8 @@ def cmd_swap(args) -> Dict[str, Any]:
     without one would be silently re-pointed. Neither is a swap.
 
     Changing an install's tier is re-embedding every memory under the new weights
-    and only then writing the new lock (`tier set`), which this release does not
-    build -- declared here rather than done halfway.
+    and only then writing the new lock: `voidloom tier set <nomic|qwen>`
+    (organs/tier_set.py), which keeps the old vectors as the rollback path.
 
     It RAISES; main() prints the envelope and exits 1. An error envelope with
     process exit 0 reads as success to every shell gate that wraps the verb.
@@ -1103,9 +1103,13 @@ def cmd_swap(args) -> Dict[str, Any]:
         "SWAP_REFUSED",
         "`swap` re-pointed an install without re-embedding and is refused. The tier of an "
         "install is its embedder.lock.json; changing it means re-embedding every memory "
-        "under the new weights before the lock moves (`tier set`), which this release "
-        "does not build.",
-        replacement="tier set", built=False, db_path=getattr(args, "db_path", None))
+        "under the new weights before the lock moves: `voidloom tier set <nomic|qwen>` "
+        "(`--plan` first for the counts; the old vectors are kept until `voidloom tier "
+        "cleanup`).",
+        replacement="tier set", built=True,
+        usage="voidloom tier set <nomic|qwen> [--plan]  (or: python3 organs/tier_set.py "
+              "--db <brain>/claude_memory.db set <nomic|qwen>)",
+        db_path=getattr(args, "db_path", None))
 
 
 # ============================================================
@@ -1483,7 +1487,7 @@ def main():
     subparsers.add_parser("migrate", help="Apply migration SQL")
     subparsers.add_parser("re-embed", help="Re-embed all memories")
     subparsers.add_parser("ab-compare", help="Run A/B comparison")
-    subparsers.add_parser("swap", help="REFUSED: re-pointing without re-embedding (exit 1)")
+    subparsers.add_parser("swap", help="REFUSED: re-pointing without re-embedding (exit 1); use `voidloom tier set`")
     subparsers.add_parser("stats", help="Show embedding stats")
     subparsers.add_parser("full", help="Full pipeline (all steps)")
     subparsers.add_parser("test", help="Run unit tests")

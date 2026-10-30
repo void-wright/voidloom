@@ -205,6 +205,21 @@ TOOLKIT: Dict[str, Any] = {
             "when": "No persona yet: offer /persona-forge; declare only approved names.",
         },
         {
+            "name": "tier",
+            "purpose": ("The brain's embedding model: set <nomic|qwen> re-embeds EVERY memory under the new model "
+                        "while the old one serves, switches lock + metadata only at 100%, keeps the old vectors; "
+                        "--plan counts only; status; rollback restores the previous lock; cleanup --confirm "
+                        "<table> empties an old table."),
+            "args": {
+                "set": "subverb; <nomic|qwen> [--plan] [--batch-size N]",
+                "status": "subverb; current tier, vectors per table, rollback available",
+                "rollback": "subverb; restore the lock and rows from before the last switch",
+                "cleanup": "subverb; --confirm <old vector table> -- a HUMAN names the table",
+                "--json": "flag; structured envelope",
+            },
+            "when": "Change embedding model; run --plan first, ask the human.",
+        },
+        {
             "name": "recall",
             "purpose": ("Hybrid retrieval (FTS5 + vector + RRF + rerank) over the brain. `results` holds memories "
                         "only; unverified dream leads ride beside them in `dreams` (framed, never facts)."),
