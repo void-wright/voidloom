@@ -36,6 +36,9 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ### Fixed
 
+- The belief engine read its neighbours' vectors from the jina table by name, whatever model the
+  brain used, so on a nomic or qwen brain its similarity gate compared vectors from another
+  model's table. It now reads through the search set.
 - Keyword recall now matches any content word of a query, ranked by BM25. It used to require
   every word ("when" and "did" included), so a natural question almost never found a keyword
   match: 2 of 152 benchmark questions on one test conversation. "Hybrid" recall was in
@@ -85,6 +88,11 @@ All notable changes to Voidloom are recorded here. The format follows
   uses. This matters for a brain that `init` pins after it already holds vectors: without the
   legacy rule its vector recall would have gone empty until a re-embed. A brain with no lock is
   searched as before, whole. Each answer names which rule it used (`search_rule`).
+- The vector readers outside recall now take their vectors from that same search set: the
+  dream cycle (novelty, the eligible pool, divergent pairs), the diversity re-rank, the belief
+  engine's neighbour scan, temporal edges (Tier-3 candidates and the LLM candidate search), the
+  anticipation fallback, and the three memory-dreaming pair selectors. On a locked brain none of
+  them can read a vector stamped under another model's checksum.
 - The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned
   HuggingFace commit, as nomic and jina already did. Results no longer depend on when the
   model was downloaded, and a warm cache loads offline. A test fails if either pin is removed.

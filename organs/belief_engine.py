@@ -89,9 +89,11 @@ DEFAULT_FOUNDATION_ELEVATED: float = 0.70
 #: extraction_method tag the belief engine stamps on the edges it authors.
 BELIEF_EXTRACTION_METHOD: str = "manual"  # see _edge_extraction_method() note
 
-#: Embedding table + dimension (the active jina-1024 table per `metadata`).
-EMBEDDING_TABLE: str = "memory_embeddings_v2"
-EMBEDDING_DIM: int = 1024
+#: No embedding table is named here. Every vector read goes through
+#: memory_write's search set (read_vector), which takes the table from the
+#: install lock (or, for a brain with no lock, from the table the brain resolves
+#: to) on every call. This module used to read the jina table by literal, so on a
+#: nomic or qwen brain its cosine gate read another model's vectors.
 
 #: How many top-k embedding neighbours a dirty memory is compared against in the
 #: nightly sweep. Bounds the sweep at O(dirty * NEIGHBOR_K) NLI calls.
@@ -296,27 +298,33 @@ def _unpack_embedding(blob: Optional[bytes]) -> Optional[Any]:
         return None
 
 
-def get_embedding(conn: sqlite3.Connection, memory_id: int) -> Optional[Any]:
-    """Fetch a memory's jina-1024 embedding as a vector, or None.
+def _mw():
+    """memory_write, the one reader (its search set is the only vector filter)."""
+    import os as _o, sys as _s
+    _d = _o.path.dirname(_o.path.abspath(__file__))
+    if _d not in _s.path:
+        _s.path.insert(0, _d)
+    import memory_write
+    return memory_write
 
-    The memory_embeddings_v2 vec0 table needs the sqlite-vec extension loaded to
-    read its `embedding` column (else SELECT raises 'no such module: vec0'). We
-    ensure it is loaded (best-effort) then pull the stored float32 blob and
-    compute cosine ourselves (no vector MATCH). Fail-graceful: a missing
-    extension / absent row returns None and the caller treats the pair as
-    un-judgeable (never NLI'd, never proposed).
-    """
+
+def get_embedding(conn: sqlite3.Connection, memory_id: int, flt=None) -> Optional[Any]:
+    """A memory's embedding as a vector IF IT IS IN THE SEARCH SET, else None.
+
+    The search set is memory_write.read_vector's (the install lock's table, or the
+    table a lockless brain resolves to). A row outside it reads as absent and the
+    caller treats the pair as un-judgeable (never NLI'd, never proposed). The vec0
+    table needs sqlite-vec loaded; we ensure it (best-effort). `flt` may carry the
+    filter the caller derived on this call for a loop of reads. A sqlite error is
+    None, as before; the reader's typed refusals propagate."""
     _ensure_vec_loaded(conn)
     try:
-        row = conn.execute(
-            f"SELECT embedding FROM {EMBEDDING_TABLE} WHERE memory_id = ?",
-            (memory_id,),
-        ).fetchone()
+        blob = _mw().read_vector(conn, memory_id, flt=flt)
     except sqlite3.Error:
         return None
-    if row is None:
+    if blob is None:
         return None
-    return _unpack_embedding(row[0])
+    return _unpack_embedding(blob)
 
 
 def cosine(vec_a: Any, vec_b: Any) -> Optional[float]:
@@ -937,7 +945,13 @@ def _top_k_neighbors(conn: sqlite3.Connection, memory_id: int, k: int,
     a bounded candidate pool: same-project + recent memories that have an
     embedding (mirrors temporal_edges Tier-3's bounded 200-row candidate window).
     """
-    me = get_embedding(conn, memory_id)
+    # The reader, consulted once for this call: a refusal propagates, None is an
+    # empty brain (no neighbours).
+    _ensure_vec_loaded(conn)
+    flt = _mw().search_set(conn)
+    if flt is None:
+        return []
+    me = get_embedding(conn, memory_id, flt=flt)
     if me is None:
         return []
     try:
@@ -954,26 +968,24 @@ def _top_k_neighbors(conn: sqlite3.Connection, memory_id: int, k: int,
     try:
         if project:
             rows = conn.execute(
-                f"SELECT m.id FROM memories m "
-                f"JOIN {EMBEDDING_TABLE} e ON e.memory_id = m.id "
+                f"SELECT m.id FROM memories m {flt.stamped_join_sql('e', 'm')} "
                 f"WHERE m.source_project = ? AND m.id != ? AND m.is_archived = 0 "
                 f"ORDER BY m.created_at DESC LIMIT 200",
-                (project, memory_id),
+                (*flt.search_set_params, project, memory_id),
             ).fetchall()
         if not rows:
             rows = conn.execute(
-                f"SELECT m.id FROM memories m "
-                f"JOIN {EMBEDDING_TABLE} e ON e.memory_id = m.id "
+                f"SELECT m.id FROM memories m {flt.stamped_join_sql('e', 'm')} "
                 f"WHERE m.id != ? AND m.is_archived = 0 "
                 f"ORDER BY m.created_at DESC LIMIT 200",
-                (memory_id,),
+                (*flt.search_set_params, memory_id),
             ).fetchall()
     except sqlite3.Error:
         return []
 
     scored: List[Tuple[int, float]] = []
     for (other_id,) in rows:
-        oe = get_embedding(conn, other_id)
+        oe = get_embedding(conn, other_id, flt=flt)
         cos = cosine(me, oe)
         if cos is not None and cos >= gate:
             scored.append((other_id, cos))

@@ -289,14 +289,21 @@ def _get_memory_content(conn: sqlite3.Connection, memory_id: int) -> Optional[st
     return row[0] if row else None
 
 
+def _mw():
+    """memory_write, the one reader (its search set is the only vector filter)."""
+    import os as _o, sys as _s
+    _d = _o.path.dirname(_o.path.abspath(__file__))
+    if _d not in _s.path:
+        _s.path.insert(0, _d)
+    import memory_write
+    return memory_write
+
+
 def _get_memory_embedding(conn: sqlite3.Connection, memory_id: int) -> Optional[bytes]:
-    """Fetch raw embedding bytes for a memory. Returns None if vec0 not loaded."""
+    """Raw embedding bytes for a memory IF IT IS IN THE SEARCH SET (memory_write.read_vector),
+    else None. None too when vec0 is not loaded; the reader's typed refusals propagate."""
     try:
-        _t, _d = _resolve_embed_tier(conn)
-        row = conn.execute(
-            f"SELECT embedding FROM {_t} WHERE memory_id = ?", (memory_id,)
-        ).fetchone()
-        return row[0] if row else None
+        return _mw().read_vector(conn, memory_id)
     except sqlite3.OperationalError:
         return None
 
@@ -631,14 +638,10 @@ TIER3_CANDIDATES = 200          # the newest N same-project memories that hold a
 _TIER3_PAGE = 256               # ids read per page while looking for N that hold a vector
 
 
-def _vectors_for(conn: sqlite3.Connection, table: str, ids: Sequence[int]) -> Dict[int, bytes]:
-    """The stored vectors of exactly `ids` (point lookups on the tier table's primary key; never a scan)."""
-    out: Dict[int, bytes] = {}
-    for mid in ids:
-        row = conn.execute(f"SELECT embedding FROM {table} WHERE memory_id = ?", (mid,)).fetchone()
-        if row is not None and row[0] is not None:
-            out[mid] = row[0]
-    return out
+def _vectors_for(conn: sqlite3.Connection, flt, ids: Sequence[int]) -> Dict[int, bytes]:
+    """The stored vectors of exactly `ids` that are in the search set `flt` (memory_write.read_vectors:
+    a membership check on `memories`, then lookups by primary key; never a scan of the vector table)."""
+    return _mw().read_vectors(conn, ids, flt=flt)
 
 
 def tier3_candidates(conn: sqlite3.Connection, project: str, exclude_id: Optional[int],
@@ -649,8 +652,10 @@ def tier3_candidates(conn: sqlite3.Connection, project: str, exclude_id: Optiona
     `limit` point lookups however large the brain's vector table is. A memory with no vector is passed over exactly as
     the inner JOIN passed it over, and the next page is read until `limit` are found or the project is exhausted.
     """
-    table = _resolve_embed_tier(conn)[0]
+    flt = _mw().search_set(conn)          # a refusal propagates; None is an empty brain
     out: List[Tuple[int, bytes]] = []
+    if flt is None:
+        return out
     offset = 0
     while len(out) < limit:
         ids = [r[0] for r in conn.execute(
@@ -662,7 +667,7 @@ def tier3_candidates(conn: sqlite3.Connection, project: str, exclude_id: Optiona
         ).fetchall()]
         if not ids:
             break
-        vecs = _vectors_for(conn, table, ids)
+        vecs = _vectors_for(conn, flt, ids)
         for mid in ids:
             if mid in vecs:
                 out.append((mid, vecs[mid]))
@@ -824,15 +829,13 @@ def extract_edges_llm(
         return []
 
     # Use vector search to find candidates.
+    # The one KNN over the search set (memory_write.knn); its typed refusals propagate.
     try:
-        rows = conn.execute(
-            f"""SELECT emb.memory_id, emb.distance, m.content, m.summary
-               FROM {_resolve_embed_tier(conn)[0]} AS emb
-               JOIN memories AS m ON m.id = emb.memory_id
-               WHERE emb.embedding MATCH ? AND k = ?
-                 AND m.is_archived = 0 AND m.id != ?""",
-            (my_embedding, top_k + 5, memory_id),
-        ).fetchall()
+        rows = []
+        for mid, dist in _mw().knn(conn, my_embedding, top_k + 5, exclude_archived=True, exclude_id=memory_id):
+            r = conn.execute("SELECT content, summary FROM memories WHERE id = ?", (mid,)).fetchone()
+            if r is not None:
+                rows.append((mid, dist, r[0], r[1]))
     except sqlite3.OperationalError:
         rows = []
 

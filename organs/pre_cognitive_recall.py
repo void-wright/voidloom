@@ -771,44 +771,18 @@ def _vector_search_fallback(
     """Pure vector search fallback. No FTS5, no reranker. Synthetic rows (dream / playbook synthesis) are never
     anticipated as memories (the dream fix, R1-M8): the hybrid path diverts them before the reranker, and this path,
     the recent-stores focus signal and the hydration exclude them by provenance."""
+    # The one KNN over the search set (memory_write.knn), active rows only. Over-fetch: synthetic rows
+    # are dropped at hydration below, and the result is trimmed to top_k after it. The reader's typed
+    # refusals propagate.
+    import memory_write
     try:
-        rows = conn.execute(
-            f"""SELECT me.memory_id, me.distance
-               FROM {_resolve_embed_tier(conn)[0]} me
-               JOIN memories m ON m.id = me.memory_id
-               WHERE me.embedding MATCH ? AND k = ?
-                 AND m.is_archived = 0 AND COALESCE(m.derived_from, '') NOT IN ('dream_synthesis', 'playbook_synthesis')
-               LIMIT ?""",
-            # F-C2 (curation_BETA). sqlite-vec applies `k` INSIDE the KNN, so
-            # `AND m.is_archived = 0` filters AFTER the k nearest are chosen: any
-            # archived neighbour silently costs a result. Measured over 200 seeded-random
-            # probes at k=5 the shortfall was 19.8%, and 5 of 200 returned ZERO where raw
-            # KNN returned 5. Over-fetch, then trim.
-            (query_vec, top_k * 4, top_k),
-        ).fetchall()
+        rows = memory_write.knn(conn, query_vec, top_k * 4, exclude_archived=True)
     except sqlite3.OperationalError:
-        # sqlite-vec might need loading
-        try:
-            import sqlite_vec
-            conn.enable_load_extension(True)
-            sqlite_vec.load(conn)
-            conn.enable_load_extension(False)
-            rows = conn.execute(
-                f"""SELECT me.memory_id, me.distance
-                   FROM {_resolve_embed_tier(conn)[0]} me
-                   JOIN memories m ON m.id = me.memory_id
-                   WHERE me.embedding MATCH ? AND k = ?
-                     AND m.is_archived = 0 AND COALESCE(m.derived_from, '') NOT IN ('dream_synthesis', 'playbook_synthesis')
-                   LIMIT ?""",
-                # F-C2 (curation_BETA). sqlite-vec applies `k` INSIDE the KNN, so
-                # `AND m.is_archived = 0` filters AFTER the k nearest are chosen: any
-                # archived neighbour silently costs a result. Measured over 200 seeded-random
-                # probes at k=5 the shortfall was 19.8%, and 5 of 200 returned ZERO where raw
-                # KNN returned 5. Over-fetch, then trim.
-                (query_vec, top_k * 4, top_k),
-            ).fetchall()
-        except Exception:
-            return []
+        import sqlite_vec
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        rows = memory_write.knn(conn, query_vec, top_k * 4, exclude_archived=True)
 
     if not rows:
         return []
@@ -848,7 +822,7 @@ def _vector_search_fallback(
         })
 
     results.sort(key=lambda x: x["distance"])
-    return results
+    return results[:top_k]
 
 
 def _run_focus_recall(

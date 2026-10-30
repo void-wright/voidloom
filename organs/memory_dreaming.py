@@ -507,6 +507,14 @@ def _context_difference(meta_a: dict, meta_b: dict, min_criteria: int = 2) -> Op
 # Pair Selection
 # ============================================================
 
+def _search_set(conn: sqlite3.Connection):
+    """The search set for this call (memory_write.search_set): every vector read in
+    this module joins its `stamped_join_sql`. A typed refusal propagates; None means
+    an EMPTY brain, and every selector returns [] for it."""
+    import memory_write
+    return memory_write.search_set(conn)
+
+
 def select_divergent_pairs(
     conn: sqlite3.Connection,
     count: int = 7,
@@ -527,27 +535,30 @@ def select_divergent_pairs(
     Returns:
         List of (memory_a_id, memory_b_id, cosine_distance) tuples.
     """
-    embed_table, embed_dim = _detect_embedding_table(conn)
+    _flt = _search_set(conn)
+    if _flt is None:
+        return []
+    _join = _flt.stamped_join_sql("e", "m")
 
     if candidate_ids:
         qmarks = ",".join("?" * len(candidate_ids))
         rows = conn.execute(
             f"""SELECT m.id, e.embedding
                 FROM memories m
-                JOIN {embed_table} e ON e.memory_id = m.id
+                {_join}
                 WHERE m.is_archived = 0 AND m.derived_from IS NULL AND m.id IN ({qmarks})
                 LIMIT ?""",
-            (*candidate_ids, max_candidates),
+            (*_flt.search_set_params, *candidate_ids, max_candidates),
         ).fetchall()
     else:
         rows = conn.execute(
             f"""SELECT m.id, e.embedding
                 FROM memories m
-                JOIN {embed_table} e ON e.memory_id = m.id
+                {_join}
                 WHERE m.is_archived = 0 AND m.derived_from IS NULL
                 ORDER BY RANDOM()
                 LIMIT ?""",
-            (max_candidates,),
+            (*_flt.search_set_params, max_candidates),
         ).fetchall()
 
     if len(rows) < 2:
@@ -609,16 +620,18 @@ def select_close_context_pairs(
     Returns:
         List of (memory_a_id, memory_b_id, cosine_distance, context_diff) tuples.
     """
-    embed_table, embed_dim = _detect_embedding_table(conn)
+    _flt = _search_set(conn)
+    if _flt is None:
+        return []
 
     rows = conn.execute(
         f"""SELECT m.id, e.embedding
             FROM memories m
-            JOIN {embed_table} e ON e.memory_id = m.id
+            {_flt.stamped_join_sql("e", "m")}
             WHERE m.is_archived = 0 AND m.derived_from IS NULL
             ORDER BY RANDOM()
             LIMIT ?""",
-        (max_candidates,),
+        (*_flt.search_set_params, max_candidates),
     ).fetchall()
 
     if len(rows) < 2:
@@ -710,7 +723,9 @@ def select_persona_pairs(
         List of (memory_a_id, memory_b_id, cosine_distance, context_diff) tuples.
         context_diff always includes {"persona_dream": True}.
     """
-    embed_table, embed_dim = _detect_embedding_table(conn)
+    _flt = _search_set(conn)
+    if _flt is None:
+        return []
 
     # Find persona-tagged memory IDs (SELF tags; a design note carrying persona-design is excluded).
     self_tags = tuple(t for t in (tags if tags is not None else persona_self_tags(persona_name))
@@ -735,14 +750,8 @@ def select_persona_pairs(
         return []
 
     # Get embeddings for persona memories.
-    persona_embeds: Dict[int, bytes] = {}
-    for pid in persona_ids[:50]:
-        row = conn.execute(
-            f"SELECT embedding FROM {embed_table} WHERE memory_id = ?",
-            (pid,),
-        ).fetchone()
-        if row:
-            persona_embeds[pid] = row[0]
+    import memory_write
+    persona_embeds: Dict[int, bytes] = memory_write.read_vectors(conn, persona_ids[:50], flt=_flt)
 
     if not persona_embeds:
         return []
@@ -751,12 +760,12 @@ def select_persona_pairs(
     non_persona = conn.execute(
         f"""SELECT m.id, e.embedding
             FROM memories m
-            JOIN {embed_table} e ON e.memory_id = m.id
+            {_flt.stamped_join_sql("e", "m")}
             WHERE m.is_archived = 0 AND m.derived_from IS NULL
               AND m.id NOT IN ({','.join('?' * len(persona_ids))})
             ORDER BY RANDOM()
             LIMIT ?""",
-        (*persona_ids, max_candidates),
+        (*_flt.search_set_params, *persona_ids, max_candidates),
     ).fetchall()
 
     if not non_persona:

@@ -301,21 +301,27 @@ def _is_vec0_table(conn: sqlite3.Connection, table: str) -> bool:
     return bool(row and row[0] and "vec0" in row[0].lower())
 
 
-def _fetch_embedding(conn: sqlite3.Connection, table: str, memory_id: int) -> Optional[bytes]:
-    """Fetch one memory's embedding bytes from either a vec0 or plain-BLOB table.
+def _mw():
+    """memory_write, the one reader (its search set is the only vector filter)."""
+    import os as _o, sys as _s
+    _d = _o.path.dirname(_o.path.abspath(__file__))
+    if _d not in _s.path:
+        _s.path.insert(0, _d)
+    import memory_write
+    return memory_write
 
-    Returns None if absent or if the vec0 extension is unavailable in this
-    connection (graceful: the caller skips that candidate rather than crashing).
-    """
+
+def _fetch_embedding(conn: sqlite3.Connection, table: str, memory_id: int, flt=None) -> Optional[bytes]:
+    """One memory's embedding bytes IF IT IS IN THE SEARCH SET (memory_write.read_vector:
+    on a locked brain the lock's table, verified or legacy rows; a row stamped under a
+    different checksum reads as absent). `table` is kept for the callers' signature; the
+    reader derives the table itself. `flt` is the filter the caller derived on this call
+    for a loop of reads. None for an absent row or an unloaded vec0 (the caller skips
+    that candidate); the reader's typed refusals propagate."""
     try:
-        row = conn.execute(
-            f"SELECT embedding FROM {table} WHERE memory_id = ?", (memory_id,)
-        ).fetchone()
+        return _mw().read_vector(conn, memory_id, flt=flt)
     except sqlite3.OperationalError:
         return None
-    if not row or row[0] is None:
-        return None
-    return row[0]
 
 
 def _cosine_distance(a: bytes, b: bytes) -> float:
@@ -691,19 +697,21 @@ def compute_novelty(conn: sqlite3.Connection, memory_id: int,
             embedding = _fetch_embedding(conn, table, memory_id)
             if embedding is None:
                 return None
+        mw = _mw()
         if _is_vec0_table(conn, table):
-            rows = conn.execute(
-                f"SELECT memory_id, distance FROM {table} "
-                f"WHERE embedding MATCH ? AND k = ? ORDER BY distance",
-                (embedding, max(2, k + 1)),
-            ).fetchall()
-            for nid, dist in rows:
-                if nid != memory_id:
-                    return round(max(0.0, min(1.0, float(dist))), 4)
+            # The one KNN over the search set: the nearest OTHER row in it.
+            for _nid, dist in mw.knn(conn, embedding, max(2, k + 1), exclude_archived=False,
+                                     exclude_id=memory_id):
+                return round(max(0.0, min(1.0, float(dist))), 4)
             return 1.0
-        # Plain-BLOB fallback (tests): brute-force nearest OTHER.
+        # Plain-BLOB fallback (tests): brute-force nearest OTHER, over the search set.
+        _flt = mw.search_set(conn)
+        if _flt is None:
+            return 1.0
         rows = conn.execute(
-            f"SELECT memory_id, embedding FROM {table} WHERE memory_id != ?", (memory_id,)
+            f"SELECT v.memory_id, v.embedding FROM {_flt.vec_table} v "
+            f"WHERE v.memory_id != ? AND v.{_flt.search_set_sql}",
+            (memory_id, *_flt.search_set_params),
         ).fetchall()
         if not rows:
             return 1.0
@@ -896,10 +904,14 @@ def select_eligible_pool(conn: sqlite3.Connection, cfg: Dict[str, Any],
 
     Cold-start (generous signal gate) -> uniform random draw == today's behavior.
     """
-    table, _dim = _detect_embed_table(conn)
+    # The search set (memory_write): a refusal propagates, None is an empty brain.
+    _flt = _mw().search_set(conn)
+    if _flt is None:
+        return [], {"mode": "empty"}
     candidate_rows = conn.execute(
-        f"""SELECT m.id FROM memories m JOIN {table} e ON e.memory_id = m.id
+        f"""SELECT m.id FROM memories m {_flt.stamped_join_sql("e", "m")}
             WHERE m.is_archived = 0 AND m.derived_from IS NULL""",
+        _flt.search_set_params,
     ).fetchall()
     candidates = [r[0] for r in candidate_rows]
     if not candidates:
@@ -979,7 +991,10 @@ def anchor_then_fling(conn: sqlite3.Connection, anchor_id: int, cfg: Dict[str, A
     phase time box; the original L4 selector uses the same bounded-sample idiom.
     """
     table, _dim = _detect_embed_table(conn)
-    a_emb = _fetch_embedding(conn, table, anchor_id)
+    _flt = _mw().search_set(conn)            # derived once for the scan below
+    if _flt is None:
+        return None
+    a_emb = _fetch_embedding(conn, table, anchor_id, flt=_flt)
     if a_emb is None:
         return None
     floor = float(cfg["divergent_distance_min"])  # the sacred 0.6
@@ -990,7 +1005,7 @@ def anchor_then_fling(conn: sqlite3.Connection, anchor_id: int, cfg: Dict[str, A
         scan = scan[:max_scan]
     best: Optional[Tuple[int, int, float]] = None
     for cid in scan:
-        c_emb = _fetch_embedding(conn, table, cid)
+        c_emb = _fetch_embedding(conn, table, cid, flt=_flt)
         if c_emb is None:
             continue
         dist = _cosine_distance(a_emb, c_emb)

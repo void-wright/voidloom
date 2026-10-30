@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 426,
+    "core": 427,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 381,
+    "all": 382,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 414,
+    "brain": 415,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "b13bfa3",
+  "derived_at_head": "1ada7bf",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 444,
+  "entries": 445,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 15378,
+   "bytes": 16064,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2921391b146d93de0caf90a5c5b56dd0b359ff99885a660cd453374de9510ecc",
+   "sha256": "6f3722d79ae95eb7e9d1ac57cdfd49fe30ea6c74463df79ba431fa2b74b98175",
    "src": "CHANGELOG.md"
   },
   {
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e7c1c0982df8901f5b84e2ab1df69a3f59ec1da6f1d3c2ca4531efe671265cc2",
+   "sha256": "01e2e1897f26d6b5f3f8154ab13df18403458a0087563190c6a0593ecc5d543a",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1585,13 +1585,13 @@
    "src": "organs/belief_cli.py"
   },
   {
-   "bytes": 73377,
+   "bytes": 74066,
    "component": "core",
    "dst": "organs/belief_engine.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "b286bbdfc7116cd2df749861796d3fd00d7c35566aca650f9ebb358608140620",
+   "sha256": "b312c857d174f33305b1169ddcbf026b101839ba2bc6c828e78229689d99fb62",
    "src": "organs/belief_engine.py"
   },
   {
@@ -1685,13 +1685,13 @@
    "src": "organs/dream_ledger.py"
   },
   {
-   "bytes": 127866,
+   "bytes": 128715,
    "component": "core",
    "dst": "organs/dream_pipeline.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "35dfb3a588889438861fb08f48a348a3c69e55b7c2237414e4c74680630d2477",
+   "sha256": "fffbb98b6c676551f2f47304084c2f978b1ecc1209efc8f9608811db78679fa8",
    "src": "organs/dream_pipeline.py"
   },
   {
@@ -1805,13 +1805,13 @@
    "src": "organs/least_privilege.py"
   },
   {
-   "bytes": 106512,
+   "bytes": 106783,
    "component": "core",
    "dst": "organs/memory_dreaming.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "198f5f75c6931c5b3558d9e9172219319ecdead161e38112a8bf87ae07dbe177",
+   "sha256": "699acdc0066b008e7bdaa935ffcd1b9c03bf38e13cad786eae402289147327b9",
    "src": "organs/memory_dreaming.py"
   },
   {
@@ -1895,13 +1895,13 @@
    "src": "organs/ppr_recall.py"
   },
   {
-   "bytes": 56211,
+   "bytes": 54781,
    "component": "core",
    "dst": "organs/pre_cognitive_recall.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "08e6995ac9106d52bb6cee45d3f3cff390f434b945b4fcc693f25fd8ed47b376",
+   "sha256": "014de8698fe3d4f833c3af20be32a7d71ba25c00eeb84f6e6117fce007c8098d",
    "src": "organs/pre_cognitive_recall.py"
   },
   {
@@ -1965,13 +1965,13 @@
    "src": "organs/recall_channels.py"
   },
   {
-   "bytes": 46073,
+   "bytes": 46396,
    "component": "core",
    "dst": "organs/recall_diversity.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1a9f222b597174a055586dcd2159f0cc7dc79590387b3279e1b7c51e6bad2b19",
+   "sha256": "0d2544d9e60111888c98dc18b41197dada8e2fe25e4e64ec8401bb22abedbe62",
    "src": "organs/recall_diversity.py"
   },
   {
@@ -2025,13 +2025,13 @@
    "src": "organs/sleep_loop.py"
   },
   {
-   "bytes": 107549,
+   "bytes": 107763,
    "component": "core",
    "dst": "organs/temporal_edges.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "982ce5bf3d4ef536e0a6e063d708258b81277421c29bb464f228fc098036df9e",
+   "sha256": "687969cdbe28f451031345981a55a0d795e0e46e86c3293c70fc00fdebab5a34",
    "src": "organs/temporal_edges.py"
   },
   {
@@ -3203,6 +3203,16 @@
    "root": "brain",
    "sha256": "5875111fc486ec70b2da7601f04c79ab3210d748c9bd7835f37c87eadbc1848a",
    "src": "voidloom/tests/test_cognitive_map_degree_cost_d26.py"
+  },
+  {
+   "bytes": 6508,
+   "component": "core",
+   "dst": "voidloom/tests/test_consumers_read_the_search_set.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "69013e7da541add6b7db00350e2bb3dcc678582db04b1ea5c04757d3d5db2067",
+   "src": "voidloom/tests/test_consumers_read_the_search_set.py"
   },
   {
    "bytes": 3868,

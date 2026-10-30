@@ -127,8 +127,6 @@ MMR_BM25_STRONG: float = 8.0    # |bm25| >= 8 == a strong exact-token hit
 MMR_BM25_WEAK: float = 2.0      # |bm25| <= 2 == diffuse / weak lexical signal
 
 # Active vec table resolver default (mirrors hybrid_retrieval._active_embedding_table).
-_DEFAULT_EMB_TABLE = "memory_embeddings"
-_V2_EMB_TABLE = "memory_embeddings_v2"
 
 
 # ==========================================================================
@@ -187,14 +185,13 @@ def _load_embeddings(
     emb_table = _active_embedding_table(conn)
     if emb_table is None:
         return {}
-    placeholders = ",".join("?" * len(ids))
     out: Dict[int, np.ndarray] = {}
     try:
-        rows = conn.execute(
-            f"SELECT memory_id, embedding FROM {emb_table} "
-            f"WHERE memory_id IN ({placeholders})",
-            list(ids),
-        ).fetchall()
+        # The search set (memory_write.read_vectors): a row outside it is absent
+        # from the dict, so its result keeps its relevance rank. A typed refusal
+        # propagates to apply_diversity, which keeps relevance order and names it.
+        import memory_write
+        rows = list(memory_write.read_vectors(conn, list(ids)).items())
     except sqlite3.OperationalError as e:
         logger.warning("diversity: embedding fetch failed: %s", e)
         return {}
@@ -581,7 +578,12 @@ def apply_diversity(
         return placed, info
 
     except Exception as e:  # noqa: BLE001 -- never break recall
-        info["error"] = str(e)
+        # A typed refusal from the reader (memory_write) lands here by name: this
+        # re-ranker keeps relevance order and says which refusal it swallowed.
+        _code = getattr(e, "code", None)
+        if _code:
+            info["refusal"] = _code
+        info["error"] = (f"{_code}: {e}" if _code else str(e))
         return results, info
 
 
