@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 416,
+    "core": 417,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 371,
+    "all": 372,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 404,
+    "brain": 405,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "1e731db",
+  "derived_at_head": "e98302a",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 434,
+  "entries": 435,
   "platforms": [
    "all",
    "posix",
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1d4456c9a82a8c2c0aa3a664ab3f34916a0c8a6dcb52bc0a8452ec7808c3ed81",
+   "sha256": "6e987042a8bb08662a7d8765ed2b2d11948941a5928e6c1e86de90e02a73ac70",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -875,13 +875,13 @@
    "src": "hooks/voidloom_signoff.py"
   },
   {
-   "bytes": 330201,
+   "bytes": 333990,
    "component": "core",
    "dst": null,
    "exec": true,
    "platform": "posix",
    "root": null,
-   "sha256": "a11a50f8ef586adc552db13ea5be3faec61bef19aa5518980850d034ca3e5a39",
+   "sha256": "66d7fd714c631dc8f5fd072e31e81b2c937d05592ff15774806c7c8d8ae5306c",
    "src": "install.sh"
   },
   {
@@ -1715,13 +1715,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 52487,
+   "bytes": 52792,
    "component": "core",
    "dst": "organs/embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "da63efce9cc754b7586354ac5bd84b4543390f399deda5ae8d3435f989396b4a",
+   "sha256": "de1a1a833ef931f82eaa273a02852ab97a26440e0ac960b07ce0b2aac0b0d9b1",
    "src": "organs/embedder_lock.py"
   },
   {
@@ -3545,6 +3545,16 @@
    "src": "voidloom/tests/test_hidden_cuda_probe_r1.py"
   },
   {
+   "bytes": 5345,
+   "component": "core",
+   "dst": "voidloom/tests/test_init_prelock_snapshot.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "cbe5c00b70334b245d6c418457525d0d74ef6887042bc74dbc75c80ef1b36d6c",
+   "src": "voidloom/tests/test_init_prelock_snapshot.py"
+  },
+  {
    "bytes": 40526,
    "component": "core",
    "dst": "voidloom/tests/test_installer_accelerator.py",
@@ -3555,13 +3565,13 @@
    "src": "voidloom/tests/test_installer_accelerator.py"
   },
   {
-   "bytes": 13974,
+   "bytes": 14090,
    "component": "core",
    "dst": "voidloom/tests/test_installer_literals.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f3497e7a1d31452012bfb597a8dacb33db21b60de4f1f34ee4c5721fc39c282e",
+   "sha256": "f194e6828c26fb57448d972b83af59dfe0beeec8e2f67e7255a41fb913f276a4",
    "src": "voidloom/tests/test_installer_literals.py"
   },
   {

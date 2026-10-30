@@ -4098,6 +4098,27 @@ GATE
             # serves whichever backend runs.
             # The reranker gate (Drew's ruling, 2026-10-14): a machine the gate turns OFF downloads no reranker at all
             # ("not even installed"); the reason is said, with what to run if the machine changes.
+            # C.init -- THE LOCK, under the venv, BEFORE the pre-cache.
+            #
+            # STEP B's `init` runs under $PY_SYS; on a host whose system python has no
+            # sqlite_vec the brain was built by schema_migrator and has NO
+            # embedder.lock.json, and the pre-cache below fetches exactly the bytes the
+            # lock names. init is idempotent: on a locked brain it never re-points the
+            # lock, and a tier the shipped catalogue does not carry (jina, a personal
+            # install) gets no lock -- the pre-cache then keeps its by-name path.
+            if [ ! -f "${BRAIN_DIR}/embedder.lock.json" ]; then
+                say "  no install lock beside the brain; running init under the venv to write it..."
+                if WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$VENV_PY" "${BRAIN_DIR}/organs/claude_memory.py" init >/dev/null 2>&1; then
+                    if [ -f "${BRAIN_DIR}/embedder.lock.json" ]; then
+                        say "  install lock written: ${BRAIN_DIR}/embedder.lock.json"
+                    else
+                        say "  no install lock for the ${EMBED_MODEL} tier (the shipped catalogue does not carry it); the pre-cache fetches it by name."
+                    fi
+                else
+                    warn "init under the venv failed; the lock is absent (inspect: WIZARD_EMBED_MODEL='${EMBED_MODEL}' WIZARD_LIBRARY_DB='${DB_PATH}' '${VENV_PY}' '${BRAIN_DIR}/organs/claude_memory.py' init)"
+                fi
+            fi
+
             if [ "$ACCEL_RERANK" = "1" ]; then
                 say "  pre-caching the ${EMBED_MODEL}-${EMBED_DIM} embedder + the ${RERANKER_BACKEND} reranker ${RERANKER_REPO} (one-time download)..."
                 _pc_rr="$RERANKER_REPO"; _pc_fb="$PRECACHE_FALLBACK"
@@ -4106,6 +4127,7 @@ GATE
                 _pc_rr=""; _pc_fb="0"
             fi
             WIZARD_EMBED_MODEL="$EMBED_MODEL" EMBED_REPO="$EMBED_REPO" \
+            WIZARD_LIBRARY_DB="$DB_PATH" BRAIN_DIR="$BRAIN_DIR" \
             RERANKER_REPO="$_pc_rr" RERANKER_FALLBACK_REPO="$RERANKER_FALLBACK_REPO" \
             PRECACHE_FALLBACK="$_pc_fb" \
             "$VENV_PY" - <<'PYEOF' || warn "model pre-cache hit a snag; recall will lazy-download on first use."
@@ -4140,20 +4162,52 @@ def _bytes_of(path):
 
 
 try:
-    from sentence_transformers import SentenceTransformer
-    from huggingface_hub import snapshot_download
-    SentenceTransformer(os.environ["EMBED_REPO"], trust_remote_code=True)
-    print("  cached " + os.environ["EMBED_REPO"] + " (embedder)")
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.environ["BRAIN_DIR"], "organs"))
+    import embedder_lock
+    # THE LOCK, not a repo name: `init` (above) wrote <brain-dir>/embedder.lock.json;
+    # fetch EXACTLY the bytes it names -- the model at lock.revision and its
+    # remote-code repository at lock.code.revision -- checksum both against
+    # lock.weights_hash, and instantiate nothing. A brain with no lock (a tier the
+    # catalogue does not ship) keeps the by-name load.
+    try:
+        _lock = embedder_lock.resolve(os.environ["WIZARD_LIBRARY_DB"])
+    except embedder_lock.EmbedderLockError as _e:
+        if _e.code != "LOCK_MISSING":
+            raise
+        _lock = None
+    if _lock is not None:
+        if _lock["model_id"] != os.environ["EMBED_REPO"]:
+            raise RuntimeError("the install lock names %s but this run selected %s; the lock is the promise"
+                               % (_lock["model_id"], os.environ["EMBED_REPO"]))
+        _snap, _computed = embedder_lock.verify_snapshot_against_lock(_lock)
+        print("  cached + verified " + _lock["model_id"] + "@" + _lock["revision"][:12]
+              + " (embedder; weights " + _computed[:12] + " == lock; " + format(_bytes_of(str(_snap)), ",") + " bytes)")
+    else:
+        from sentence_transformers import SentenceTransformer
+        SentenceTransformer(os.environ["EMBED_REPO"], trust_remote_code=True)
+        print("  cached " + os.environ["EMBED_REPO"] + " (embedder; no install lock for this tier)")
+    # THE RERANKER, BY ITS PIN: the catalogue's `rerankers` entry names the
+    # repository, its hub revision and the weights_hash; it is fetched AT THAT
+    # REVISION and hashed before this install calls it cached. A reranker the
+    # catalogue does not pin is not fetched: a name is not a pin.
     wanted = []
     if os.environ.get("RERANKER_REPO"):         # empty: the reranker gate is OFF on this machine (nothing fetched)
-        wanted.append((os.environ["RERANKER_REPO"], "reranker (this install loads this one)"))
-    if wanted and os.environ.get("PRECACHE_FALLBACK") == "1":
-        wanted.append((os.environ["RERANKER_FALLBACK_REPO"], "reranker fallback"))
+        wanted = [(n, e) for n, e in embedder_lock.catalogue_rerankers().items()
+                  if e["model_id"] == os.environ["RERANKER_REPO"]]
+        if not wanted:
+            print("  reranker %s is NOT pinned in organs/embedders.lock.json -- not pre-cached "
+                  "(this package fetches nothing it does not pin)" % os.environ["RERANKER_REPO"])
+        if os.environ.get("PRECACHE_FALLBACK") == "1":
+            print("  PRECACHE_FALLBACK=1: the fallback %s is not pinned in the catalogue and is NOT "
+                  "fetched; it loads only from a cache you populate yourself" % os.environ["RERANKER_FALLBACK_REPO"])
     total = 0
-    for repo, what in wanted:
-        n = _bytes_of(snapshot_download(repo))
+    for _name, _entry in wanted:
+        _snap, _computed = embedder_lock.verify_snapshot_against_lock(_entry, allow_fetch=True, pin_kind="reranker")
+        n = _bytes_of(str(_snap))
         total += n
-        print("  cached %s (%s): %s bytes" % (repo, what, format(n, ",")))
+        print("  cached + verified %s@%s (reranker pin %r, weights %s..., %s bytes)"
+              % (_entry["model_id"], _entry["revision"][:12], _name, _computed[:12], format(n, ",")))
     if wanted:
         print("  reranker bytes on disk: %s" % format(total, ","))
         print("  embedder + reranker cached.")

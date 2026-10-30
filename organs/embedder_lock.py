@@ -720,9 +720,12 @@ def _fetch_pinned(model_id: str, revision: str, *, allow_fetch: bool, weights_ha
             "SNAPSHOT_ABSENT",
             f"no local snapshot for {what} {model_id}@{revision[:12]} under {hf_hub_cache()} and "
             + ("this process is HF-offline (HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE)" if hf_offline()
-               else "fetching is disabled for this caller"),
+               else "fetching is disabled for this caller")
+            + ". Fetch it, with the network: `python3 organs/model_fetch.py --db <brain>/claude_memory.db` "
+              "(from the installed brain directory) -- or populate the cache yourself at exactly this revision.",
             weights_hash=weights_hash, model_id=model_id, revision=revision, what=what,
-            hf_hub_cache=str(hf_hub_cache()))
+            hf_hub_cache=str(hf_hub_cache()),
+            retry=["python3 organs/model_fetch.py --db <brain>/claude_memory.db"])
     from huggingface_hub import snapshot_download    # only here, only when absent
     kwargs: Dict[str, Any] = {"revision": revision}
     if allow_patterns:
