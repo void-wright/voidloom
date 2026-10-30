@@ -135,7 +135,7 @@ _V2_EMB_TABLE = "memory_embeddings_v2"
 # Embedding access (for the MMR cosine).
 # ==========================================================================
 
-def _active_embedding_table(conn: sqlite3.Connection) -> str:
+def _active_embedding_table(conn: sqlite3.Connection) -> Optional[str]:
     """Resolve the active vec table. Mirrors hybrid_retrieval's resolver so the
     MMR cosine reads the SAME tier the store side wrote to. Fail-safe: any
     error -> the Nomic default (so a missing metadata table never raises)."""
@@ -145,8 +145,12 @@ def _active_embedding_table(conn: sqlite3.Connection) -> str:
     # carries the defect it controls for cannot falsify anything.
     #
     # MMR is a diversity re-rank on a hot path; refusing outright would drop
-    # diversity entirely. So: resolve through the one resolver, and where it
-    # refuses, say so at ERROR and fall back to the LIVE table, never the dormant.
+    # diversity entirely. So: resolve through the one resolver (the install lock
+    # first, metadata only for a brain with no lock), and where it refuses, say so
+    # at ERROR and return None: no diversity signal for this call, relevance order
+    # stands. No other table is substituted -- the jina table this used to fall
+    # back to holds another model's space, and on a locked brain it is never the
+    # table the store side wrote.
     import sys as _s, os as _o
     _d = _o.path.dirname(_o.path.abspath(__file__))
     if _d not in _s.path:
@@ -156,10 +160,11 @@ def _active_embedding_table(conn: sqlite3.Connection) -> str:
         return embed_resolver.resolve(conn)[0]
     except Exception as e:
         logger.error(
-            "recall_diversity: embedding tier UNRESOLVED (%s: %s); MMR cosine "
-            "falls back to %r.", type(e).__name__, e, _V2_EMB_TABLE,
+            "recall_diversity: embedding tier UNRESOLVED (%s: %s); no diversity "
+            "signal for this call (relevance order stands). No table is substituted.",
+            type(e).__name__, e,
         )
-        return _V2_EMB_TABLE
+        return None
 
 
 def _load_embeddings(
@@ -180,6 +185,8 @@ def _load_embeddings(
     if not ids:
         return {}
     emb_table = _active_embedding_table(conn)
+    if emb_table is None:
+        return {}
     placeholders = ",".join("?" * len(ids))
     out: Dict[int, np.ndarray] = {}
     try:
@@ -593,6 +600,8 @@ def is_diversity_available(conn: sqlite3.Connection) -> bool:
     """
     try:
         emb_table = _active_embedding_table(conn)
+        if emb_table is None:
+            return False
         row = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') "
             "AND name=?",

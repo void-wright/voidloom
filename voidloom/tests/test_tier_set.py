@@ -365,6 +365,9 @@ class TestTierSet(unittest.TestCase):
         self.assertEqual(after, before, "old vectors, stamps and metadata rows as before the switch")
         self.assertEqual(env["receipt"]["memories_without_a_restored_vector"], 1)
         self.assertIn("tier set nomic", env["gap_fill"])
+        # the report names `tier set <old tier>` as THE route when the old tier is shipped
+        self.assertIn("`voidloom tier set nomic` is the route", env["route"])
+        self.assertEqual(env["receipt"]["route"], env["route"])
 
     def test_rollback_saboteur_second_rollback_and_lockless_source(self):
         db = make_brain(self.dir, "jina")
@@ -373,6 +376,9 @@ class TestTierSet(unittest.TestCase):
         env = self.ts.rollback(db)
         self.assertEqual(env["status"], "ok", env)
         self.assertIsNone(lock_bytes(self.dir), "a lockless brain is lockless again")
+        # a jina source: `tier set` cannot target it, so the report says restore is the only route
+        self.assertIn("restore is the only route", env["route"])
+        self.assertNotIn("voidloom tier set", env["route"])
         import embed_resolver
         c = _connect(db)
         self.assertEqual(embed_resolver.resolve(c), ("memory_embeddings_v2", 1024))

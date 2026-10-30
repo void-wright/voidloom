@@ -454,24 +454,23 @@ def _encode_for_embedding(text: str, conn=None) -> Optional[bytes]:
                          "REFUSED downstream if this brain is on jina/1024.",
                          type(e).__name__, e)
     try:
-        from sentence_transformers import SentenceTransformer
-        import torch
-        import numpy as np
-
         # setdefault is FORBIDDEN (#15708): it yields to an existing OR EMPTY
         # value, so an exported-but-empty variable silently wins.  Resolve.
         from voidloom_device import apply_cuda_pin as _apply
         _apply()
-        device = _torch_device(torch)
-        model = SentenceTransformer(
-            "nomic-ai/nomic-embed-text-v1.5",
-            revision=_NOMIC_REVISION,  # Voidloom #176 RCE: pin code tree (moved tag can't swap it)
-            trust_remote_code=True,
-            device=device,
-        )
-        query = f"search_document: {text}"
-        vec = model.encode(query, normalize_embeddings=True)
-        return _serialize_f32(vec[:_NOMIC_DIM].astype(np.float32).tolist())
+        # The local nomic path loads THROUGH THE SHIPPED CATALOGUE ENTRY (organs/
+        # embedders.lock.json, tier 'cpu'): the model AND its remote-code repository
+        # at their pinned revisions, the bytes checksum-verified before anything is
+        # instantiated, read from the verified snapshot directory. A by-name load
+        # resolves the hub's moving `main` for the remote code, which a cache
+        # holding only the pinned bytes cannot satisfy offline -- and could run
+        # bytes nobody checked online.
+        import embedding_upgrade as _eu
+        lock = dict(_eu._lock_module().catalogue_tiers()["cpu"])
+        lock["tier"] = "cpu"
+        if int(lock["dim"]) != _NOMIC_DIM:
+            raise ValueError("the shipped cpu tier is %s wide, this path writes %d" % (lock["dim"], _NOMIC_DIM))
+        return _eu.encode_locked(text, is_query=False, lock=lock)
     except Exception as e:
         logger.warning("Embedding failed: %s", e)
         return None

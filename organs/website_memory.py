@@ -93,10 +93,23 @@ def _load_model():
     if "model" in _model_cache:
         return _model_cache["model"]
     try:
-        from sentence_transformers import SentenceTransformer
-        import torch
-        device = _torch_device(torch)
-        model = SentenceTransformer(NOMIC_MODEL_NAME, revision="e9b6763023c676ca8431644204f50c2b100d9aab", trust_remote_code=True, device=device)
+        # Loaded THROUGH THE SHIPPED CATALOGUE ENTRY for nomic (organs/embedders.lock.json,
+        # tier 'cpu'), the model this store's 768-wide table holds: the model and its
+        # remote-code repository at their pinned revisions, checksum-verified before
+        # instantiation, read from the verified snapshot directory. Not the brain's own
+        # install lock -- that names whatever tier the BRAIN uses, and this database is
+        # always nomic. A by-name load resolved the remote code at the hub's moving `main`,
+        # which a cache holding only the pinned bytes cannot satisfy offline.
+        _here = os.path.dirname(os.path.abspath(__file__))
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        import embedding_upgrade as _eu
+        lock = dict(_eu._lock_module().catalogue_tiers()["cpu"])
+        lock["tier"] = "cpu"
+        if lock["model_id"] != NOMIC_MODEL_NAME or int(lock["dim"]) != NOMIC_DIM:
+            raise ValueError("the shipped cpu tier is %s/%s, this store is %s/%d"
+                             % (lock["model_id"], lock["dim"], NOMIC_MODEL_NAME, NOMIC_DIM))
+        model, _ = _eu.get_locked_embedder(lock)
         _model_cache["model"] = model
         return model
     except Exception as e:

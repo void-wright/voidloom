@@ -485,6 +485,30 @@ def _embedding_coherence(db_path: Optional[str]) -> Dict[str, Any]:
             out["recorded_table"] = rows.get("active_embedding_table")
             out["recorded_model"] = rows.get("active_embedding_model")
             tab = out["recorded_table"]
+            # THE INSTALL LOCK FIRST (organs/embed_resolver.py): on a brain with a lock the lock names the
+            # table and its width, and the metadata rows only echo it. `voidloom tier set` moves both in one
+            # transaction, so a disagreement means a switch was interrupted after the lock moved; re-running
+            # the same `tier set` finishes it. A brain with no lock is read from metadata, as before.
+            locked = None
+            try:
+                od = str(_paths.organ_dir())
+                if od not in sys.path:
+                    sys.path.insert(0, od)
+                import embed_resolver as _er  # type: ignore
+                locked = _er._from_lock(conn)
+            except ImportError:
+                locked = None
+            except Exception as e:
+                out["reason"] = f"{getattr(e, 'code', type(e).__name__)}: {e}"
+                return out
+            out["table_source"] = "lock" if locked else "metadata"
+            if locked:
+                tab = locked[0]
+                out["resolved_table"], out["resolved_dim"] = locked
+                if out["recorded_table"] and out["recorded_table"] != tab:
+                    out["metadata_disagrees"] = (
+                        f"the install lock names {tab} but metadata records {out['recorded_table']}: a "
+                        f"`voidloom tier set` was interrupted after the lock moved; run it again to finish")
             if not tab:
                 out["reason"] = "the brain records no active_embedding_table"
                 return out
@@ -534,12 +558,14 @@ def _embedding_coherence(db_path: Optional[str]) -> Dict[str, Any]:
         rec = int(out["recorded_dim"]) if out["recorded_dim"] is not None else None
     except (TypeError, ValueError):
         rec = None
+    if out.get("resolved_dim") is not None:
+        rec = int(out["resolved_dim"])          # the lock's width is the promise when there is a lock
     if rec is None or out["observed_dim"] is None:
         out["reason"] = "one side is unknown; not compared"
         return out
     out["agrees"] = (rec == out["observed_dim"])
     if not out["agrees"]:
-        out["reason"] = (f"the brain records {rec}-dim vectors for {out['recorded_table']} "
+        out["reason"] = (f"the brain records {rec}-dim vectors for {out.get('resolved_table') or out['recorded_table']} "
                          f"but the table holds {out['observed_dim']}-dim vectors — semantic "
                          f"recall over this table cannot be trusted")
     return out

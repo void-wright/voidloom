@@ -441,8 +441,9 @@ def plan(db: Path, tier: str) -> Dict[str, Any]:
 
 # The flip embeds at most this many late rows inside its write transaction; more, and
 # it rolls back, converges outside (per-batch commits) and tries again -- so a store
-# from another process never waits behind a long encode. Neither number is measured:
-# they bound a wait, and a writer that outpaces them is told to stop instead.
+# from another process never waits behind a long encode. Both numbers are INVENTED, NOT
+# TUNED: nothing was measured to choose them. They bound a wait, and a writer that
+# outpaces them is told to stop instead.
 FLIP_GAP_CAP = 32
 FLIP_ATTEMPTS = 10
 
@@ -623,8 +624,17 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
     receipt = {"at": _now(), "action": "tier-rollback", "by": "tier rollback", "db": str(db),
                "restored_vec_table": restored, "restored_lock": pre["previous_lock_raw"] is not None,
                "memories_without_a_restored_vector": int(gap)}
+    if restored_tier:
+        route = (f"the restored tier ({restored_tier}) is shipped, so `voidloom tier set {restored_tier}` is the "
+                 f"route that fills any gap: it reuses every vector already stamped under it and embeds only "
+                 f"what is missing")
+    else:
+        route = (f"the restored table {restored} belongs to a tier the package does not ship (jina), so "
+                 f"`tier set` cannot target it and this restore is the only route back to it; a gap is filled "
+                 f"by `{fill}`")
+    receipt["route"] = route
     _receipt(data_dir, receipt)
-    return {"status": "ok", "action": "rollback", "receipt": receipt,
+    return {"status": "ok", "action": "rollback", "receipt": receipt, "route": route,
             "gap_fill": fill if gap else None,
             "note": (f"{gap} memor(ies) written after the switch have no vector in {restored}; they are found by "
                      f"keyword until `{fill}` embeds them") if gap else None}

@@ -451,6 +451,12 @@ if ($Tier0Only) {
             $env:PYTHON_KEYRING_BACKEND = "keyring.backends.null.Keyring"
             $env:HF_HUB_DISABLE_TELEMETRY = "1"
 
+            # THE LOCK FIRST (install.sh's C.init): `init` writes <brain>\embedder.lock.json, and
+            # the pre-download below fetches exactly the bytes it names. init is idempotent:
+            # on a locked brain it never re-points the lock; a tier the shipped catalogue does
+            # not carry gets no lock, and the pre-download keeps its by-name path.
+            & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") init *> $null
+
             # PRE-DOWNLOAD the models this host will ACTUALLY load.
             #
             # CRUCIBLE-3 D9-F2: this fetched BAAI/bge-reranker-v2-m3 and labelled it
@@ -468,23 +474,50 @@ if ($Tier0Only) {
             $predlPy = @'
 import os, sys
 EMBED_MODEL    = os.environ["EMBED_MODEL_REPO"]
-RERANKER_MODEL = os.environ["RERANKER_MODEL"]
+RERANKER_MODEL = os.environ.get("RERANKER_MODEL", "")
+sys.path.insert(0, os.path.join(os.environ["WIZARD_LIBRARY_HOME"], "organs"))
 try:
-    from sentence_transformers import SentenceTransformer
-    from huggingface_hub import snapshot_download
+    import embedder_lock
 except Exception as e:
-    print(f"  ! sentence-transformers import failed: {e}", file=sys.stderr); sys.exit(3)
+    print(f"  ! organs/embedder_lock.py import failed: {e}", file=sys.stderr); sys.exit(3)
 try:
-    print(f"  ... fetching embedder {EMBED_MODEL}", flush=True)
-    SentenceTransformer(EMBED_MODEL, trust_remote_code=True)
-    # snapshot_download, not CrossEncoder: the default backend is a
-    # Qwen3ForCausalLM, which CrossEncoder cannot instantiate. The snapshot is the
-    # cache both loaders read.
-    print(f"  ... fetching reranker {RERANKER_MODEL}", flush=True)
-    snapshot_download(RERANKER_MODEL)
+    # THE LOCK, not a repo name: `init` (run just above) wrote <brain>/embedder.lock.json.
+    # Fetch EXACTLY the bytes it names -- the model at lock.revision and its remote-code
+    # repository at lock.code.revision -- checksum them against lock.weights_hash, and
+    # instantiate nothing. A by-name load resolves the hub's moving `main`, which a cache
+    # holding only the pinned bytes cannot satisfy offline. A brain with no lock (a tier
+    # the shipped catalogue does not carry) keeps the by-name load.
+    try:
+        lock = embedder_lock.resolve(os.environ["WIZARD_LIBRARY_DB"])
+    except embedder_lock.EmbedderLockError as e:
+        if e.code != "LOCK_MISSING":
+            raise
+        lock = None
+    if lock is not None:
+        if lock["model_id"] != EMBED_MODEL:
+            raise RuntimeError("the install lock names %s but this run selected %s; the lock is the promise"
+                               % (lock["model_id"], EMBED_MODEL))
+        print(f"  ... fetching embedder {lock['model_id']}@{lock['revision'][:12]} (the install lock's pins)", flush=True)
+        snap, computed = embedder_lock.verify_snapshot_against_lock(lock)
+        print(f"  cached + verified {lock['model_id']} (weights {computed[:12]} == lock)", flush=True)
+    else:
+        from sentence_transformers import SentenceTransformer
+        print(f"  ... fetching embedder {EMBED_MODEL} (no install lock for this tier)", flush=True)
+        SentenceTransformer(EMBED_MODEL, trust_remote_code=True)
+    # THE RERANKER, BY ITS PIN: only a reranker the catalogue pins is fetched, at that
+    # revision, and hashed before it is called cached. A name is not a pin: the unpinned
+    # fallback reranker is never pre-fetched.
+    if RERANKER_MODEL:
+        wanted = [(n, e) for n, e in embedder_lock.catalogue_rerankers().items() if e["model_id"] == RERANKER_MODEL]
+        if not wanted:
+            print(f"  reranker {RERANKER_MODEL} is NOT pinned in organs/embedders.lock.json -- not pre-cached")
+        for name, entry in wanted:
+            print(f"  ... fetching reranker {entry['model_id']}@{entry['revision'][:12]} (catalogue pin {name!r})", flush=True)
+            embedder_lock.verify_snapshot_against_lock(entry, allow_fetch=True, pin_kind="reranker")
 except Exception as e:
-    print(f"  ! model pre-download failed: {e}", file=sys.stderr); sys.exit(4)
-print("  both models cached — full L4 (semantic + reranked hybrid) recall ready.")
+    code = getattr(e, "code", None)
+    print(f"  ! model pre-download failed: {code + ': ' if code else ''}{e}", file=sys.stderr); sys.exit(4)
+print("  models cached and verified against their pins -- full L4 (semantic + reranked hybrid) recall ready.")
 sys.exit(0)
 '@
             $tmpPre = Join-Path $env:TEMP "wl_predownload.py"; Set-Content -Path $tmpPre -Value $predlPy -Encoding UTF8
@@ -496,7 +529,7 @@ sys.exit(0)
             } else {
                 Warn "could not pre-download one or both models (offline, low disk, or HF unreachable)."
                 Warn "Tier 0 (keyword recall) is unaffected. To fetch the models by hand:"
-                Warn "  & `"$VenvPy`" -c `"from sentence_transformers import SentenceTransformer; from huggingface_hub import snapshot_download; SentenceTransformer('$EmbedRepo', trust_remote_code=True); snapshot_download('$RerankerRepo')`""
+                Warn "  & `"$VenvPy`" `"$BrainDir\organs\model_fetch.py`" --db `"$DbPath`"   (fetches the pinned bytes the install lock names)"
             }
 
             & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") init *> $null

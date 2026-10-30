@@ -11,6 +11,28 @@ All notable changes to Voidloom are recorded here. The format follows
 - `WIZARD_GAP_RESEARCH_FOCUS` (in the env file the scheduled jobs read) points gap research at
   your own field; the default stays generic. A `research_focus` key in a `--config` file wins
   over it.
+- **An install lock.** `claude_memory.py init` writes `embedder.lock.json` beside the brain. It
+  names the embedder (model, revision, its remote-code repository's revision, a checksum of the
+  bytes, width and table) from the shipped catalogue `organs/embedders.lock.json`. The model is
+  loaded only after its files on disk match that checksum, and every new vector's provenance
+  stamp records the checksum the loaded model computed. Brains installed before this keep
+  working: they are read against the catalogue entry for the tier they already use, and their
+  older stamps read `unresolved` until re-embedded. A tier the catalogue does not ship (jina)
+  gets no lock and works as before.
+- **`voidloom tier set <nomic|qwen>`** moves a brain to another embedding model by re-embedding
+  every memory under it while the old model keeps serving recall. It switches only when every
+  memory has a vector under the new model, replacing the lock in one step and writing a
+  receipt to `embedder.lock.history.jsonl`. `--plan` counts the work first and changes nothing.
+  The old vectors are kept. **To roll back,** run `voidloom tier rollback`: it restores the
+  previous lock and table and reports how many memories written after the switch have no
+  vector there. When the old tier is shipped, `voidloom tier set <old tier>` fills that gap,
+  reusing every vector already present; for a jina brain the rollback is the only way back.
+  `voidloom tier cleanup --confirm <old table>` deletes the old vectors, writes its own receipt,
+  and ends the rollback. A late write during the switch is embedded inside it, at most 32
+  memories per attempt and 10 attempts (`FLIP_GAP_CAP`, `FLIP_ATTEMPTS` in `organs/tier_set.py`).
+  **Both bounds are invented, not tuned**: nothing was measured to choose them.
+- Migrations 042–045: provenance stamps can name the weights checksum; the re-embed log states
+  its model and width; seed and origin columns on memories; derived-layer stamps.
 
 ### Fixed
 
@@ -40,6 +62,25 @@ All notable changes to Voidloom are recorded here. The format follows
 - The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned
   HuggingFace commit, as nomic and jina already did. Results no longer depend on when the
   model was downloaded, and a warm cache loads offline. A test fails if either pin is removed.
+- **Qwen3-Embedding now loads only from files already on disk.** Its bytes are checked against
+  the install lock first, and the catalogue's pin and the engine's pin must agree. Fetch it
+  before first use with `python3 organs/model_fetch.py --db <brain>/claude_memory.db`, or let
+  `voidloom tier set qwen` fetch it at the pin while online.
+- **The installers no longer pre-cache the unpinned BGE reranker or the fallback reranker.**
+  Only a reranker the catalogue pins is downloaded, at its revision, and checked. The fallback
+  loads only from a cache you fill yourself.
+- The installers write the lock before pre-caching, then fetch exactly the files it names (the
+  Windows installer now does too). The self-check verifies the embedder by checksum and loads
+  nothing.
+- Every component that chooses a vector table reads the install lock first and the metadata
+  rows only for a brain without one: the dream pipeline (which used to send a qwen brain to
+  the nomic table), the Tier-1 probe, `voidloom doctor` and `embedding_upgrade.py stats`. If
+  `tier set` is interrupted after the lock moved, `voidloom doctor` says so and names the
+  command that finishes it. The diversity re-rank no longer falls back to the jina table when
+  the lock cannot be read; it drops its signal for that call.
+- `organs/website_memory.py` and the whisper network's fallback encoder load nomic at the
+  catalogue's pinned model and code revisions, checksum-verified, instead of by name.
+- `embedding_upgrade.py re-embed` on a locked brain re-embeds under that brain's own lock.
 
 ## [1.0.0] — 2026-10-27
 

@@ -1152,6 +1152,19 @@ def cmd_stats(args) -> Dict[str, Any]:
         "SELECT value FROM metadata WHERE key = 'active_embedding_table'"
     ).fetchone()
     active_table = active_table_row[0] if active_table_row else "memory_embeddings"
+    # The install lock first: on a locked brain it names the model and table, and the metadata rows
+    # only echo it (`tier set` moves them together). A brain with no lock is read from metadata.
+    # embed_resolver's rule decides (a lock naming a table or width the engine does not build refuses).
+    table_source, lock_error = "metadata", None
+    _el = _lock_module()
+    import embed_resolver as _er            # stdlib-only, beside embedder_lock (imported above)
+    try:
+        _locked = _er._from_lock(conn)
+        if _locked is not None:
+            active_model = _el.resolve(conn)["model_id"]
+            active_table, table_source = _locked[0], "lock"
+    except (_er.EmbedTierUnresolved, _el.EmbedderLockError) as e:
+        lock_error = f"{e.code}: {e}"
 
     # Check upgrade log
     upgrade_log = []
@@ -1184,6 +1197,8 @@ def cmd_stats(args) -> Dict[str, Any]:
         },
         "active_model": active_model,
         "active_table": active_table,
+        "table_source": table_source,
+        "lock_error": lock_error,
         "coverage_v1_pct": round(100 * v1_count / active_count, 1) if active_count else 0,
         "coverage_v2_pct": round(100 * v2_count / active_count, 1) if active_count else 0,
         "recent_upgrade_log": upgrade_log,

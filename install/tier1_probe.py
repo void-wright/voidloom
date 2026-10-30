@@ -88,19 +88,54 @@ def _ro_uri(db: str) -> str:
     return "file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db))
 
 
+def _lock_table(db: str):
+    """The install lock's vec_table for the brain at `db`: (table, None), or (None, None) when there is no
+    lock beside it (a brain installed before the lock), or (None, "<CODE>: <why>") when a lock is there and
+    cannot be used. The lock is read FIRST because `voidloom tier set` moves it: a brain whose lock and
+    metadata row disagree is mid-switch, and the lock is the promise. The rule is organs/embed_resolver.py's
+    own (stdlib-only, beside embedder_lock in the sibling organs/ directory of both the package and a laid
+    brain), so this probe cannot accept a lock the engine would refuse."""
+    lock_file = Path(os.path.abspath(db)).parent / "embedder.lock.json"
+    organs = str(Path(__file__).resolve().parent.parent / "organs")
+    try:
+        if organs not in sys.path:
+            sys.path.insert(0, organs)
+        import embed_resolver
+    except ImportError as e:
+        if lock_file.exists():
+            return None, "LOCK_UNREADABLE: %s is present but embed_resolver is not importable from %s (%s)" % (
+                lock_file, organs, e)
+        return None, None
+    try:
+        c = sqlite3.connect(_ro_uri(db), uri=True)
+    except sqlite3.Error:
+        return None, None                         # db_facts reports the unreadable brain itself
+    try:
+        got = embed_resolver._from_lock(c)
+    except embed_resolver.EmbedTierUnresolved as e:
+        return None, "%s: %s" % (e.code, e)
+    finally:
+        c.close()
+    return (got[0], None) if got else (None, None)
+
+
 def db_facts(db: str) -> dict:
-    """The brain's declarations, read without writing: the active table, its declared width,
-    tier0_only. mode=ro, NEVER immutable=1 (reference-host round, iteration 2; memory #21830):
+    """The brain's declarations, read without writing: the active table (from the install lock when
+    there is one, else metadata), its declared width, tier0_only. mode=ro, NEVER immutable=1 (reference-host round, iteration 2; memory #21830):
     these facts decide the brain's CURRENT state (P2's width, P3's tier, the counts' table), and
     immutable=1 skips the WAL -- a declaration committed behind an open reader stayed invisible.
     mode=ro is WAL-aware; on a WAL brain it may leave SQLite's -wal/-shm beside it."""
     out = {"db": db}
+    locked, lock_err = _lock_table(db)
+    if lock_err:
+        out["error"] = lock_err
+        return out
     try:
         c = sqlite3.connect(_ro_uri(db), uri=True)
         try:
             row = c.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
             t0 = c.execute("SELECT value FROM metadata WHERE key='tier0_only'").fetchone()
-            table = row[0] if row else None
+            table = locked or (row[0] if row else None)
             ddl = None
             if table:
                 r = c.execute("SELECT sql FROM sqlite_master WHERE name=?", (table,)).fetchone()
@@ -111,7 +146,8 @@ def db_facts(db: str) -> dict:
         out["error"] = "%s: %s" % (type(e).__name__, e)
         return out
     m = _DIM_RE.search(ddl or "")
-    out.update({"active_embedding_table": table, "tier": TIER_BY_TABLE.get(table or ""),
+    out.update({"active_embedding_table": table, "table_source": "lock" if locked else "metadata",
+                "tier": TIER_BY_TABLE.get(table or ""),
                 "declared_dim": int(m.group(1)) if m else None,
                 "tier0_only": (t0[0] if t0 else None)})
     return out

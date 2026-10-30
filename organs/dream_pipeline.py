@@ -275,15 +275,19 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
 
 
 def _detect_embed_table(conn: sqlite3.Connection) -> Tuple[str, int]:
-    try:
-        row = conn.execute(
-            "SELECT value FROM metadata WHERE key='active_embedding_table'"
-        ).fetchone()
-    except sqlite3.OperationalError:
-        row = None
-    if row and row[0] == "memory_embeddings_v2":
-        return "memory_embeddings_v2", _JINA_DIM
-    return "memory_embeddings", _NOMIC_DIM
+    """(table, dim) through embed_resolver: the install lock beside this database
+    first, the metadata row only for a brain with no lock. This used to read the
+    metadata row alone and answer two ways (jina or nomic), so a qwen brain was
+    read from the nomic table, and a brain whose lock had moved (`tier set`) was
+    read from the table the lock no longer names. A batch organ has no interactive
+    caller to degrade for: a refusal propagates and the cycle stops, loudly
+    (compute_novelty catches it, as it catches every failure)."""
+    import os as _o, sys as _s
+    _d = _o.path.dirname(_o.path.abspath(__file__))
+    if _d not in _s.path:
+        _s.path.insert(0, _d)
+    import embed_resolver
+    return embed_resolver.resolve(conn)
 
 
 def _is_vec0_table(conn: sqlite3.Connection, table: str) -> bool:
