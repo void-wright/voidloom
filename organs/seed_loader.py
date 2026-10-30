@@ -197,7 +197,7 @@ def seed_shape(conn: sqlite3.Connection) -> Dict[str, Any]:
             enable_vec(conn)                     # the vector table is vec0: readable only with the extension
         except SeedLoadError:
             pass
-        table = memory_write.provenance_filter(conn)[0]
+        table = memory_write.provenance_filter(conn).vec_table
         out["seed_rows_with_vector_and_stamp"] = conn.execute(
             f"SELECT COUNT(*) FROM memories m JOIN embedding_provenance p ON p.memory_id = m.id "
             f"WHERE m.seed = 1 AND COALESCE(m.is_archived,0)=0 AND p.vec_table = ? "
@@ -225,7 +225,7 @@ def delete_one(db: str, origin: str) -> Dict[str, Any]:
         mid = rows[0][0]
         try:
             import memory_write
-            table = memory_write.provenance_filter(conn)[0]
+            table = memory_write.provenance_filter(conn).vec_table
             conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (mid,))
         except Exception:
             pass                                 # no tier / no vec0 on a Tier-0 brain: no vector to drop
@@ -286,7 +286,7 @@ def self_test(db: str, *, doctrine: Path = DOCTRINE_DEFAULT, mode: Optional[str]
     bar = int(ds.get("bar", 23))
     conn = _connect(db)
     try:
-        table = memory_write.provenance_filter(conn)[0]
+        table = memory_write.provenance_filter(conn).vec_table
         lock = embedding_upgrade.brain_lock(conn, tier=claude_memory._TABLE_TO_TIER.get(table, ""))
         by_mode: Dict[str, Any] = {}
         qvecs: Dict[int, bytes] = {}

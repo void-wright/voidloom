@@ -37,6 +37,7 @@ from __future__ import annotations
 import hashlib
 import re
 import sqlite3
+import json
 import struct
 import subprocess
 import sys
@@ -545,6 +546,251 @@ class C12_EngineVectorWritesStamp(_BrainCase):
         self.assertEqual((cov.covered, cov.vectors_without_stamp), (1, 0))
         self.assertEqual(self.conn.execute("SELECT organ FROM embedding_provenance WHERE memory_id=?",
                                            (mid,)).fetchone()[0], "claude_memory.store")
+
+
+
+# ============================================================================
+# THE READER ON A LOCKED BRAIN, AND ON A BRAIN WITH NO LOCK (owner decision D2).
+#
+# A locked brain (the shipped cpu tier: nomic, 768, memory_embeddings, with
+# <data-dir>/embedder.lock.json written by embedder_lock.write_lock) searches only
+# rows stamped under the lock's computed checksum. No model is loaded: the
+# process register is given the catalogue's checksum, as the one loader would
+# after verifying the bytes, and the encoder is a content-derived stub.
+# ============================================================================
+L_TABLE, L_DIM = "memory_embeddings", 768
+
+
+def _l_encoder(text: str) -> bytes:
+    h = hashlib.sha256(text.encode()).digest()
+    return struct.pack(f"{L_DIM}f", *[((h[i % 32] / 255.0) - 0.5) for i in range(L_DIM)])
+
+
+def _l_axis(i: int) -> bytes:
+    v = [0.0] * L_DIM
+    v[i] = 1.0
+    return struct.pack(f"{L_DIM}f", *v)
+
+
+class _LockedCase(unittest.TestCase):
+    def setUp(self):
+        import embedder_lock as el
+        import memory_write as mw
+        self.el, self.mw = el, mw
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        self.db = self.d / "claude_memory.db"
+        c = _connect(self.db)
+        c.executescript(f"""
+            CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT);
+            INSERT INTO metadata VALUES ('active_embedding_table', '{L_TABLE}');
+            CREATE TABLE memories (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL,
+                                   is_archived INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE memory_tags (memory_id INTEGER, tag TEXT);
+            CREATE VIRTUAL TABLE {L_TABLE} USING vec0(memory_id INTEGER PRIMARY KEY, embedding float[{L_DIM}]);
+        """)
+        mw.ensure_provenance_table(c)
+        c.commit()
+        self.conn = c
+        el.write_lock(self.d, "cpu")
+        self.cpu = el.catalogue_tiers()["cpu"]
+        el.register_loaded(model_id=self.cpu["model_id"], revision=self.cpu["revision"],
+                           weights_hash=self.cpu["weights_hash"], dim=L_DIM, vec_table=L_TABLE)
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def write(self, text: str, vec: bytes = None) -> int:
+        mid = _add(self.conn, text)
+        self.mw.attach_embedding(self.conn, mid, text, embedding=vec, encoder=_l_encoder,
+                                 policy="require", organ="test")
+        self.conn.commit()
+        return mid
+
+    def bare_vector(self, text: str, vec: bytes) -> int:
+        """A vector with NO stamp: what a writer that bypassed memory_write leaves."""
+        mid = _add(self.conn, text)
+        self.conn.execute(f"INSERT INTO {L_TABLE} (memory_id, embedding) VALUES (?, ?)", (mid, vec))
+        self.conn.commit()
+        return mid
+
+    def edit_lock(self, **kw) -> None:
+        lp = self.d / self.el.LOCK_NAME
+        lock = json.loads(lp.read_text(encoding="utf-8"))
+        lock.update(kw)
+        lp.write_text(json.dumps(lock), encoding="utf-8")
+
+
+class L1_OtherChecksumIsOutsideTheSearchSet(_LockedCase):
+    def test_control_every_sanctioned_write_is_in_the_search_set(self):
+        ids = [self.write(f"memory {i}") for i in range(3)]
+        flt = self.mw.provenance_filter(self.conn)
+        self.assertEqual((flt.basis, flt.vec_table, flt.weights_hash),
+                         ("lock", L_TABLE, self.cpu["weights_hash"]))
+        self.assertEqual(sorted(self.mw.read_vectors(self.conn, ids)), ids)
+        cov = self.mw.provenance_coverage(self.conn)
+        self.assertEqual((cov.basis, cov.matched, cov.total, cov.clean), ("lock", 3, 3, True))
+
+    def test_saboteur_an_unresolved_stamp_is_absent_from_every_reader_and_is_work(self):
+        ids = [self.write(f"memory {i}") for i in range(3)]
+        self.conn.execute("UPDATE embedding_provenance SET weights_hash = 'unresolved' WHERE memory_id = ?",
+                          (ids[1],))
+        self.conn.commit()
+        cov = self.mw.provenance_coverage(self.conn)
+        self.assertEqual((cov.matched, cov.stamped_other_hash), (2, 1))
+        self.assertIsNone(self.mw.read_vector(self.conn, ids[1]))
+        self.assertNotIn(ids[1], self.mw.read_vectors(self.conn, ids))
+        q = _l_encoder("memory 1")                  # the unresolved row's own text: its nearest
+        self.assertNotIn(ids[1], [m for m, _ in self.mw.knn(self.conn, q, 3)])
+        self.assertIn(ids[1], [m for m, _ in self.mw.pending_embeddings(self.conn)])
+
+
+class L2_LockedReaderRefusesTyped(_LockedCase):
+    def test_control_a_stamped_brain_returns_lock_coverage(self):
+        self.write("a")
+        cov = self.mw.provenance_coverage(self.conn)
+        self.assertIsInstance(cov, self.mw.LockCoverage)
+        self.assertEqual(cov.coverage, {"matched": 1, "total": 1, "value": 1.0})
+
+    def test_saboteur_foreign_weights_in_the_lock_is_NO_ROWS_FOR_LOCK_with_a_histogram(self):
+        self.write("a")
+        self.edit_lock(weights_hash="f" * 64)
+        with self.assertRaises(self.mw.ProvenanceUnmatched) as cm:
+            self.mw.search_set(self.conn)
+        self.assertEqual(cm.exception.code, "NO_ROWS_FOR_LOCK")
+        self.assertEqual(cm.exception.coverage.histogram, {self.cpu["weights_hash"]: 1})
+
+    def test_saboteur_a_malformed_lock_refuses_and_the_envelope_still_carries_coverage(self):
+        self.write("a")
+        self.edit_lock(vec_table="memory_embeddings_v9")
+        with self.assertRaises(self.el.EmbedderLockError) as cm:
+            self.mw.search_set(self.conn)
+        self.assertEqual(cm.exception.code, "LOCK_MALFORMED")
+        env = self.mw.coverage_envelope(self.conn)
+        self.assertEqual((env["ok"], env["error"], env["matched"], env["total"]),
+                         (False, "LOCK_MALFORMED", 0, 1))
+
+    def test_saboteur_an_unshipped_checksum_with_rows_under_it_is_LOCK_NOT_SHIPPED(self):
+        self.write("a")
+        self.edit_lock(weights_hash="a" * 64)
+        self.conn.execute("UPDATE embedding_provenance SET weights_hash = ?", ("a" * 64,))
+        self.conn.commit()
+        with self.assertRaises(self.el.EmbedderLockError) as cm:
+            self.mw.provenance_coverage(self.conn)
+        self.assertEqual(cm.exception.code, "LOCK_NOT_SHIPPED")
+        self.assertEqual(self.mw.coverage_envelope(self.conn)["matched"], 1)
+
+    def test_saboteur_the_locks_checksum_on_another_width_is_STAMP_INCONSISTENT(self):
+        self.write("a")
+        mid = _add(self.conn, "b")
+        row = dict(zip(self.mw.PROVENANCE_COLUMNS, self.conn.execute(
+            "SELECT * FROM embedding_provenance").fetchone()))
+        row.update(memory_id=mid, vec_table="memory_embeddings_v3", dim=1024)
+        self.conn.execute(f"INSERT INTO embedding_provenance ({', '.join(row)}) "
+                          f"VALUES ({', '.join('?' * len(row))})", list(row.values()))
+        self.conn.commit()
+        with self.assertRaises(self.mw.ProvenanceInconsistent) as cm:
+            self.mw.provenance_coverage(self.conn)
+        self.assertEqual(cm.exception.code, "STAMP_INCONSISTENT")
+
+    def test_control_an_empty_brain_is_zero_over_zero_and_searches_nothing(self):
+        cov = self.mw.provenance_coverage(self.conn)
+        self.assertEqual(cov.coverage, {"matched": 0, "total": 0, "value": 0.0})
+        self.assertIsNone(self.mw.search_set(self.conn))
+        self.assertEqual(self.mw.knn(self.conn, _l_axis(0), 3), [])
+
+    def test_saboteur_memories_with_only_unstamped_vectors_refuse_rather_than_answer(self):
+        self.bare_vector("a", _l_axis(0))
+        with self.assertRaises(self.mw.ProvenanceUnmatched):
+            self.mw.knn(self.conn, _l_axis(0), 1)
+
+
+class L3_CoverageIsThreeRawNumbers(_LockedCase):
+    def test_control_half_populated_reports_five_of_ten_not_one_of_two(self):
+        for i in range(10):
+            if i % 2:
+                _add(self.conn, f"unembedded {i}")
+            else:
+                self.write(f"embedded {i}")
+        self.conn.commit()
+        cov = self.mw.provenance_coverage(self.conn)
+        self.assertEqual(cov.coverage, {"matched": 5, "total": 10, "value": 0.5})
+        self.assertEqual(cov.as_dict()["coverage_of_active"], {"num": 5, "den": 10, "value": 0.5})
+
+    def test_saboteur_an_archived_vectored_memory_leaves_numerator_and_denominator(self):
+        a, b = self.write("a"), self.write("b")
+        self.conn.execute("UPDATE memories SET is_archived = 1 WHERE id = ?", (b,))
+        self.conn.commit()
+        self.assertEqual(self.mw.provenance_coverage(self.conn).coverage,
+                         {"matched": 1, "total": 1, "value": 1.0})
+        self.assertEqual([m for m, _ in self.mw.knn(self.conn, _l_encoder("b"), 2)], [a])
+
+
+class L4_OneUnitOfWork(_LockedCase):
+    def test_control_the_predicate_counts_work_and_writing_it_drives_it_to_zero(self):
+        a = _add(self.conn, "never embedded")
+        self.write("embedded")
+        self.conn.commit()
+        self.assertEqual(self.mw.count_pending_embeddings(self.conn), 1)
+        self.assertEqual(self.mw.pending_embeddings(self.conn), [(a, "never embedded")])
+        self.mw.attach_embedding(self.conn, a, "never embedded", encoder=_l_encoder,
+                                 policy="require", organ="test")
+        self.conn.commit()
+        self.assertEqual(self.mw.count_pending_embeddings(self.conn), 0)
+
+    def test_saboteur_an_edit_and_an_unstamped_vector_are_work_not_done(self):
+        a = self.write("before the edit")
+        b = self.bare_vector("bare", _l_axis(1))
+        self.conn.execute("UPDATE memories SET content = 'after the edit' WHERE id = ?", (a,))
+        self.conn.commit()
+        self.assertEqual([m for m, _ in self.mw.pending_embeddings(self.conn)], [a, b])
+
+
+class L5_KnnIsAPreFilter(_LockedCase):
+    def test_control_the_nearest_unstamped_row_is_skipped_not_returned_as_a_gap(self):
+        near = self.bare_vector("nearest, unstamped", _l_axis(0))
+        stamped = self.write("stamped", vec=_l_axis(1))
+        self.assertEqual([m for m, _ in self.mw.knn(self.conn, _l_axis(0), 1)], [stamped])
+        self.assertNotEqual(near, stamped)
+
+    def test_control_exclude_id_drops_the_querys_own_row_and_still_returns_k(self):
+        a = self.write("a", vec=_l_axis(0))
+        b = self.write("b", vec=_l_axis(1))
+        self.assertEqual([m for m, _ in self.mw.knn(self.conn, _l_axis(0), 1, exclude_id=a)], [b])
+
+
+class D2_LocklessBrainSearchesItsWholeTable(_BrainCase):
+    """Public's jina brain above has no lock: it made no promise about bytes, so
+    every reader reads the whole table it resolves to, as it did before the lock."""
+
+    def test_control_the_filter_says_lockless_and_names_the_resolved_table(self):
+        flt = self.mw.provenance_filter(self.conn)
+        self.assertEqual((flt.basis, flt.vec_table, flt.weights_hash, flt.dim), ("lockless", TABLE, None, DIM))
+        self.assertEqual(self.mw.search_set(self.conn).basis, "lockless")
+
+    def test_saboteur_an_unstamped_vector_is_still_read_without_a_lock(self):
+        mid = _add(self.conn, "legacy, never stamped")
+        vec = _stub_encoder("legacy, never stamped")
+        self.conn.execute(f"INSERT INTO {TABLE} (memory_id, embedding) VALUES (?, ?)", (mid, vec))
+        self.conn.commit()
+        self.assertEqual(self.mw.read_vector(self.conn, mid), vec)
+        self.assertEqual([m for m, _ in self.mw.knn(self.conn, vec, 1)], [mid])
+        env = self.mw.coverage_envelope(self.conn)
+        self.assertEqual((env["basis"] if env["ok"] else env["error"]), "NO_ROWS_FOR_MODEL")
+
+    def test_control_the_lock_predicate_refuses_a_brain_with_no_lock(self):
+        with self.assertRaises(Exception) as cm:
+            self.mw.count_pending_embeddings(self.conn)
+        self.assertEqual(getattr(cm.exception, "code", None), "LOCK_MISSING")
+
+    def test_control_the_envelope_carries_three_numbers_and_the_basis(self):
+        mid = _add(self.conn, "x")
+        _embed(self.conn, mid, "x")
+        self.conn.commit()
+        env = self.mw.coverage_envelope(self.conn)
+        self.assertEqual((env["ok"], env["basis"], env["coverage"]),
+                         (True, "lockless", {"matched": 1, "total": 1, "value": 1.0}))
 
 
 if __name__ == "__main__":
