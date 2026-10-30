@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-30T19:54:11Z from the checkout at `75a3fee`.
+> Generated 2026-10-30T20:11:57Z from the checkout at `02810c7`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| files tracked | 443 |
-| files hashed | 443 |
-| total bytes | 10393344 |
+| files tracked | 444 |
+| files hashed | 444 |
+| total bytes | 10398411 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  173 files, 2769875 bytes
+### `voidloom` — The CLI facade  ·  174 files, 2772677 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -145,6 +145,7 @@
 | `voidloom/tests/test_belief_pair_counts_r2.py` | 1474 | `303248c5329ebf9e` |
 | `voidloom/tests/test_belief_quarantine_r1.py` | 17346 | `6733b724413fec53` |
 | `voidloom/tests/test_brain_busy_wait_r3.py` | 12632 | `5f206fb97833533e` |
+| `voidloom/tests/test_brain_file_mode.py` | 2802 | `2c856469605db161` |
 | `voidloom/tests/test_brain_keyed_locks_r3g3.py` | 22536 | `9e0a08835c195e68` |
 | `voidloom/tests/test_codex_hook_fires_on_resume_d26.py` | 10567 | `486166b342a0a461` |
 | `voidloom/tests/test_cognitive_map_degree_cost_d26.py` | 4187 | `5875111fc486ec70` |
@@ -321,7 +322,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 946756 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 947051 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -338,7 +339,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 129119 | `6231f3827883c00e` |
+| `install/lay_manifest.json` | 129414 | `322c1be2a387cf32` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -487,28 +488,28 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19332 | `6af8d4be38a85697` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8356 | `c7cc27a42ca95b3c` |
+| `docs/LAYOUT.md` | 8356 | `e7c1c0982df8901f` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 33559 | `237fde2a944066d7` |
+| `docs/PACKAGE_MANIFEST.md` | 33559 | `15b1c05ea2799b8d` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  10 files, 415517 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  10 files, 417487 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 14353 | `ffcb60ba7278e5a1` |
+| `CHANGELOG.md` | 14684 | `f20fb45141ce1b07` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `CONTRIBUTING.md` | 6709 | `475e8fbc09ff909e` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
 | `NOTICE` | 4391 | `6608b4df230ab445` |
 | `README.md` | 26899 | `6cadeec2a804a2c3` |
 | `SECURITY.md` | 1930 | `384e3060f9d1866a` |
-| `install.sh` | 333990 | `66d7fd714c631dc8` |
+| `install.sh` | 335629 | `083ffad57c402be3` |
 | `uninstall.sh` | 8695 | `da81d6b412856c4b` |
 
 ### `.github` —   ·  9 files, 20980 bytes

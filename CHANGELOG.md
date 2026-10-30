@@ -64,6 +64,10 @@ All notable changes to Voidloom are recorded here. The format follows
   another width, or another tier's table is refused as `LOCK_MALFORMED` when it is read, for
   every reader. Before, a lock naming the jina table under the cpu tier was accepted, and the
   engine then selected the jina model.
+- A brain the installer creates is readable by its owner only (mode 600), and so are its
+  `-wal`/`-shm` files, whatever the umask. It was 644 under the default umask and under umask
+  000. A brain that was already in place keeps the mode its owner gave it; a mode looser than
+  600 is reported with the command that restricts it.
 
 ### Changed
 

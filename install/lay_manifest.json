@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 425,
+    "core": 426,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 380,
+    "all": 381,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 413,
+    "brain": 414,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "75a3fee",
+  "derived_at_head": "02810c7",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 443,
+  "entries": 444,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 14353,
+   "bytes": 14684,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "ffcb60ba7278e5a170fcbd2ff2f4671d367d90f0d4b25ed6c9432db4290c44bf",
+   "sha256": "f20fb45141ce1b078baa09d786ef0fb13b659c46d8c9e8b6c82aeb16cf38e342",
    "src": "CHANGELOG.md"
   },
   {
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "c7cc27a42ca95b3cb064d650c92d33301b6ccded75005e47d9ce3296b861f78a",
+   "sha256": "e7c1c0982df8901f5b84e2ab1df69a3f59ec1da6f1d3c2ca4531efe671265cc2",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -875,13 +875,13 @@
    "src": "hooks/voidloom_signoff.py"
   },
   {
-   "bytes": 333990,
+   "bytes": 335629,
    "component": "core",
    "dst": null,
    "exec": true,
    "platform": "posix",
    "root": null,
-   "sha256": "66d7fd714c631dc8f5fd072e31e81b2c937d05592ff15774806c7c8d8ae5306c",
+   "sha256": "083ffad57c402be372e1d6c7c967d8854ffe270ccd8fb89e44fbbd2a6030f54c",
    "src": "install.sh"
   },
   {
@@ -3163,6 +3163,16 @@
    "root": "brain",
    "sha256": "5f206fb97833533e9ff59b579862e64df8c20970504d9e9ef86d2d1bfdf86632",
    "src": "voidloom/tests/test_brain_busy_wait_r3.py"
+  },
+  {
+   "bytes": 2802,
+   "component": "core",
+   "dst": "voidloom/tests/test_brain_file_mode.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "2c856469605db16158bc9e40124ec3aaed6bd8d9d4eacd48f8cbd43956d21fca",
+   "src": "voidloom/tests/test_brain_file_mode.py"
   },
   {
    "bytes": 22536,

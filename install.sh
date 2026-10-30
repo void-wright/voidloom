@@ -3275,7 +3275,8 @@ else
     elif resolve_brain_source; then
         SRC_SZ="$(wc -c < "$BRAIN_SRC" 2>/dev/null || echo 0)"
         say "  cloning the brain: ${BRAIN_SRC} ($(( SRC_SZ / 1048576 )) MB) -> ${DB_PATH}"
-        run_argv cp -f "${BRAIN_SRC}" "${DB_PATH}" || die "could not copy the brain snapshot ${BRAIN_SRC} to ${DB_PATH}"
+        ( umask 077; run_argv cp -f "${BRAIN_SRC}" "${DB_PATH}" ) || die "could not copy the brain snapshot ${BRAIN_SRC} to ${DB_PATH}"
+        BRAIN_CREATED=1
     elif [ "$INIT_BLANK" -eq 1 ]; then
         say "  no snapshot found; initializing a FRESH empty brain (--init-blank)."
         # WIZARD_EMBED_MODEL MUST be passed. `init` resolves the tier itself, and on
@@ -3285,7 +3286,10 @@ else
         # memory_embeddings_v3". The announcement and the action disagreed, and the
         # only symptom was a tier stamp nobody reads until first recall. The Tier-1
         # path below passes it; this one did not.
-        if WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$PY_SYS" "${BRAIN_DIR}/organs/claude_memory.py" init >/dev/null 2>&1; then
+        BRAIN_CREATED=1
+        # umask 077 for the creators below: the file is born owner-only, so there is
+        # no instant in which a brain with memories in it is readable by others.
+        if ( umask 077; WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$PY_SYS" "${BRAIN_DIR}/organs/claude_memory.py" init >/dev/null 2>&1 ); then
             say "  fresh brain initialized at ${DB_PATH}."
         else
             # C3 -- THE TIER-0 BRAIN, and the reason line 26 stops being a lie.
@@ -3301,7 +3305,7 @@ else
             # reported UNMEASURABLE rather than failed.
             say "  full-engine init unavailable on ${PY_SYS}; building the brain at Tier 0 (stdlib)."
             rm -f "$DB_PATH"
-            if "$PY_SYS" -c "import sqlite3,sys; sqlite3.connect(sys.argv[1]).close()" "$DB_PATH" \
+            if ( umask 077; "$PY_SYS" -c "import sqlite3,sys; sqlite3.connect(sys.argv[1]).close()" "$DB_PATH" ) \
                && WIZARD_LIBRARY_DB="$DB_PATH" "$PY_SYS" "${BRAIN_DIR}/organs/schema_migrator.py" apply --db "$DB_PATH"; then
                 say "  fresh brain initialized at Tier 0: ${DB_PATH}."
                 say "  (semantic recall needs the Tier-1 venv; keyword recall works now.)"
@@ -3311,6 +3315,28 @@ else
         fi
     else
         die "no brain snapshot found (expected brain/claude_memory.db in the package). Pass --brain-db <path> to clone an existing brain, or --init-blank to start fresh."
+    fi
+
+    # B.1.4 — THE BRAIN IS OWNER-ONLY. Every memory the user stores lives in this
+    # file, so a brain this run created is mode 600 whatever the umask was (measured
+    # before this: 644 under the default umask, and wider under umask 000), and so
+    # are its -wal/-shm siblings, which SQLite creates with the database's own mode.
+    # A brain that was already here, or attached in place, keeps the mode its owner
+    # gave it; a mode looser than 600 is reported, not changed.
+    if [ "${BRAIN_CREATED:-0}" -eq 1 ]; then
+        for _bf in "$DB_PATH" "${DB_PATH}-wal" "${DB_PATH}-shm"; do
+            [ -e "$_bf" ] && { run_argv chmod 600 "$_bf" || die "could not make ${_bf} owner-only (chmod 600)"; }
+        done
+    fi
+    _bmode="$(stat -c %a "$DB_PATH" 2>/dev/null || stat -f %Lp "$DB_PATH" 2>/dev/null || echo unknown)"
+    if [ "$_bmode" = "600" ]; then
+        say "  brain file mode: 600 (owner only)"
+    elif [ "$DRY_RUN" -eq 1 ]; then
+        :
+    elif [ "${BRAIN_CREATED:-0}" -eq 1 ]; then
+        die "the brain at ${DB_PATH} is mode ${_bmode} after chmod 600 -- this filesystem does not hold the mode. Refusing to leave a fresh brain readable by others."
+    else
+        warn "the existing brain at ${DB_PATH} is mode ${_bmode}, not 600: other users on this machine may be able to read it. Left as found; to restrict it: chmod 600 '${DB_PATH}'"
     fi
 
     # B.1.5 — BRING THE BRAIN UP TO THIS PACKAGE'S SCHEMA, WHATEVER ITS SOURCE.
