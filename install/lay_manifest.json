@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 417,
+    "core": 418,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 372,
+    "all": 373,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 405,
+    "brain": 406,
     "home": 2,
     "null": 10,
     "skills": 18
    }
   },
-  "derived_at_head": "e98302a",
+  "derived_at_head": "cf36963",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 435,
+  "entries": 436,
   "platforms": [
    "all",
    "posix",
@@ -761,7 +761,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6e987042a8bb08662a7d8765ed2b2d11948941a5928e6c1e86de90e02a73ac70",
+   "sha256": "3317aee3a963694110274f74237e84f7c964b9bdc14bcdd25dec33a5d6e621be",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1065,13 +1065,13 @@
    "src": "install/requirements.txt"
   },
   {
-   "bytes": 53042,
+   "bytes": 54508,
    "component": "core",
    "dst": "install/self_check.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6fec2301094e3728e934e98367e49e589236a0c370c5abf7e50084871e123bcb",
+   "sha256": "dc6cb2024fae0272bd4ac5c875277addd2645a5f805ad287792cf79b9f6c8d7b",
    "src": "install/self_check.py"
   },
   {
@@ -3863,6 +3863,16 @@
    "root": "brain",
    "sha256": "3da7084a2a2757cee315847962b47434ca56c29f1b149b3ca423422ded09b9ec",
    "src": "voidloom/tests/test_seed_doctrine_and_denylist.py"
+  },
+  {
+   "bytes": 3539,
+   "component": "core",
+   "dst": "voidloom/tests/test_self_check_models_lock.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "870921cfe7efb8394afe3822f38c12be5cada8ff3506192044dcdac30fe83d2c",
+   "src": "voidloom/tests/test_self_check_models_lock.py"
   },
   {
    "bytes": 7970,

@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-30T02:54:21Z from the checkout at `e98302a`.
+> Generated 2026-10-30T11:42:45Z from the checkout at `cf36963`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| files tracked | 435 |
-| files hashed | 435 |
-| total bytes | 10224361 |
+| files tracked | 436 |
+| files hashed | 436 |
+| total bytes | 10229675 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -98,7 +98,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  166 files, 2689795 bytes
+### `voidloom` — The CLI facade  ·  167 files, 2693334 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -215,6 +215,7 @@
 | `voidloom/tests/test_schema_migrator.py` | 8188 | `6aa0410c65f897ea` |
 | `voidloom/tests/test_seed_anchor_delta.py` | 19453 | `6b97c55bff94c3ad` |
 | `voidloom/tests/test_seed_doctrine_and_denylist.py` | 12191 | `3da7084a2a2757ce` |
+| `voidloom/tests/test_self_check_models_lock.py` | 3539 | `870921cfe7efb839` |
 | `voidloom/tests/test_self_check_scale.py` | 7970 | `1f90a2e72b949c63` |
 | `voidloom/tests/test_self_check_seed_scope_r3.py` | 15061 | `fa7f001f0c98be46` |
 | `voidloom/tests/test_self_eval_counts_its_own_fires_d26.py` | 2182 | `21f022651716a9c2` |
@@ -313,7 +314,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 938846 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 940621 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -330,12 +331,12 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 126756 | `565184fff8c4efb6` |
+| `install/lay_manifest.json` | 127065 | `095f4d2b98b299c5` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
 | `install/requirements.txt` | 9268 | `7b4fd5182fbf243a` |
-| `install/self_check.py` | 53042 | `6fec2301094e3728` |
+| `install/self_check.py` | 54508 | `dc6cb2024fae0272` |
 | `install/tier1_probe.py` | 42737 | `01f45138ccadea67` |
 | `install/wire_persona.ps1` | 8385 | `6c760a0105833234` |
 | `install/wire_persona.sh` | 10855 | `0896d140f773a1bc` |
@@ -479,10 +480,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19332 | `6af8d4be38a85697` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8356 | `6e987042a8bb0866` |
+| `docs/LAYOUT.md` | 8356 | `3317aee3a9636941` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 32972 | `3f92031db8727a3d` |
+| `docs/PACKAGE_MANIFEST.md` | 32972 | `e04352e36ef1cd0f` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

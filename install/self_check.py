@@ -745,40 +745,62 @@ def check_models(checks: Checks, db_path: Path):
         _rr_on, _rr_why = bool(_g.get("enabled")), str(_g.get("why") or "")
     except Exception as _e:  # the gate could not be read: keep the stricter check, say so
         _rr_why = f"reranker gate unreadable ({type(_e).__name__}); checking for it anyway"
+    # THE INSTALL LOCK FIRST. The installer fetches the embedder AT THE LOCK'S PINS (the model and
+    # its remote-code repository at their revisions), so a by-NAME load with local_files_only --
+    # which resolves the hub's moving `main` ref -- fails on a cache that holds exactly the bytes
+    # the lock promised (measured: the port's clean room at the first pinned pre-cache), and could
+    # pass on one holding bytes the lock would refuse. With a lock beside the brain this check
+    # verifies those bytes by checksum and instantiates nothing; a brain with no lock (a tier the
+    # shipped catalogue does not carry) keeps the by-name load. The reranker likewise: by its
+    # catalogue pin when it has one, by name otherwise.
+    _lock, _el = None, None
     try:
-        from sentence_transformers import SentenceTransformer
-        from huggingface_hub import snapshot_download
-        # local_files_only=True → verify the cache only; never download here.
-        # device="cpu": this verifies the CACHE; with no device, SentenceTransformer probes CUDA in THIS process, and
-        # under a CUDA_VISIBLE_DEVICES that selects no device the WSL2 driver's cuInit segfaults (reflector-4, executed)
-        SentenceTransformer(EMBED_MODEL, trust_remote_code=True, local_files_only=True, device="cpu")
-        # snapshot_download, not CrossEncoder: the default backend is a
-        # Qwen3ForCausalLM, which CrossEncoder cannot instantiate. The snapshot is
-        # the cache BOTH loaders read, so this check is backend-agnostic by
-        # construction rather than by remembering to update it.
+        _organs_dir = str(Path(__file__).resolve().parent.parent / "organs")
+        if _organs_dir not in sys.path:
+            sys.path.insert(0, _organs_dir)
+        import embedder_lock as _el
+        _lock = _el.read_lock(_el.lock_path_for(str(db_path)))
+    except Exception as _e:
+        if _el is None or getattr(_e, "code", None) != "LOCK_MISSING":
+            _lock = _e                            # a lock present but unreadable: reported below, never "absent"
+    try:
+        if isinstance(_lock, Exception):
+            raise _lock
+        if _lock is not None:
+            _snap, _computed = _el.verify_snapshot_against_lock(_lock, allow_fetch=False)
+            _emb = (f"{_lock['model_id']}@{_lock['revision'][:12]} verifies against the install lock "
+                    f"({_computed[:12]}..., tier '{_lock['tier']}', instantiated nothing)")
+        else:
+            from sentence_transformers import SentenceTransformer
+            # device="cpu": this verifies the CACHE; with no device, SentenceTransformer probes CUDA in
+            # THIS process, and under a CUDA_VISIBLE_DEVICES that selects no device the WSL2 driver's
+            # cuInit segfaults (reflector-4, executed)
+            SentenceTransformer(EMBED_MODEL, trust_remote_code=True, local_files_only=True, device="cpu")
+            _emb = f"{EMBED_MODEL} cached ({EMBED_SOURCE}; no install lock for this tier)"
         if _rr_on:
-            snapshot_download(RERANKER_MODEL, local_files_only=True)
+            _pins = ([e for e in _el.catalogue_rerankers().values() if e["model_id"] == RERANKER_MODEL]
+                     if _el is not None else [])
+            if _pins:
+                _el.verify_snapshot_against_lock(_pins[0], allow_fetch=False, pin_kind="reranker")
+            else:
+                from huggingface_hub import snapshot_download
+                snapshot_download(RERANKER_MODEL, local_files_only=True)
             ok, detail, fix = True, (
-                f"both models cached: {EMBED_MODEL} (embedder — {EMBED_SOURCE}) + "
-                f"{RERANKER_MODEL} (reranker, backend '{RERANKER_BACKEND}' — the one "
-                f"this host's recall will load)."
+                f"both models present: {_emb} + {RERANKER_MODEL} (reranker, backend '{RERANKER_BACKEND}' -- "
+                f"the one this host's recall will load{', at its catalogue pin' if _pins else ''})."
             ), ""
         else:
             ok, detail, fix = True, (
-                f"embedder cached: {EMBED_MODEL} ({EMBED_SOURCE}). No reranker on this host, by design: "
+                f"embedder present: {_emb}. No reranker on this host, by design: "
                 f"{_rr_why or 'the reranker gate is off'}."
             ), ""
     except Exception as e:
         ok, detail = False, (
-            "one or both required models are not in the local cache "
+            "one or both required models could not be verified from the local cache "
             f"(~/.cache/huggingface): {e}"
         )
-        fix = ("Pre-download them: "
-               "<venv>/bin/python3 -c \"from sentence_transformers import "
-               "SentenceTransformer; from huggingface_hub import snapshot_download; "
-               "SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True); "
-               f"snapshot_download('{RERANKER_MODEL}')\"  "
-               "(or re-run install.sh). Keyword recall is unaffected.")
+        fix = ("Fetch them at the install lock's pins: python3 organs/model_fetch.py --db <brain>/claude_memory.db "
+               "(from the installed brain directory), or re-run install.sh. Keyword recall is unaffected.")
     checks.add(
         "full L4 models load (embedder + reranker)", ok, required=False,
         detail=detail, fix=fix,
