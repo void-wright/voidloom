@@ -917,16 +917,18 @@ def reranker_score(
 # Orchestrator: vector + BM25 + RRF + rerank pipeline
 # ============================================================
 
-# ROUND GAMMA (A7): the fallback is a NAMED CONSTANT beside the resolver, not a
-# literal buried in an except branch. It points at the table the brain is
-# currently written to, so a metadata failure degrades toward the LIVE tier.
-_LIVE_EMB_FALLBACK = "memory_embeddings_v2"
+# There is no fallback table. This used to name `memory_embeddings_v2` (jina) as
+# "the table the brain is currently written to"; on a brain with an install lock
+# that is another model's space, so a lock that could not be read sent the query
+# vector into the wrong table. A refusal now turns the vector arm off for that
+# call (said at ERROR); the keyword arm still answers.
 
 
-def _active_embedding_table(conn: sqlite3.Connection) -> str:
+def _active_embedding_table(conn: sqlite3.Connection) -> Optional[str]:
     """Resolve the active vec table (two-tier embedding, Council #4258).
 
-    Reads metadata.active_embedding_table; defaults to memory_embeddings (Nomic).
+    The install lock first, metadata only for a brain with no lock (embed_resolver);
+    None when neither can be read.
     Keeps the recall side on the SAME tier the store side wrote to.
     """
     # ROUND GAMMA (A7): one resolver, and the default is EXPLICIT AT THE CALL SITE.
@@ -936,8 +938,9 @@ def _active_embedding_table(conn: sqlite3.Connection) -> str:
     #
     # This is a RECALL HOT PATH, so a hard raise would turn degraded recall into
     # no recall. The compromise is deliberate and is not silence: resolve through
-    # embed_resolver, and when it refuses, log at ERROR and fall back to the table
-    # the brain is CURRENTLY WRITTEN TO, never to the dormant one.
+    # embed_resolver (the install lock first), and when it refuses, log at ERROR
+    # and return None: the vector arm is off for this call, the keyword arm
+    # answers. No other table is substituted.
     import sys as _s, os as _o
     _d = _o.path.dirname(_o.path.abspath(__file__))
     if _d not in _s.path:
@@ -948,10 +951,10 @@ def _active_embedding_table(conn: sqlite3.Connection) -> str:
     except Exception as e:
         logger.error(
             "hybrid_retrieval: embedding tier UNRESOLVED (%s: %s); the vector arm "
-            "falls back to %r. Lexical retrieval is unaffected.",
-            type(e).__name__, e, _LIVE_EMB_FALLBACK,
+            "is off for this call. Lexical retrieval is unaffected.",
+            type(e).__name__, e,
         )
-        return _LIVE_EMB_FALLBACK
+        return None
 
 
 def _vector_search(
@@ -968,6 +971,8 @@ def _vector_search(
     recall side always matches whatever tier the store side wrote to.
     """
     emb_table = _active_embedding_table(conn)
+    if emb_table is None:
+        return []
     sql = f"""
         SELECT emb.memory_id, emb.distance
         FROM {emb_table} AS emb

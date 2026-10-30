@@ -76,8 +76,9 @@ All notable changes to Voidloom are recorded here. The format follows
   rows only for a brain without one: the dream pipeline (which used to send a qwen brain to
   the nomic table), the Tier-1 probe, `voidloom doctor` and `embedding_upgrade.py stats`. If
   `tier set` is interrupted after the lock moved, `voidloom doctor` says so and names the
-  command that finishes it. The diversity re-rank no longer falls back to the jina table when
-  the lock cannot be read; it drops its signal for that call.
+  command that finishes it. When the lock cannot be read, recall's vector arm and the diversity
+  re-rank no longer fall back to the jina table: the vector arm is off for that call (keyword
+  recall still answers) and the re-rank drops its signal.
 - `organs/website_memory.py` and the whisper network's fallback encoder load nomic at the
   catalogue's pinned model and code revisions, checksum-verified, instead of by name.
 - `embedding_upgrade.py re-embed` on a locked brain re-embeds under that brain's own lock.

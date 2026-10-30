@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "161112c",
+  "derived_at_head": "9f3717f",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 441,
   "platforms": [
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 13013,
+   "bytes": 13105,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "973734e273dddae7b053c8ccd3d460914c0f42a348a57da819809901413fc196",
+   "sha256": "663959959a091342e91203ce8aef662520170b72eb7855bc5a8c51b0ddd58441",
    "src": "CHANGELOG.md"
   },
   {
@@ -1775,13 +1775,13 @@
    "src": "organs/gpu_guard.py"
   },
   {
-   "bytes": 80784,
+   "bytes": 81001,
    "component": "core",
    "dst": "organs/hybrid_retrieval.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6aab8e7261c5bd2e2999c94f03e6c908d9b421134291adf436dfc3cf06c03f17",
+   "sha256": "738274b679224ae8bf99fc2fe82b50c812ddf98a9515d07e30b53c3dc602fdc2",
    "src": "organs/hybrid_retrieval.py"
   },
   {
@@ -3825,13 +3825,13 @@
    "src": "voidloom/tests/test_qwen_revision_pinned.py"
   },
   {
-   "bytes": 8420,
+   "bytes": 8533,
    "component": "core",
    "dst": "voidloom/tests/test_readers_lock_first.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "dd241130a474d170c294a09d598c242dd050cca56eb4738fe49a04718bdaa112",
+   "sha256": "40f26b13d3679f926a2de1fd0093fd0e58b7a66cb884f866782b4b7610ca485e",
    "src": "voidloom/tests/test_readers_lock_first.py"
   },
   {

@@ -158,6 +158,7 @@ class ReadersLockFirst(unittest.TestCase):
         self.assertEqual(got["dream_pipeline"], ("REFUSED", "LOCK_MALFORMED"))
         self.assertEqual(got["memory_dreaming"], ("REFUSED", "LOCK_MALFORMED"))
         self.assertIsNone(got["recall_diversity"], "MMR must drop its signal, not read another table")
+        self.assertIsNone(got["hybrid_retrieval"], "the vector arm turns off; it never searches the jina table")
         self.assertEqual(got["tier1_probe"], "LOCK_MALFORMED")
         self.assertEqual(got["doctor"], "LOCK_MALFORMED")
         self.assertEqual(got["stats"], "LOCK_MALFORMED")

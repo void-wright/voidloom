@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-30T15:14:54Z from the checkout at `161112c`.
+> Generated 2026-10-30T16:17:08Z from the checkout at `9f3717f`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -12,12 +12,12 @@
 |---|---|
 | files tracked | 441 |
 | files hashed | 441 |
-| total bytes | 10337162 |
+| total bytes | 10337819 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4593788 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4594005 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -48,7 +48,7 @@
 | `organs/gap_mapping.py` | 107155 | `9e659adec01af772` |
 | `organs/governance.py` | 46295 | `ea70b57a2ff92acf` |
 | `organs/gpu_guard.py` | 57313 | `412bd1d077eab846` |
-| `organs/hybrid_retrieval.py` | 80784 | `6aab8e7261c5bd2e` |
+| `organs/hybrid_retrieval.py` | 81001 | `738274b679224ae8` |
 | `organs/kind_taxonomy.py` | 30780 | `042ae8556f4600df` |
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
 | `organs/memory_dreaming.py` | 106512 | `198f5f75c6931c5b` |
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  171 files, 2746458 bytes
+### `voidloom` — The CLI facade  ·  171 files, 2746571 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -211,7 +211,7 @@
 | `voidloom/tests/test_preflight_verb.py` | 2694 | `fab053d8ac241306` |
 | `voidloom/tests/test_ps1_precache_by_pin.py` | 3956 | `adbd619480b0fd68` |
 | `voidloom/tests/test_qwen_revision_pinned.py` | 3887 | `ad2c57e0c5c3551a` |
-| `voidloom/tests/test_readers_lock_first.py` | 8420 | `dd241130a474d170` |
+| `voidloom/tests/test_readers_lock_first.py` | 8533 | `40f26b13d3679f92` |
 | `voidloom/tests/test_recall_topk_after_placement.py` | 3824 | `b697d7b65e0fd52a` |
 | `voidloom/tests/test_release_gates_execute.py` | 3803 | `e8ae84f6b38ab25e` |
 | `voidloom/tests/test_reranker_gate.py` | 27923 | `0f272e2e01596bcb` |
@@ -336,7 +336,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 128519 | `78086c54296c0ace` |
+| `install/lay_manifest.json` | 128519 | `8c066ad2330ed47b` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -477,7 +477,7 @@
 | `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 217188 bytes
+### `docs` — Documentation  ·  12 files, 217423 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -488,18 +488,18 @@
 | `docs/LAYOUT.md` | 8356 | `12ecbe53a53984be` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 33173 | `0ce0a836325cab9a` |
+| `docs/PACKAGE_MANIFEST.md` | 33408 | `eb4b4ba607d40507` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  10 files, 414177 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  10 files, 414269 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 13013 | `973734e273dddae7` |
+| `CHANGELOG.md` | 13105 | `663959959a091342` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `CONTRIBUTING.md` | 6709 | `475e8fbc09ff909e` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
