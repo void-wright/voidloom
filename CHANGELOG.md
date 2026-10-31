@@ -37,9 +37,13 @@ All notable changes to Voidloom are recorded here. The format follows
   program that installs it can refuse a mismatch before writing anything. It names the version,
   the migrations and the sha256 of a fresh brain's normalised schema, the oldest schema it can
   migrate (a brain carrying only `migrations/schema.sql`), the Python range (`>=3.10`, the
-  installer's own floor; no ceiling is declared), the CLI surface, and the scheduled units of
-  `install/cron_roster.json`. `tools/build_compat.py --emit` derives it and `--check` compares;
-  the test suite rebuilds a fresh brain and checks the schema hash every run.
+  installer's own floor; no ceiling is declared), the CLI surface, the installers' option
+  surface (`install_verb_contract`, a digest of every option `install.sh` and `install.ps1`
+  accept), and the scheduled units of `install/cron_roster.json`. It names no commit (a file
+  cannot hold the hash of the commit it sits in) and does not describe what an install lays: a
+  program that installs this package names the commit it pinned and measures its own install.
+  `tools/build_compat.py --emit` derives it and `--check` compares; the test suite rebuilds a
+  fresh brain and checks the schema hash every run.
 - **`voidloom --version --json`** prints the version and `cli_surface_version`, a digest of
   every verb and option the CLI accepts; `COMPAT.json` carries the same value. Plain
   `voidloom --version` is unchanged.

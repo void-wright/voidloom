@@ -1,6 +1,6 @@
 {
   "cli_surface_version": "cli-surface/1:b231860f86c15e07",
-  "install_verb_contract": "install.sh (install/install.ps1 on Windows) lays install/lay_manifest.json into the install root, creates the brain with `organs/claude_memory.py init` (which writes embedder.lock.json beside it for a shipped tier), applies organs/schema_migrator.py, and loads seed/seed_pack.json with `organs/claude_memory_lite.py load-seed`; the package's commit is the one this file ships in",
+  "install_verb_contract": "install-verb/1:8fadbc9fe991e287",
   "oldest_migratable_schema": {
     "migrations": []
   },

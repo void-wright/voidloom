@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "27c6585",
+  "derived_at_head": "ebc227d",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 450,
   "platforms": [
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 18502,
+   "bytes": 18844,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2c3bbf47495998c416f05ce4c79c1be9c2ef18530ce6aa3c5974fddc81ffe81f",
+   "sha256": "dd86a82dde1df529cc226c0ff2df4db66f94391a19e4e141ea881f6bf6a5058b",
    "src": "CHANGELOG.md"
   },
   {
@@ -165,13 +165,13 @@
    "src": "CODE_OF_CONDUCT.md"
   },
   {
-   "bytes": 3397,
+   "bytes": 3050,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2e558b023b46c380b0973dc88a66c1de3d9ff7d6ccdab39f75dd01529c269f54",
+   "sha256": "7f02f5fbef807e2961af922ce9c0c95c531916f355443615a7b835b40b16bc89",
    "src": "COMPAT.json"
   },
   {
@@ -2525,13 +2525,13 @@
    "src": "seed/seed_pack.json"
   },
   {
-   "bytes": 11326,
+   "bytes": 13035,
    "component": "core",
    "dst": "tools/build_compat.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "16530dcfca56d01307289b92ce78ac1e60ce526e4207e24be2bdc8d2bd05d123",
+   "sha256": "2865e1f90180ce8a96229a3d3a60e32b1568528cceaf21badcfcc8988f85d449",
    "src": "tools/build_compat.py"
   },
   {
@@ -3225,13 +3225,13 @@
    "src": "voidloom/tests/test_cognitive_map_degree_cost_d26.py"
   },
   {
-   "bytes": 7759,
+   "bytes": 10842,
    "component": "core",
    "dst": "voidloom/tests/test_compat_and_version_json.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7352e97bdc9ab4c705518b5f92471f1df703227ede6c07cc0277b87b12c4d47d",
+   "sha256": "2079947275c9025077af25a4abbd5f2db1b2a93119901a4e5f116e1e3af7233e",
    "src": "voidloom/tests/test_compat_and_version_json.py"
   },
   {

@@ -28,8 +28,12 @@ Fields and their sources:
   oldest_migratable_schema        [] : a brain carrying only migrations/schema.sql, run through
                                   organs/schema_migrator.py and then `init`, reaches schema_sha256 exactly
                                   (voidloom/tests/test_compat_and_version_json.py measures it every run).
-  install_verb_contract           the install entry points and what they lay, in words. It cannot name this
-                                  package's own commit: a file cannot contain the hash of the commit holding it.
+  install_verb_contract           the installers' option surface, as a version: `install-verb/1:` + the first 16 hex
+                                  of sha256 over install.sh's argument-loop options (each with whether it takes a
+                                  value) and install/install.ps1's param() names and types. It moves exactly when
+                                  an installer gains, loses or changes an option. It names no commit (a file cannot
+                                  hold the hash of the commit it sits in; the consumer's pin names the commit) and
+                                  describes no lay (the consumer measures what its own install lays).
   cli_surface_version             voidloom.cli.cli_surface_version() (`voidloom --version --json` prints the same)
   python_range                    install.sh's own floor (py_ge_310); the package declares no ceiling
   profiles.<p>.unit_set           the unit names of install/cron_roster.json (the same roster for every profile)
@@ -80,6 +84,35 @@ def python_range(root: Path = ROOT) -> str:
     if not m or m.group(1) != m.group(2):
         raise SystemExit("install.sh's python floor (py_ge_3NN) is not where this builder reads it")
     return f">=3.{m.group(2)}"
+
+
+_SH_LOOP = re.compile(r'^for arg in "\$@"; do\n(.*?)^done$', re.S | re.M)
+_SH_OPT = re.compile(r"^\s+((?:--?[A-Za-z0-9][A-Za-z0-9-]*)(?:\|--?[A-Za-z0-9][A-Za-z0-9-]*)*)\)(.*)$", re.M)
+_PS_PARAM = re.compile(r"^param\(\n(.*?)^\)$", re.S | re.M)
+_PS_ARG = re.compile(r"\[(switch|string|int)\]\$([A-Za-z][A-Za-z0-9]*)")
+
+
+def install_surface(root: Path = ROOT) -> dict:
+    """The options a caller can pass the installers, read from their sources. Fails closed: a loop or a param()
+    block this reader cannot find, or one with no options, stops the build rather than hashing an empty surface."""
+    sh = (root / "install.sh").read_text(encoding="utf-8")
+    loops = _SH_LOOP.findall(sh)
+    if len(loops) != 1:
+        raise SystemExit(f"install.sh: expected one `for arg in \"$@\"` loop, found {len(loops)}")
+    sh_opts = sorted([label, "__EXPECT__" in rest] for label, rest in _SH_OPT.findall(loops[0]))
+    ps = (root / "install" / "install.ps1").read_text(encoding="utf-8")
+    blocks = _PS_PARAM.findall(ps)
+    if len(blocks) != 1:
+        raise SystemExit(f"install/install.ps1: expected one top-level param() block, found {len(blocks)}")
+    ps_opts = sorted([name, kind] for kind, name in _PS_ARG.findall(blocks[0]))
+    if not sh_opts or not ps_opts:
+        raise SystemExit("an installer's option surface read empty; the reader no longer matches its source")
+    return {"install.sh": sh_opts, "install/install.ps1": ps_opts}
+
+
+def install_verb_contract(root: Path = ROOT) -> str:
+    blob = json.dumps(install_surface(root), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "install-verb/1:" + hashlib.sha256(blob).hexdigest()[:16]
 
 
 def cli_surface_version(root: Path = ROOT) -> str:
@@ -151,11 +184,7 @@ def derive(root: Path = ROOT, schema_db: Path = None, build_schema: bool = True)
         "version": version(root),
         "schema_produced": {"migrations": migrations(root), "schema_sha256": None},
         "oldest_migratable_schema": {"migrations": []},
-        "install_verb_contract": (
-            "install.sh (install/install.ps1 on Windows) lays install/lay_manifest.json into the install root, "
-            "creates the brain with `organs/claude_memory.py init` (which writes embedder.lock.json beside it for "
-            "a shipped tier), applies organs/schema_migrator.py, and loads seed/seed_pack.json with "
-            "`organs/claude_memory_lite.py load-seed`; the package's commit is the one this file ships in"),
+        "install_verb_contract": install_verb_contract(root),
         "cli_surface_version": cli_surface_version(root),
         "python_range": python_range(root),
         "profiles": {p: {"unit_set": unit_set(root)} for p in PROFILES},

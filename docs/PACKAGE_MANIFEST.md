@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-30T23:39:57Z from the checkout at `27c6585`.
+> Generated 2026-10-31T00:27:06Z from the checkout at `ebc227d`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -12,7 +12,7 @@
 |---|---|
 | files tracked | 450 |
 | files hashed | 450 |
-| total bytes | 10476302 |
+| total bytes | 10481274 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  178 files, 2814457 bytes
+### `voidloom` — The CLI facade  ·  178 files, 2817540 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -149,7 +149,7 @@
 | `voidloom/tests/test_brain_keyed_locks_r3g3.py` | 22536 | `9e0a08835c195e68` |
 | `voidloom/tests/test_codex_hook_fires_on_resume_d26.py` | 10567 | `486166b342a0a461` |
 | `voidloom/tests/test_cognitive_map_degree_cost_d26.py` | 4187 | `5875111fc486ec70` |
-| `voidloom/tests/test_compat_and_version_json.py` | 7759 | `7352e97bdc9ab4c7` |
+| `voidloom/tests/test_compat_and_version_json.py` | 10842 | `2079947275c90250` |
 | `voidloom/tests/test_consumers_read_the_search_set.py` | 6508 | `69013e7da541add6` |
 | `voidloom/tests/test_counterfactual_busy_rN.py` | 3868 | `73db1eba9964349c` |
 | `voidloom/tests/test_counterfactual_reply_r3.py` | 6482 | `df9b54c38ad7c631` |
@@ -326,7 +326,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 949300 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 949301 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -343,7 +343,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 131176 | `2b8c1170b9a64a31` |
+| `install/lay_manifest.json` | 131177 | `43593469844ec21d` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -457,11 +457,11 @@
 | `persona/skills/persona-forge/TEMPLATES/voice.md.tmpl` | 533 | `d66076ed2dea66a0` |
 | `persona/skills/persona-forge/validate_persona.py` | 12511 | `c2621de5c61e2740` |
 
-### `tools` — Maintainer-only: package gates + recall harness  ·  23 files, 243570 bytes
+### `tools` — Maintainer-only: package gates + recall harness  ·  23 files, 245279 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
-| `tools/build_compat.py` | 11326 | `16530dcfca56d013` |
+| `tools/build_compat.py` | 13035 | `2865e1f90180ce8a` |
 | `tools/build_embedder_catalogue.py` | 9845 | `ea7b807681211a86` |
 | `tools/build_manifest.py` | 21081 | `7e727f80b735d02a` |
 | `tools/cross_platform_audit.py` | 3990 | `a9a9306b7de01aa6` |
@@ -485,7 +485,7 @@
 | `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 217920 bytes
+### `docs` — Documentation  ·  12 files, 218104 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -496,20 +496,20 @@
 | `docs/LAYOUT.md` | 8372 | `61fa4f308aee9185` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 33889 | `1f0fbfabe124cef6` |
+| `docs/PACKAGE_MANIFEST.md` | 34073 | `2c8e9b3269939cc9` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 424702 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 424697 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 18502 | `2c3bbf47495998c4` |
+| `CHANGELOG.md` | 18844 | `dd86a82dde1df529` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
-| `COMPAT.json` | 3397 | `2e558b023b46c380` |
+| `COMPAT.json` | 3050 | `7f02f5fbef807e29` |
 | `CONTRIBUTING.md` | 6709 | `475e8fbc09ff909e` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
 | `NOTICE` | 4391 | `6608b4df230ab445` |

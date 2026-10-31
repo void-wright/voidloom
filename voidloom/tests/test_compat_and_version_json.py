@@ -11,7 +11,9 @@ none, a version it would downgrade, a Python outside the range, and a roster tha
     3.12, a string unit list per profile) and the unit set IS the roster's;
   * saboteur: a copy with a unit added, or a version moved, reads DRIFT and exits 1;
   * control: `--version --json` prints the version and cli_surface_version, and equals COMPAT's;
-  * saboteur: one option added to one verb moves cli_surface_version; plain `--version` keeps its text line.
+  * saboteur: one option added to one verb moves cli_surface_version; plain `--version` keeps its text line;
+  * control: no field names a commit or what an install lays; install_verb_contract is the installers' option
+    surface as a version (saboteur: an option added to either installer moves it; an unreadable loop fails closed).
 """
 import argparse
 import json
@@ -78,6 +80,58 @@ class CompatIsDerived(unittest.TestCase):
         r = self._tampered(lambda d: d.__setitem__("version", "9.9.9"))
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("version", r.stdout)
+
+
+class CompatNamesNoCommitAndNoLay(unittest.TestCase):
+    """COMPAT carries only what the package derives from its own tree. The commit is named by the consumer's pin (a
+    file cannot hold the hash of the commit it sits in), and what an install lays is measured by the consumer, so
+    neither may appear here; install_verb_contract is the installers' option surface, as a version."""
+
+    def setUp(self):
+        self.compat = json.loads((ROOT / "COMPAT.json").read_text(encoding="utf-8"))
+        import build_compat
+        self.bc = build_compat
+
+    def test_control_no_field_names_a_commit_or_a_lay(self):
+        text = json.dumps(self.compat)
+        self.assertIsNone(re.search(r"\b[0-9a-f]{40}\b", text), "a commit-shaped hash in COMPAT.json")
+        for key in ("referent", "commit", "write_set_hash", "model_cache_layout"):
+            self.assertNotIn(key, text)
+        self.assertRegex(self.compat["install_verb_contract"], r"^install-verb/1:[0-9a-f]{16}$")
+        self.assertEqual(self.compat["install_verb_contract"], self.bc.install_verb_contract(ROOT))
+
+    def _copy_installers(self, td):
+        root = Path(td)
+        (root / "install").mkdir()
+        for rel in ("install.sh", "install/install.ps1"):
+            (root / rel).write_bytes((ROOT / rel).read_bytes())
+        return root
+
+    def test_saboteur_an_option_added_to_an_installer_moves_the_contract(self):
+        before = self.bc.install_verb_contract(ROOT)
+        with tempfile.TemporaryDirectory(prefix="vl_ivc_") as td:
+            root = self._copy_installers(td)
+            sh = root / "install.sh"
+            src = sh.read_text(encoding="utf-8")
+            sh.write_text(src.replace("        --dry-run)      DRY_RUN=1 ;;",
+                                      "        --dry-run)      DRY_RUN=1 ;;\n        --planted-opt) : ;;", 1),
+                          encoding="utf-8")
+            self.assertNotEqual(self.bc.install_verb_contract(root), before)
+            sh.write_text(src, encoding="utf-8")
+            ps = root / "install" / "install.ps1"
+            ps.write_text(ps.read_text(encoding="utf-8").replace("    [switch]$DryRun,",
+                                                                 "    [switch]$DryRun,\n    [switch]$Planted,", 1),
+                          encoding="utf-8")
+            self.assertNotEqual(self.bc.install_verb_contract(root), before)
+
+    def test_saboteur_an_unreadable_option_loop_fails_closed(self):
+        with tempfile.TemporaryDirectory(prefix="vl_ivc_") as td:
+            root = self._copy_installers(td)
+            sh = root / "install.sh"
+            sh.write_text(sh.read_text(encoding="utf-8").replace('for arg in "$@"; do', 'for a in "$@"; do', 1),
+                          encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                self.bc.install_verb_contract(root)
 
 
 try:
