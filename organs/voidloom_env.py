@@ -48,19 +48,48 @@ RESOLUTION ORDER for :func:`env_path(name)`
   1. ``VOIDLOOM_ENV_DIR``  — explicit operator override. Set and non-empty
      wins unconditionally, EVEN IF the file does not exist there, so that a
      fresh machine writes where it was told to. basis ``"env"``.
-  2. ``<preferred>/name``  — the neutral default dir, if the file exists in
+  2. ``WIZARD_ENV_FILE``   — the env file the installer wrote and the scheduled
+     jobs load. Set, non-empty and absolute: the env file itself for
+     ``wizard-library-env``, else ``<its directory>/name``, unconditionally.
+     basis ``"env-file"``. A relative value is ignored (the installer refuses
+     one too) and the basis says so (``+env-file-relative-ignored``).
+  3. ``<preferred>/name``  — the neutral default dir, if the file exists in
      it. basis ``"preferred"``.
-  3. discovery            — the immediate hidden directories of ``$HOME``,
-     sorted, first one that actually CONTAINS a file called ``name``. This is
-     the limb that finds a legacy install without naming it.
-     basis ``"discovered:<dirname>"``.
-  4. ``<preferred>/name``  — the neutral default, for creation by whoever
+  4. LEGACY discovery, ONLY when ``VOIDLOOM_LEGACY_DISCOVERY`` is exactly
+     ``1``: the immediate hidden directories of ``$HOME``, sorted, and the
+     first one that carries THIS install's ownership marker (below) AND
+     contains ``name``. basis ``"discovered:<dirname>"``. Without the opt-in no
+     other hidden directory is listed or touched at all.
+  5. ``<preferred>/name``  — the neutral default, for creation by whoever
      needs to create it. basis ``"default"``.
 
-  Note that limbs 2 and 4 return the SAME PATH and different bases. That is
+  Note that limbs 3 and 5 return the SAME PATH and different bases. That is
   deliberate: "found in the default location" and "nothing exists anywhere,
   here is where it would go" are different facts about the world, and a
   caller that must not create a file needs to tell them apart.
+
+WHY DISCOVERY IS OPT-IN AND MARKED
+    Discovery used to run for every lookup. Two installs that share one user
+    account and one ``$HOME`` (a second product running this package, or two
+    copies) could then read each other's sidecars, credentials included,
+    because "a hidden directory that contains a file of this name" names no
+    owner. Now discovery runs only when asked for, and a discovered directory
+    is used only if it carries ``.voidloom-owner`` (:data:`OWNER_MARKER`), a
+    small JSON file ``{"schema": "voidloom.env-owner/1", "install_root":
+    "<abs path>"}`` whose ``install_root`` is THIS install's root (the
+    directory this module was laid into, both sides resolved). The marker is
+    read before anything else in that directory; a directory without it, or
+    marked for another install, has none of its sidecars opened or even
+    looked up, and is counted in the basis (``+refused-unowned:<n>``).
+    Limbs 1–3 and 5 are named by the operator or by the product, so an
+    UNMARKED directory there is trusted (every install made before the marker
+    existed is unmarked). A directory there that carries a marker which is NOT
+    this install's (another root, malformed, a symlink) is refused on every
+    limb with :class:`EnvOwnershipRefused` (a ``ValueError``): never a fall-
+    through, because the default limb would then create this install's files
+    inside the other install's directory. To keep a legacy directory working,
+    set ``WIZARD_ENV_FILE`` or ``VOIDLOOM_ENV_DIR`` to it, or opt in and mark it:
+    ``python3 organs/voidloom_env.py --mark <dir>``.
 """
 from __future__ import annotations
 
@@ -78,6 +107,14 @@ __all__ = [
     "resolve_verbose",
     "describe",
     "candidate_dirs",
+    "ENV_FILE_KEY",
+    "ENV_FILE_NAME",
+    "LEGACY_DISCOVERY_KEY",
+    "OWNER_MARKER",
+    "install_root",
+    "owner_marker_ok",
+    "write_owner_marker",
+    "EnvOwnershipRefused",
 ]
 
 #: The neutral, vendor-free directory this project uses on a fresh machine.
@@ -87,6 +124,17 @@ DEFAULT_DIR_NAME = ".voidloom"
 #: The one environment variable that overrides everything.
 ENV_DIR_KEY = "VOIDLOOM_ENV_DIR"
 
+#: The env file the installer writes and the scheduled jobs load; its directory is limb 2.
+ENV_FILE_KEY = "WIZARD_ENV_FILE"
+ENV_FILE_NAME = "wizard-library-env"
+
+#: Discovery of a legacy directory runs only when this is exactly "1".
+LEGACY_DISCOVERY_KEY = "VOIDLOOM_LEGACY_DISCOVERY"
+
+#: The ownership marker a discovered directory must carry, and its schema.
+OWNER_MARKER = ".voidloom-owner"
+OWNER_SCHEMA = "voidloom.env-owner/1"
+
 #: Hard cap on how many hidden directories the discovery limb will consider.
 #: A pathological $HOME (thousands of dotdirs) must not turn a path lookup
 #: into a directory crawl. If the cap is hit we say so in the basis rather
@@ -95,13 +143,20 @@ ENV_DIR_KEY = "VOIDLOOM_ENV_DIR"
 _DISCOVERY_CAP = 512
 
 
+class EnvOwnershipRefused(ValueError):
+    """A sidecar directory carries an ownership marker that is not this install's. Raised, never fallen through."""
+
+    code = "ENV_DIR_FOREIGN"
+
+
 class EnvResolution(NamedTuple):
     """The verbose result of resolving a sidecar path.
 
     * ``path``   — the resolved path (always present; may not exist).
-    * ``basis``  — provenance: ``"env"``, ``"preferred"``,
+    * ``basis``  — provenance: ``"env"``, ``"env-file"``, ``"preferred"``,
       ``"discovered:<dirname>"``, ``"default"``, optionally suffixed
-      ``"+discovery-capped"``.
+      ``"+env-file-relative-ignored"``, ``"+discovery-capped"`` or
+      ``"+refused-unowned:<n>"``.
     * ``exists`` — whether the resolved path exists RIGHT NOW. Callers that
       must not create files branch on this.
     """
@@ -137,14 +192,67 @@ def preferred_dir() -> Path:
     return Path.home() / DEFAULT_DIR_NAME
 
 
+def install_root() -> Path:
+    """This install's root: the directory this module was laid into (``<root>/organs/voidloom_env.py``)."""
+    return Path(__file__).resolve().parent.parent
+
+
+def owner_marker_ok(d: Path) -> bool:
+    """True only when ``d/.voidloom-owner`` is a regular file (not a symlink) whose JSON names THIS install's
+    root. Reads that one small file and nothing else in ``d``. Any defect (absent, unreadable, too large, not
+    JSON, wrong schema, another root) is False: an unproven owner is not this install."""
+    import json
+    m = d / OWNER_MARKER
+    try:
+        if m.is_symlink() or not m.is_file() or m.stat().st_size > 4096:
+            return False
+        doc = json.loads(m.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict) or doc.get("schema") != OWNER_SCHEMA:
+            return False
+        root = doc.get("install_root")
+        if not isinstance(root, str) or not os.path.isabs(root):
+            return False
+        return Path(root).resolve() == install_root()
+    except (OSError, ValueError):
+        return False
+
+
+def _refuse_if_foreign(d: Path, limb: str) -> None:
+    """Named limbs trust an UNMARKED directory; a marker that is present and not this install's refuses."""
+    m = d / OWNER_MARKER
+    try:
+        present = m.is_symlink() or m.exists()
+    except OSError:
+        present = True
+    if present and not owner_marker_ok(d):
+        raise EnvOwnershipRefused(
+            "%s: the %s sidecar directory %s carries %s naming another install (or one that cannot be read); this "
+            "install (root %s) will not read or create its files there. Point VOIDLOOM_ENV_DIR at this install's own "
+            "directory." % (EnvOwnershipRefused.code, limb, d, OWNER_MARKER, install_root()))
+
+
+def write_owner_marker(d: Path) -> Path:
+    """Mark ``d`` as this install's sidecar directory, for the opt-in discovery limb. The ONE function that
+    writes here; resolution never calls it. The directory must already exist."""
+    import json
+    d = Path(d)
+    if not d.is_dir():
+        raise FileNotFoundError("not a directory: %s" % d)
+    m = d / OWNER_MARKER
+    tmp = d / (OWNER_MARKER + ".tmp")
+    tmp.write_text(json.dumps({"schema": OWNER_SCHEMA, "install_root": str(install_root())}) + "\n",
+                   encoding="utf-8")
+    os.replace(str(tmp), str(m))
+    return m
+
+
 def candidate_dirs() -> List[Path]:
     """Hidden directories directly under ``$HOME``, sorted, capped.
 
     ONE level, no recursion, no symlink following into the tree. Sorted so the
     answer is deterministic across runs and across filesystems whose readdir
-    order is not stable. ``$HOME/.voidloom`` is not special-cased here — the
-    caller checks it first — but it will also appear in this list if present,
-    which is harmless because it resolves to the same path.
+    order is not stable. Only the opt-in discovery limb calls this, and it
+    uses a directory only if :func:`owner_marker_ok` says it is this install's.
     """
     home = Path.home()
     out: List[Path] = []
@@ -185,36 +293,57 @@ def resolve_verbose(name: str) -> EnvResolution:
     # 1. explicit override wins unconditionally, existing or not.
     override = _clean_env(ENV_DIR_KEY)
     if override:
-        p = Path(override).expanduser() / name
+        d = Path(override).expanduser()
+        _refuse_if_foreign(d, "VOIDLOOM_ENV_DIR")
+        p = d / name
         return EnvResolution(p, "env", p.exists())
 
+    # 2. the env file the installer wrote (and the jobs load): its directory.
+    note = ""
+    env_file = _clean_env(ENV_FILE_KEY)
+    if env_file:
+        f = Path(env_file).expanduser()
+        if f.is_absolute():
+            _refuse_if_foreign(f.parent, "WIZARD_ENV_FILE")
+            p = f if name == ENV_FILE_NAME else f.parent / name
+            return EnvResolution(p, "env-file", p.exists())
+        note = "+env-file-relative-ignored"
+
     default_dir = Path.home() / DEFAULT_DIR_NAME
+    _refuse_if_foreign(default_dir, "default")
     preferred = default_dir / name
 
-    # 2. the neutral default, if the file is actually there.
+    # 3. the neutral default, if the file is actually there.
     try:
         if preferred.is_file():
-            return EnvResolution(preferred, "preferred", True)
+            return EnvResolution(preferred, "preferred" + note, True)
     except OSError:
         pass
 
-    # 3. discovery: the directory that CONTAINS the file, whatever it is called.
-    cands = candidate_dirs()
-    capped = len(cands) >= _DISCOVERY_CAP
-    suffix = "+discovery-capped" if capped else ""
-    for d in cands:
-        if d == default_dir:
-            continue  # already tried, and it did not have the file
-        cand = d / name
-        try:
-            if cand.is_file():
-                return EnvResolution(cand, "discovered:" + d.name + suffix, True)
-        except OSError:
-            continue
+    # 4. discovery, ONLY on the explicit legacy opt-in, and only into a directory marked as THIS install's.
+    if os.environ.get(LEGACY_DISCOVERY_KEY) == "1":
+        cands = candidate_dirs()
+        if len(cands) >= _DISCOVERY_CAP:
+            note += "+discovery-capped"
+        refused = 0
+        for d in cands:
+            if d == default_dir:
+                continue  # already tried, and it did not have the file
+            if not owner_marker_ok(d):
+                refused += 1
+                continue  # not this install's: none of its files is looked at
+            cand = d / name
+            try:
+                if cand.is_file():
+                    return EnvResolution(cand, "discovered:" + d.name + note, True)
+            except OSError:
+                continue
+        if refused:
+            note += "+refused-unowned:%d" % refused
 
-    # 4. nothing exists anywhere. Report where it WOULD go, and say plainly
+    # 5. nothing exists anywhere. Report where it WOULD go, and say plainly
     #    that it is not there — never create it here.
-    return EnvResolution(preferred, "default" + suffix, False)
+    return EnvResolution(preferred, "default" + note, False)
 
 
 def env_path(name: str) -> Path:
@@ -244,6 +373,9 @@ def describe(name: str) -> str:
 if __name__ == "__main__":  # pragma: no cover - operator convenience
     import sys
 
+    if sys.argv[1:2] == ["--mark"] and len(sys.argv) == 3:
+        print("marked: %s" % write_owner_marker(Path(sys.argv[2]).expanduser()))
+        raise SystemExit(0)
     names = sys.argv[1:] or ["wizard-library-env", "wizard-config.json",
                              "claude-oauth-token"]
     print("preferred dir: %s" % preferred_dir())

@@ -145,7 +145,7 @@ WIZARD_READ_ONLY = {"WIZARD_PYTHON_BIN": "an interpreter: executed, never a writ
 #   CITE install/install_crons.sh:143 WIZARD_ENV_FILE
 #   CITE organs/voidloom_device.py:367 WIZARD_CONFIG_PATH
 #   CITE organs/wizard_config.py:396 _env_key   -> WIZARD_DB_PATH, WIZARD_MODULE_DIR (WIZARD_<KEY> for db_path, module_dir)
-#   CITE organs/voidloom_env.py:88 VOIDLOOM_ENV_DIR   -> the thinker's credential home (<VOIDLOOM_ENV_DIR>/thinker): OTHER_PATH_VARS
+#   CITE organs/voidloom_env.py:125 VOIDLOOM_ENV_DIR   -> the thinker's credential home (<VOIDLOOM_ENV_DIR>/thinker): OTHER_PATH_VARS
 # Any value of these is a path whatever its spelling: a relative value, `~/x` inside a quoted variable (bash does
 # not tilde-expand it) or a literal `$HOME/x` is resolved by the child against ITS CWD -- measured: three such
 # values each wrote a file outside --home under GREEN. So for these, only an absolute path under --home is allowed.

@@ -50,6 +50,17 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ### Fixed
 
+- **Sidecar files are no longer found by scanning `$HOME`.** The env file, the JSON config and
+  the credential files were looked up in every hidden directory under your home folder, and the
+  first one holding a file of that name was used. Two installs under one user account could
+  read each other's credentials that way. The order is now `VOIDLOOM_ENV_DIR`, then the
+  directory of `WIZARD_ENV_FILE` (the env file the installer wrote), then `~/.voidloom`. The
+  scan runs only with `VOIDLOOM_LEGACY_DISCOVERY=1`, and even then it uses a directory only if
+  it holds a `.voidloom-owner` marker naming this install (`python3 organs/voidloom_env.py
+  --mark <dir>` writes one). A named directory that carries ANOTHER install's marker is
+  refused (`ENV_DIR_FOREIGN`); an unmarked one is used as before. **If your sidecars live in an
+  older, differently named directory,** set `VOIDLOOM_ENV_DIR` or `WIZARD_ENV_FILE` to it, or
+  opt in and mark it.
 - Measuring coverage took 13 to 14 seconds on a brain with 28,063 vectors, because each count
   looked up the vector table once per row. The same counts now take about 0.1 seconds.
 - Six more queries looked up the vector table once per memory: the backfill count and its row

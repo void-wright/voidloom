@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 432,
+    "core": 433,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 387,
+    "all": 388,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 419,
+    "brain": 420,
     "home": 2,
     "null": 11,
     "skills": 18
    }
   },
-  "derived_at_head": "ebc227d",
+  "derived_at_head": "51b9ad0",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 450,
+  "entries": 451,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 18844,
+   "bytes": 19794,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "dd86a82dde1df529cc226c0ff2df4db66f94391a19e4e141ea881f6bf6a5058b",
+   "sha256": "7c488b5fdad986e6caaf8ab554b070122bccb743a2e996ea923d605ec55dcc41",
    "src": "CHANGELOG.md"
   },
   {
@@ -771,7 +771,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "61fa4f308aee9185789ec1b4d100afef97905887c5bacff68360b58ce1c0057c",
+   "sha256": "210414bcb4615783b4e8849e143db0dbbe5c854fcd6a5c4ca1343d37809155e0",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -2165,13 +2165,13 @@
    "src": "organs/voidloom_device.py"
   },
   {
-   "bytes": 10400,
+   "bytes": 16752,
    "component": "core",
    "dst": "organs/voidloom_env.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f543d420b7a14b327c2d0ac082ac797bc40e0de192a02bd96490286263c446eb",
+   "sha256": "92e448973676b881def20c84cdada753d79fe4ace25fcdbc94d3ef1c6bb3eb6b",
    "src": "organs/voidloom_env.py"
   },
   {
@@ -3035,13 +3035,13 @@
    "src": "voidloom/tests/harness/mutation_matrix.py"
   },
   {
-   "bytes": 35895,
+   "bytes": 35896,
    "component": "core",
    "dst": "voidloom/tests/harness/outside_target_diff.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e6f50e6d8b5a55773e6ac4379d9d86d7e3cebdf4d48885abd2350ff6761e600a",
+   "sha256": "fd744a68d80a4400066160bc4cbf6211bfe9c129d273409220fd21c2494f639f",
    "src": "voidloom/tests/harness/outside_target_diff.py"
   },
   {
@@ -3513,6 +3513,16 @@
    "root": "brain",
    "sha256": "45c8b59c36f86a8c67d9beb025614c0d865026a17fa929ee35ed44e0164822c0",
    "src": "voidloom/tests/test_env_file_reader.py"
+  },
+  {
+   "bytes": 8346,
+   "component": "core",
+   "dst": "voidloom/tests/test_env_sidecar_discovery.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "c8ec01ab296532e7909ef3b3bcaee0fae48b674f12770760556e222c7734ba45",
+   "src": "voidloom/tests/test_env_sidecar_discovery.py"
   },
   {
    "bytes": 10458,

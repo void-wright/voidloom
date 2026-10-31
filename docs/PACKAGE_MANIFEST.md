@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-10-31T00:27:06Z from the checkout at `ebc227d`.
+> Generated 2026-10-31T02:09:27Z from the checkout at `51b9ad0`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -10,14 +10,14 @@
 
 | | |
 |---|---|
-| files tracked | 450 |
-| files hashed | 450 |
-| total bytes | 10481274 |
+| files tracked | 451 |
+| files hashed | 451 |
+| total bytes | 10497310 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4639202 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4645554 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -86,7 +86,7 @@
 | `organs/voidloom_banner.py` | 104239 | `c7d9b35fc7ec1d0d` |
 | `organs/voidloom_canary.py` | 114403 | `0f8a8005428a5c74` |
 | `organs/voidloom_device.py` | 74175 | `e6534dd0f1ade94b` |
-| `organs/voidloom_env.py` | 10400 | `f543d420b7a14b32` |
+| `organs/voidloom_env.py` | 16752 | `92e448973676b881` |
 | `organs/voidloom_heartbeat.py` | 37464 | `7142ec7ccf30467b` |
 | `organs/voidloom_hooks_status.py` | 421184 | `04933b0f28e7304c` |
 | `organs/voidloom_instructions.py` | 71527 | `ffca380e1c52f4c3` |
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  178 files, 2817540 bytes
+### `voidloom` — The CLI facade  ·  179 files, 2825887 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -130,7 +130,7 @@
 | `voidloom/tests/harness/canary_r8_notice.py` | 13802 | `a37c716963247e4e` |
 | `voidloom/tests/harness/cli_install_suite.py` | 103577 | `43b69a864bd0dafa` |
 | `voidloom/tests/harness/mutation_matrix.py` | 81230 | `05b28d0f67c0fc64` |
-| `voidloom/tests/harness/outside_target_diff.py` | 35895 | `e6f50e6d8b5a5577` |
+| `voidloom/tests/harness/outside_target_diff.py` | 35896 | `fd744a68d80a4400` |
 | `voidloom/tests/harness/property_battery_16_install.py` | 31627 | `1067b6c358dc43d9` |
 | `voidloom/tests/harness/run_all.py` | 5792 | `ecc5b27cfa5dc5e6` |
 | `voidloom/tests/test_accelerator_table.py` | 49518 | `e0d1594d990b4ec3` |
@@ -178,6 +178,7 @@
 | `voidloom/tests/test_env_file_mode_follows_symlink.py` | 5084 | `d5df32f5ac8290f7` |
 | `voidloom/tests/test_env_file_path_is_curated.py` | 4651 | `f7d4f5258ebd5cf6` |
 | `voidloom/tests/test_env_file_reader.py` | 111079 | `45c8b59c36f86a8c` |
+| `voidloom/tests/test_env_sidecar_discovery.py` | 8346 | `c8ec01ab296532e7` |
 | `voidloom/tests/test_first_night_is_derived.py` | 10458 | `2b9b097840fdfcaf` |
 | `voidloom/tests/test_fts_any_word.py` | 9287 | `7c6676405f55cef5` |
 | `voidloom/tests/test_fts_lone_punctuation_r2.py` | 962 | `f07d0702b995c511` |
@@ -326,7 +327,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 949301 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 949608 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -343,7 +344,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 131177 | `43593469844ec21d` |
+| `install/lay_manifest.json` | 131484 | `165611f1fc4e658a` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -485,7 +486,7 @@
 | `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 218104 bytes
+### `docs` — Documentation  ·  12 files, 218184 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -493,21 +494,21 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19332 | `6af8d4be38a85697` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `61fa4f308aee9185` |
+| `docs/LAYOUT.md` | 8372 | `210414bcb4615783` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 34073 | `2c8e9b3269939cc9` |
+| `docs/PACKAGE_MANIFEST.md` | 34153 | `87ac8317e3fcea1a` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 424697 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 425647 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 18844 | `dd86a82dde1df529` |
+| `CHANGELOG.md` | 19794 | `7c488b5fdad986e6` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3050 | `7f02f5fbef807e29` |
 | `CONTRIBUTING.md` | 6709 | `475e8fbc09ff909e` |
