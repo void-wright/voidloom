@@ -68,6 +68,15 @@ python3 voidloom/tests/harness/run_all.py --list    # what it runs, and what it 
 python3 voidloom/tests/harness/run_all.py
 ```
 
+### Your own install and this checkout
+
+An install marks the `~/.voidloom` it creates, and code run from a checkout is not
+that install, so it refuses the folder (`ENV_DIR_FOREIGN`). The test suite gives
+itself an empty folder when that happens. For anything else you run from the
+checkout, set `VOIDLOOM_ENV_DIR` to a scratch folder, or for one command
+`VOIDLOOM_INSTALL_ROOT=<brain directory>`. Do not export that one: it makes
+everything in the shell speak for that install.
+
 ### GPUs: never assume device 0
 
 On many machines GPU 0 drives the monitor, and a model loaded there can starve

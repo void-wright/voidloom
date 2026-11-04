@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "5b4009c",
+  "derived_at_head": "5d28e16",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 455,
   "platforms": [
@@ -175,13 +175,13 @@
    "src": "COMPAT.json"
   },
   {
-   "bytes": 6709,
+   "bytes": 7188,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "475e8fbc09ff909e3c771f95acd05580518863e5c366109a3cdd4920b113e40b",
+   "sha256": "1afdadec1fd60f917c7cdc2ef8f01480520485bdc6a3018f0de188cd1c5d82aa",
    "src": "CONTRIBUTING.md"
   },
   {
@@ -205,13 +205,13 @@
    "src": "NOTICE"
   },
   {
-   "bytes": 26899,
+   "bytes": 28124,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "6cadeec2a804a2c3ab6af2cc4b428a4a5ff20c85e1a6f1f7d972955cf3a8a92d",
+   "sha256": "397fe00c28f2e5839f87e232dc25663c163501ef95d9b6198b1353b74b4e4ad6",
    "src": "README.md"
   },
   {
@@ -815,13 +815,13 @@
    "src": "docs/PERSONA_FORGE.md"
   },
   {
-   "bytes": 8534,
+   "bytes": 9747,
    "component": "core",
    "dst": "docs/RESTORE_MANIFEST.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "5876ed9b624409b42a188ea5e75782f06a130b1b6e762fc23672fa5d36d6c3da",
+   "sha256": "64c120fbc605bb65da6a8da93d9aa480e47076a9c54d7703b52b03313aa7deb2",
    "src": "docs/RESTORE_MANIFEST.md"
   },
   {

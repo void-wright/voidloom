@@ -209,6 +209,8 @@ Every flag: `bash install.sh --help`.
 | `~/.local/bin/voidloom` | The `voidloom` command (a symlink) | always |
 | `~/.voidloom/wizard-library-env` | Settings every scheduled job reads (PATH, brain location, embedding model, GPU choice), mode `0600`; your own lines outside its managed block are kept | always |
 | `~/.voidloom/wizard-config.json` | The reranker decision and your approvals choice | always |
+| `~/.voidloom/.voidloom-owner` | A label naming the brain this folder belongs to, so a second install on the same account stays out of it | only if this install created the folder |
+| `~/.claude/memory/embedder.lock.json` | Which embedding model this brain uses, at which revision, and the checksum its files must match | semantic tier |
 | `~/.claude/skills/persona-forge/`, `~/.claude/commands/persona-forge.md` | The Persona Forge and its `/persona-forge` command | after the install's self-check passes |
 | `~/.claude/skills/memory-operator/` | Two blank outlines for writing a persona by hand | always |
 | `~/.claude/settings.json` | One SessionStart hook entry, backed up first | only if you answer yes (or `--wire-hooks`) |
@@ -402,7 +404,7 @@ licences are listed in [`NOTICE`](./NOTICE).
 | What | When | Where it goes |
 |---|---|---|
 | Installing the semantic tier | install | PyPI; for Linux CPU-only, AMD and Intel GPU machines, also PyTorch's own index (`download.pytorch.org`) |
-| Embedding and reranking models | install (downloaded once), or first use if missing | Hugging Face Hub |
+| Embedding and reranking models | install (downloaded once, at the pinned revisions), or `voidloom tier set` | Hugging Face Hub |
 | A model vendor's installer | only if you say yes when the thinker's program is missing | that vendor's official install script, shown to you first |
 | Proving the thinker credential | install, or `voidloom thinker set` / `login` | your chosen model's service |
 | Scheduled jobs that think | only once armed, and only with a thinker chosen | your chosen model's service (nothing, for **e** or a model on your own machine) |
@@ -423,7 +425,7 @@ previews: it lists everything it would remove and changes nothing.
 | Run `bash uninstall.sh` with | What happens |
 |---|---|
 | no options | Preview only. Nothing changes. |
-| `--yes` | Removes the scheduled jobs, the session hooks and instruction blocks, the `voidloom` command and the installed code. **Keeps your memories** (the brain database) and your env file. |
+| `--yes` | Removes the scheduled jobs, the session hooks and instruction blocks, the `voidloom` command and the installed code. **Keeps your memories** (the brain database) and your env file; the env folder's ownership label is removed if it names this install. |
 | `--yes --remove-brain` | Also deletes the brain and `~/.voidloom`, after asking you to type a confirmation phrase. |
 
 It does not delete downloaded model caches, a persona you forged, or the AI
@@ -441,7 +443,9 @@ python3 -c "import sqlite3, os; src = sqlite3.connect(os.path.expanduser('~/.cla
 ```
 
 Keep that file wherever you keep backups. To restore, stop any scheduled jobs, put the
-file back at `~/.claude/memory/claude_memory.db`, and run the self-check;
+file back at `~/.claude/memory/claude_memory.db`, and run the self-check. Keep
+`embedder.lock.json` from the same folder with it: it says which model made the
+brain's vectors, and it travels with the brain.
 [`docs/RESTORE_MANIFEST.md`](./docs/RESTORE_MANIFEST.md) lists what else a brain
 needs to stand up on another machine.
 
@@ -457,6 +461,11 @@ python3 ~/.claude/memory/install/self_check.py
 Answers you gave before (the overnight thinker, approvals, your GPU choice) are
 recorded and reused; the thinker is proven again rather than asked again. What
 changed in each release is in [`CHANGELOG.md`](./CHANGELOG.md).
+
+If your env file lives anywhere other than `~/.voidloom`, tell Voidloom where: it no
+longer searches your home folder. Set `WIZARD_ENV_FILE` or `VOIDLOOM_ENV_DIR`, or
+mark the folder with `python3 ~/.claude/memory/organs/voidloom_env.py --mark <folder>`
+and set `VOIDLOOM_LEGACY_DISCOVERY=1`.
 
 ---
 
@@ -521,6 +530,11 @@ tier runs through an interpreter outside the brain (no venv); see
 - Approvals: `voidloom approvals --mode auto|manual`.
 - GPU: edit the `WIZARD_DISPLAY_INDEX=` and `WIZARD_CUDA_DEVICE=` lines the
   installer wrote in `~/.voidloom/wizard-library-env`, outside the managed block.
+- Embedding model: `voidloom tier set <nomic|qwen>` re-embeds every memory under the
+  new model while the old one keeps answering, and switches only when all of them are
+  done. Add `--plan` to count the work first. The old vectors are kept:
+  `voidloom tier rollback` goes back, and `voidloom tier cleanup --confirm <old table>`
+  deletes them once you are sure.
 
 ### Writing your own lines in the env file
 

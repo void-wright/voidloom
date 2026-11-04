@@ -53,14 +53,18 @@ Recall loads **two** models, not one. The reranker is the one people forget.
 
 | role | id | dim | cache bytes |
 |---|---|---|---|
-| embedder | `jinaai/jina-embeddings-v5-text-small` | 1024 | 1,369,724,029 |
+| embedder, gpu tier | `Qwen/Qwen3-Embedding-0.6B` | 1024 | 1,207,489,041 |
+| embedder, cpu tier | `nomic-ai/nomic-embed-text-v1.5` | 768 | 548,032,310 |
+| cpu tier's remote code | `nomic-ai/nomic-bert-2048` (pinned in the lock's `code`) | — | 105,521 |
+| embedder, personal installs only | `jinaai/jina-embeddings-v5-text-small` (no lock; not a shipped tier) | 1024 | 1,369,724,029 |
 | reranker (default) | `Qwen/Qwen3-Reranker-0.6B` | — | 1,207,489,163 |
 | reranker (fallback) | `BAAI/bge-reranker-v2-m3` | — | 2,293,259,813 |
-| light tier | `nomic-ai/nomic-embed-text-v1.5` | 768 | 548,033,496 |
 
-Which tier is used is read from the brain itself
-(`metadata.active_embedding_table`), not from config. Cache lives under
-`~/.cache/huggingface/hub/`, plus a second location people miss:
+Which tier is used is read from the install lock beside the brain
+(`<brain>/embedder.lock.json`), and from `metadata.active_embedding_table` only on a
+brain with no lock, never from config. Cache lives under
+`~/.cache/huggingface/hub/` (or wherever `HF_HUB_CACHE`, `HF_HOME` or `XDG_CACHE_HOME`
+puts it), plus a second location people miss:
 `~/.cache/huggingface/modules/transformers_modules/`, where `trust_remote_code`
 compiles the embedder's custom code.
 
@@ -99,6 +103,8 @@ means or not at all.
 | `<env-dir>/wizard-library-env` | 1,696 | **the one that bites.** Declares the GPU device. Omit it and `voidloom_device` returns the package-safe default, device **0** — which on a two-GPU workstation may be the display card |
 | `~/.cache/huggingface/token` | 37 | opened on every model load |
 | `<env-dir>/thinker/` (mode 700) | — | **the overnight thinker's only credential home**: `claude.env` (the Claude one-year token), `kimi.env` (a Kimi Code key) or `codex/` (the brain's own Codex sign-in). Absent = the thinking organs take their heuristic path, logged, never raised. Restore it with the brain, or run `voidloom thinker login <claude\|kimi\|codex>` again |
+| `<brain>/embedder.lock.json` | — | **which model made this brain's vectors**: model, revision, checksum, width, table. Read before the `metadata` rows, and the loader refuses files that hash differently. A brain with no lock (older installs, jina) is read from `metadata.active_embedding_table`. Restore it beside the database, with `embedder.lock.history.jsonl` and any `embedder.lock.preimage.json` |
+| `<env-dir>/.voidloom-owner` | — | the install this directory belongs to. It names a path: on a machine where the brain sits elsewhere, delete it or the new install refuses the directory (`ENV_DIR_FOREIGN`) |
 | `<brain>/THINKER_RECORD` | — | which model the owner chose and when it was proven (sha256-sealed; a hand-edited copy is refused on read). Restore it beside the database, then run `voidloom thinker status` |
 
 **One Claude-token home, not three.** Before the thinker had its own folder, the Claude
@@ -150,7 +156,10 @@ Three smaller ones:
 3. `schema.sql` + the 27 `migration_*.sql` (accepting that 028 is missing).
 4. `~/.cache/huggingface/hub/` **and** `.../modules/transformers_modules/`.
 5. The env-dir sidecars — above all the one declaring the GPU device — and the
-   thinker's `thinker/` folder, with `THINKER_RECORD` beside the brain.
+   thinker's `thinker/` folder, with `THINKER_RECORD` and `embedder.lock.json` beside
+   the brain. `<env-dir>` is `VOIDLOOM_ENV_DIR`, else the directory of
+   `WIZARD_ENV_FILE`, else `~/.voidloom`; no other directory is searched unless
+   `VOIDLOOM_LEGACY_DISCOVERY=1`.
 6. The seven pinned third-party packages, including `vec0.so`.
 7. Then **prove it**: stand it up in a fresh directory and make it store *and*
    recall. A `PRAGMA integrity_check` has tested the file, not the restore.

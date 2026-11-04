@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-04T02:07:31Z from the checkout at `5b4009c`.
+> Generated 2026-11-04T02:34:08Z from the checkout at `5d28e16`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -12,7 +12,7 @@
 |---|---|
 | files tracked | 455 |
 | files hashed | 455 |
-| total bytes | 10549094 |
+| total bytes | 10552011 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -348,7 +348,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 132741 | `cca8146b826991af` |
+| `install/lay_manifest.json` | 132741 | `2899781ff9244ac6` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -490,7 +490,7 @@
 | `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 218516 bytes
+### `docs` — Documentation  ·  12 files, 219729 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -501,13 +501,13 @@
 | `docs/LAYOUT.md` | 8372 | `9322255bb1dfd280` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 34485 | `c017b97ec4eebc64` |
+| `docs/PACKAGE_MANIFEST.md` | 34485 | `871d4de49b2980b1` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
-| `docs/RESTORE_MANIFEST.md` | 8534 | `5876ed9b624409b4` |
+| `docs/RESTORE_MANIFEST.md` | 9747 | `64c120fbc605bb65` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 433442 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 435146 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -515,10 +515,10 @@
 | `CHANGELOG.md` | 22693 | `90de5c65b33496b9` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3050 | `7f02f5fbef807e29` |
-| `CONTRIBUTING.md` | 6709 | `475e8fbc09ff909e` |
+| `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
 | `NOTICE` | 4391 | `6608b4df230ab445` |
-| `README.md` | 26899 | `6cadeec2a804a2c3` |
+| `README.md` | 28124 | `397fe00c28f2e583` |
 | `SECURITY.md` | 1930 | `384e3060f9d1866a` |
 | `install.sh` | 339678 | `edc9e90efd46975c` |
 | `uninstall.sh` | 9542 | `3d3c603984e7d92f` |
