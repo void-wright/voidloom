@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 438,
+    "core": 439,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 393,
+    "all": 394,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 425,
+    "brain": 426,
     "home": 2,
     "null": 11,
     "skills": 18
    }
   },
-  "derived_at_head": "7d16060",
+  "derived_at_head": "faeffc1",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 456,
+  "entries": 457,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 23007,
+   "bytes": 23782,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "d10621a47b60f6c3e273e45a905d288e266c192fa66cce074d5354a0d57af211",
+   "sha256": "b9096df220cb484ce31bf4e1baec57c80438b4913bb9cbd0c4a608a28d14ae5e",
    "src": "CHANGELOG.md"
   },
   {
@@ -771,7 +771,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "20a4aead221c8a0c5b8c4f975cd8cf95b01f245c9e8d6bde1e77af2ee29c19b1",
+   "sha256": "26e9a802ac3aac248e67817fc440a538c375901696b71d4f2d7c867b26e48e78",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1825,13 +1825,13 @@
    "src": "organs/memory_dreaming.py"
   },
   {
-   "bytes": 89805,
+   "bytes": 96414,
    "component": "core",
    "dst": "organs/memory_write.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "bb721644f4f77e19a645add697071384b458f767acdec2cb72bde1294d4079f4",
+   "sha256": "c2993661056fdb7354290c51b45823234080ed661783c0bc253a1f7139032937",
    "src": "organs/memory_write.py"
   },
   {
@@ -2025,13 +2025,13 @@
    "src": "organs/skill_graduation.py"
   },
   {
-   "bytes": 108895,
+   "bytes": 111325,
    "component": "core",
    "dst": "organs/sleep_loop.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "3d9fff5ba8f90dc4d32afcf18e18fe4b8f82176c8dcab5cd9d26912db77e06e5",
+   "sha256": "7f25fdd977d21a651062314bf44b3403bc7f2de69abd75928979ad8565bb71b5",
    "src": "organs/sleep_loop.py"
   },
   {
@@ -3205,6 +3205,16 @@
    "src": "voidloom/tests/test_brain_keyed_locks_r3g3.py"
   },
   {
+   "bytes": 15537,
+   "component": "core",
+   "dst": "voidloom/tests/test_centroid_stamp.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "13645fb6a6f119d244539594f4d44e23bb0109b585b63176997cc23fb5963490",
+   "src": "voidloom/tests/test_centroid_stamp.py"
+  },
+  {
    "bytes": 10567,
    "component": "core",
    "dst": "voidloom/tests/test_codex_hook_fires_on_resume_d26.py",
@@ -4155,13 +4165,13 @@
    "src": "voidloom/tests/test_sleep_loop_unit_tests_r3g3.py"
   },
   {
-   "bytes": 31281,
+   "bytes": 32242,
    "component": "core",
    "dst": "voidloom/tests/test_sleep_loop_unstallable_r1.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "bf063b29abea1a410669d4e9e54dabb4948ea3e955b1a09854e874236b609b10",
+   "sha256": "0434a92ff5da911986d3b3d5fbf47e9d8082ee572789c0a1224a2618fd5dd648",
    "src": "voidloom/tests/test_sleep_loop_unstallable_r1.py"
   },
   {

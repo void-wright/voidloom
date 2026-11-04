@@ -85,14 +85,6 @@ from pathlib import Path
 import voidloom_env
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-# --- TO-02 repair: resolve the embedding tier instead of hardcoding it -------
-# The write path moved to memory_embeddings_v2 on 2026-05-28; this reader was not
-# moved with it and has returned NOTHING since. embed_resolver refuses rather than
-# defaulting to the dormant table (architecture-009).
-from embed_resolver import resolve as _resolve_embed_tier  # noqa: E402
-# ---------------------------------------------------------------------------
-
-
 # L5-F (iter-2 P2): the ACT-R activation view lives in kind_taxonomy. Stage 5
 # (rerank_importance) reads it as the SINGLE decay source instead of computing its
 # own boost/decay -- the SAME view claude_memory.cmd_maintain consumes, so there is
@@ -580,6 +572,21 @@ def _any_embeddings(conn) -> bool:
     return False
 
 
+def _legacy_episodics_held(conn, flt, cutoff: str) -> int:
+    """How many recent episodic memories hold a vector but no verified stamp on a locked brain: read by nothing else,
+    counted so a night that clusters nothing on a pinned brain says why. 0 on a brain with no lock."""
+    if not flt.locked:
+        return 0
+    vec_ids = f"SELECT memory_id FROM {flt.vec_table}"
+    return int(conn.execute(
+        f"""SELECT COUNT(*) FROM memories m
+            LEFT JOIN {_vl_mw.PROVENANCE_TABLE} p ON p.memory_id = m.id AND p.vec_table = ?
+            WHERE m.kind = 'episodic' AND m.is_archived = 0 AND m.created_at > ?
+              AND m.id IN ({vec_ids})
+              AND (p.memory_id IS NULL OR p.weights_hash = ?)""",
+        (flt.vec_table, cutoff, _vl_mw.WEIGHTS_HASH_UNRESOLVED)).fetchone()[0])
+
+
 def consolidate_episodics(
     conn: sqlite3.Connection,
     lookback_days: int = 7,
@@ -617,21 +624,33 @@ def consolidate_episodics(
     # the window up to a day off (a 'T' sorts after every ' ' of the same date) and 4 h off (EDT).
     cutoff = _utc_stamp(_utc_now() - timedelta(days=lookback_days))
 
-    # Fetch recent episodic memories with their embeddings.
+    # Fetch recent episodic memories with their embeddings, through the search set: the reader's refusals propagate.
+    if _vl_mw is None:
+        raise RuntimeError("memory_write unavailable: consolidation cannot read the search set")
     try:
-        _emb_table, _emb_dim = _resolve_embed_tier(conn)
+        _flt = _vl_mw.search_set(conn)
     except Exception:
         # A brain with no embedding tier yet (a Tier-0 install, or a fresh brain before its first embed) has nothing
-        # Stage 1 can cluster: that is "nothing to do", not a failed night. Only when vectors EXIST without a declared
-        # table is the refusal a real fault, and then it stays loud.
+        # Stage 1 can cluster: that is "nothing to do", not a failed night. Only when vectors EXIST and the reader
+        # refuses is the refusal a real fault, and then it stays loud.
         if not _any_embeddings(conn):
             return []
         raise
+    if _flt is None:                                     # a locked brain with nothing in it
+        return []
+    _emb_table, _emb_dim = _flt.vec_table, _flt.dim
+    # A locked brain clusters VERIFIED members only. A legacy member is in the search set for reading, but a centroid
+    # over it could not carry the lock's checksum (memory_write.stamp_centroid), so it is excluded here, at selection,
+    # and waits for a re-embed. A brain with no lock has no stamp to require: the join is empty, its parameters too.
+    _held = _legacy_episodics_held(conn, _flt, cutoff)
+    if _held:
+        logger.info("consolidation: %d recent episodic memories are legacy under the lock and wait for a re-embed", _held)
     rows = conn.execute(
         f"""SELECT m.id, m.content, m.summary, m.importance, m.category,
                   e.embedding
            FROM memories m
            JOIN {_emb_table} e ON e.memory_id = m.id
+           {_flt.verified_join_sql('m')}
            WHERE m.kind = 'episodic'
              AND m.is_archived = 0
              AND m.created_at > ?
@@ -658,7 +677,7 @@ def consolidate_episodics(
              AND NOT EXISTS (SELECT 1 FROM consolidation_sources cs
                               WHERE cs.source_memory_id = m.id)
            ORDER BY m.created_at DESC""",
-        (cutoff,),
+        (*_flt.search_set_params, cutoff),
     ).fetchall()
 
     if len(rows) < min_cluster_size:
@@ -852,11 +871,23 @@ def consolidate_episodics(
         )
         new_id = cursor.lastrowid
 
-        # Insert centroid embedding.
-        conn.execute(
-            f"INSERT INTO {_resolve_embed_tier(conn)[0]} (memory_id, embedding) VALUES (?, ?)",
-            (new_id, centroid),
-        )
+        # Insert the centroid embedding AND ITS STAMP. A refusal rolls the memory back with it, so no unstamped vector
+        # and no orphan memory survive; the members stay eligible and the rest of the night goes on.
+        try:
+            conn.execute(
+                f"INSERT INTO {_emb_table} (memory_id, embedding) VALUES (?, ?)",
+                (new_id, centroid),
+            )
+            _vl_mw.stamp_centroid(conn, new_id, _emb_table, _emb_dim, members, cluster_embeddings,
+                                  "sleep_loop.consolidate_episodics")
+        except Exception as _stamp_err:
+            conn.rollback()
+            logger.error("consolidation cluster %s REFUSED at the centroid stamp (%s: %s); nothing written for it",
+                         cluster_id, type(_stamp_err).__name__, _stamp_err)
+            results.append({'consolidated_memory_id': None, 'source_ids': members,
+                            'cluster_size': len(members), 'summary': consolidated_summary,
+                            'refused': f"{type(_stamp_err).__name__}: {_stamp_err}"})
+            continue
 
         # Insert tags.
         for tag in top_tags:
@@ -1745,9 +1776,11 @@ def run_sleep_cycle(
             results['memories_consolidated'] = sum(
                 1 for c in consolidations if c.get('consolidated_memory_id')
             )
+            results['clusters_refused'] = sum(1 for c in consolidations if c.get('refused'))
             stages_ok += 1
             _end('consolidation', t, clusters=results['clusters_found'],
-                 consolidated=results['memories_consolidated'])
+                 consolidated=results['memories_consolidated'],
+                 refused=results['clusters_refused'] or None)
         except BudgetExhausted:
             interrupted = 'consolidation'
             if not dry_run:
@@ -2067,7 +2100,8 @@ def unit_tests():
         import types
         _unit = struct.pack("768f", *([1.0 / math.sqrt(768)] * 768))
         _vl_mw = types.SimpleNamespace(on_memory_written=lambda *a, **k: _real_mw.on_memory_written(
-            *a, encoder=lambda _text: _unit, **k))
+            *a, encoder=lambda _text: _unit, **k), search_set=_real_mw.search_set,
+            stamp_centroid=_real_mw.stamp_centroid)
 
     # Create a temporary test database.
     tmp_dir = tempfile.mkdtemp(prefix="sleep_loop_test_")

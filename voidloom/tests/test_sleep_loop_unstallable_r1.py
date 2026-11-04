@@ -151,10 +151,20 @@ def watermark(db):
         c.close()
 
 
+def no_model_writer():
+    """memory_write with its post-write hook switched off and everything that needs no model left real."""
+    import types
+    import memory_write as mw
+    return types.SimpleNamespace(on_memory_written=lambda *a, **k: {"embedded": False}, search_set=mw.search_set,
+                                 stamp_centroid=mw.stamp_centroid, PROVENANCE_TABLE=mw.PROVENANCE_TABLE,
+                                 WEIGHTS_HASH_UNRESOLVED=mw.WEIGHTS_HASH_UNRESOLVED)
+
+
 @pytest.fixture(autouse=True)
 def _no_real_writer(monkeypatch):
-    """No test here may reach the real embedding writer (a model load)."""
-    monkeypatch.setattr(sleep_loop, "_vl_mw", None, raising=False)
+    """No test here may reach the real embedding writer (a model load). Consolidation's reader and its centroid stamp
+    load no model, so they stay real."""
+    monkeypatch.setattr(sleep_loop, "_vl_mw", no_model_writer(), raising=False)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -394,7 +404,11 @@ def slow(conn, mid, *a, **k):
     time.sleep(0.05)
     return real(conn, mid, *a, **k)
 temporal_edges.extract_edges_heuristic = slow
-sleep_loop._vl_mw = None
+import types, memory_write as mw
+sleep_loop._vl_mw = types.SimpleNamespace(on_memory_written=lambda *a, **k: {"embedded": False},
+                                          search_set=mw.search_set, stamp_centroid=mw.stamp_centroid,
+                                          PROVENANCE_TABLE=mw.PROVENANCE_TABLE,
+                                          WEIGHTS_HASH_UNRESOLVED=mw.WEIGHTS_HASH_UNRESOLVED)
 cfg = {"quickening_enabled": False, "communities_enabled": False, "min_unreflected_for_reflection": 10 ** 9,
        "budget_seconds": 0, "edge_batch_size": 5}
 res = sleep_loop.run_sleep_cycle(db, config=cfg)

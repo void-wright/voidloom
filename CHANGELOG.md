@@ -31,6 +31,14 @@ All notable changes to Voidloom are recorded here. The format follows
   and ends the rollback. A late write during the switch is embedded inside it, at most 32
   memories per attempt and 10 attempts (`FLIP_GAP_CAP`, `FLIP_ATTEMPTS` in `organs/tier_set.py`).
   **Both bounds are invented, not tuned**: nothing was measured to choose them.
+- **The nightly centroid is stamped.** Consolidation averages member vectors, so no embedder
+  stamps the result: it wrote that vector with no provenance. It now reads through the same search
+  set as the other vector readers and stamps the row as a centroid, naming its members and a
+  checksum over their vectors. On a locked brain every member must carry the lock's checksum; a
+  cluster that does not is refused and rolled back whole, and the night goes on. Rows written
+  before the lock (`unresolved`, or unstamped) are searched, but they do not enter a centroid: on
+  a pinned brain they wait for `re-embed`, and the sleep log says how many are waiting. A brain with
+  no lock keeps writing, never a refusal: the checksum the members agree on, otherwise `unresolved`.
 - Migrations 042–045: provenance stamps can name the weights checksum; the re-embed log states
   its model and width; seed and origin columns on memories; derived-layer stamps.
 - **`COMPAT.json`**, at the top of the package: what this package produces and accepts, so a

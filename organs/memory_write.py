@@ -945,6 +945,108 @@ def stamp_after_vector_insert(conn: sqlite3.Connection, memory_id: int, text: st
     return _stamp_provenance(conn, memory_id, table, dim, text, organ)
 
 
+def centroid_content_hash(member_vectors: Sequence[bytes]) -> str:
+    """sha256 over the member vectors' BYTES, in the caller's (memory_id) order.
+
+    Bytes, not ids: a member re-embedded after a text edit changes its bytes and so
+    makes the centroid detectably stale, which an id list could never show."""
+    h = hashlib.sha256()
+    for v in member_vectors:
+        h.update(bytes(v))
+    return h.hexdigest()
+
+
+class CentroidRefused(MemoryWriteError):
+    """On a locked brain, a centroid whose members are not ALL stamped under the
+    lock's checksum is refused, not stamped: averaging across spaces is not a vector
+    in any space. `.detail` names the members and why."""
+
+    def __init__(self, message: str, **detail: Any):
+        super().__init__(message)
+        self.detail = dict(detail)
+
+
+def stamp_centroid(conn: sqlite3.Connection, memory_id: int, table: str, dim: int,
+                   member_ids: Sequence[int], member_vectors: Sequence[bytes],
+                   organ: str) -> Dict[str, Any]:
+    """The stamp for a vector no embedder produced: an average of member vectors.
+    Called by the one organ that writes its own vector
+    (sleep_loop.consolidate_episodics), inside its open transaction, AFTER the
+    centroid INSERT.
+
+    locked brain   weights_hash / model_id / dim are INHERITED AND VERIFIED: every
+                   member's stamp must exist on `table` and carry the lock's checksum
+                   at the lock's width, and `table` must be the lock's; otherwise
+                   CentroidRefused, and the caller rolls its INSERT back. A legacy
+                   member ('unresolved', or no stamp) refuses too: nobody can say what
+                   space it is in, so the average cannot carry the lock's checksum.
+    pre-lock brain (no embedder.lock.json beside the database, which includes every
+                   tier the catalogue does not ship) keeps writing, never a refusal:
+                   the checksum every member carries when they all agree on one at
+                   this width, else the declared absence 'unresolved'.
+    A malformed lock raises LOCK_MALFORMED; it is never read as absent.
+
+    content_hash is the sha256 over the member vectors' bytes in memory_id order;
+    input_kind is 'centroid' and inputs the member ids, so a tier change can see what
+    the row was derived from.
+    """
+    ids = [int(i) for i in member_ids]
+    if not ids or len(ids) != len(member_vectors):
+        raise CentroidRefused("a centroid needs at least one member, and one vector per member",
+                              members=ids, vectors=len(member_vectors))
+    el = _embedder_lock()
+    ensure_provenance_table(conn)
+    try:
+        lock = el.resolve(conn)
+    except el.EmbedderLockError as e:
+        if e.code != "LOCK_MISSING":
+            raise
+        lock = None
+    if lock is not None and (table != lock["vec_table"] or int(dim) != int(lock["dim"])):
+        raise CentroidRefused(
+            f"centroid targets {table!r}@{dim} but the lock promises {lock['vec_table']!r}@{lock['dim']}",
+            vec_table=table, dim=int(dim), lock_vec_table=lock["vec_table"], lock_dim=int(lock["dim"]))
+    by_id: Dict[int, Tuple[Any, int]] = {}
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        ph = ",".join("?" * len(chunk))
+        for mid, whash, wide in conn.execute(
+                f"SELECT memory_id, weights_hash, dim FROM {PROVENANCE_TABLE} "
+                f"WHERE vec_table = ? AND memory_id IN ({ph})", [table, *chunk]).fetchall():
+            by_id[int(mid)] = (whash, int(wide))
+    if lock is not None:
+        missing = [i for i in ids if i not in by_id]
+        other = sorted(i for i in ids if i in by_id and by_id[i][0] != lock["weights_hash"])
+        wrong_dim = sorted(i for i in ids if i in by_id and by_id[i][1] != int(lock["dim"]))
+        if missing or other or wrong_dim:
+            raise CentroidRefused(
+                f"refusing to stamp a centroid over members not all under the lock "
+                f"({lock['weights_hash'][:12]}…): {len(missing)} unstamped, {len(other)} under "
+                f"another checksum or 'unresolved', {len(wrong_dim)} at another width. Averaging "
+                "across spaces is not a vector in any space.",
+                missing=missing, foreign=other, wrong_dim=wrong_dim, lock_hash=lock["weights_hash"])
+        weights_hash, model_id, model_ref = lock["weights_hash"], lock["model_id"], lock["revision"]
+    else:
+        agreed = {by_id.get(i) for i in ids}
+        only = agreed.pop() if len(agreed) == 1 else None
+        weights_hash = (only[0] if only and only[0] and only[0] != WEIGHTS_HASH_UNRESOLVED
+                        and only[1] == int(dim) else WEIGHTS_HASH_UNRESOLVED)
+        ident = model_identity(table)
+        model_id, model_ref = ident["model_id"], ident["model_ref"]
+    order = sorted(range(len(ids)), key=lambda k: ids[k])
+    row = {
+        "memory_id": int(memory_id), "vec_table": table, "model_id": model_id,
+        "model_ref": model_ref, "weights_hash": weights_hash, "dim": int(dim),
+        "content_hash": centroid_content_hash([member_vectors[k] for k in order]),
+        "embedded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "organ": organ or "?", "input_kind": "centroid", "inputs": json.dumps(sorted(ids)),
+    }
+    conn.execute(
+        f"INSERT OR REPLACE INTO {PROVENANCE_TABLE} ({', '.join(PROVENANCE_COLUMNS)}) "
+        f"VALUES ({', '.join(':' + c for c in PROVENANCE_COLUMNS)})", row)
+    return row
+
+
 def attach_under_lock(conn: sqlite3.Connection, memory_id: int, text: str, vec: bytes,
                       *, lock: Dict[str, Any], organ: str) -> Dict[str, Any]:
     """Write ONE vector and its stamp into the table `lock` names -- which need NOT
@@ -1116,6 +1218,18 @@ class ProvenanceFilter:
         if not self.locked:
             return join
         return f"{join} AND {self.member_sql(mem_alias)}"
+
+    def verified_join_sql(self, mem_alias: str = "m", stamp_alias: str = "p") -> str:
+        """For a reader that derives a NEW vector from what it reads, so needs the
+        VERIFIED part of the search set and not its legacy part: a plain JOIN to the
+        stamp carrying the lock's checksum at its width, one keyed lookup per row.
+        Bind `search_set_params` before the caller's own parameters. Lockless: empty,
+        no stamp is required and the parameters are empty too."""
+        if not self.locked:
+            return ""
+        return (f"JOIN {PROVENANCE_TABLE} {stamp_alias} ON {stamp_alias}.memory_id = {mem_alias}.id "
+                f"AND {stamp_alias}.vec_table = ? AND {stamp_alias}.weights_hash = ? "
+                f"AND {stamp_alias}.dim = ?")
 
     def as_dict(self) -> Dict[str, Any]:
         return {"basis": self.basis, "search_rule": self.search_rule,
@@ -1320,9 +1434,12 @@ def provenance_coverage(conn: sqlite3.Connection):
         (table,)).fetchone()[0]
 
     conn.create_function("vl_sha256", 1, content_hash, deterministic=True)
+    # A centroid has no source text, so it is never stale against one. A sidecar
+    # still in migration_033's shape has no input_kind and holds no centroid.
+    text_rows = "AND p.input_kind = 'text' " if "input_kind" in _sidecar_columns(conn) else ""
     stale = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p JOIN memories m ON m.id = p.memory_id "
-        f"WHERE p.vec_table = ? AND p.model_id = ? "
+        f"WHERE p.vec_table = ? AND p.model_id = ? {text_rows}"
         f"  AND p.memory_id IN (SELECT memory_id FROM {table}) "
         f"  AND p.content_hash <> vl_sha256(m.content)",
         (table, model_id)).fetchone()[0]
