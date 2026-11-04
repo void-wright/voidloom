@@ -190,7 +190,7 @@ PERSONA_TAGS = frozenset({
     "four-layer-persona", "persona-depth", "persona-persistence",
 })
 
-# Embedding dimension — Jina v5 1024-dim (active_embedding_table).
+# Embedding dimensions per tier; the ACTIVE one comes from embed_resolver.
 _JINA_DIM = 1024
 _NOMIC_DIM = 768
 
@@ -362,11 +362,9 @@ def _get_conn(db_path: str) -> sqlite3.Connection:
 
 
 def _detect_embedding_table(conn: sqlite3.Connection) -> Tuple[str, int]:
-    """Detect the active embedding table and dimension.
-
-    Reads the metadata key ``active_embedding_table``. Falls back to
-    ``memory_embeddings`` (768-dim Nomic) if the key is absent.
-    """
+    """The active embedding table and dimension, through embed_resolver: the install
+    lock first, then, for a brain with no lock, the table it already resolves to. No
+    fallback table."""
     # ROUND GAMMA (A7): batch organ, so it REFUSES rather than guessing. There is
     # no interactive caller to degrade for; a dream cycle that cannot tell which
     # tier it is on should stop, loudly, not quietly read a dead table.
@@ -1245,13 +1243,29 @@ def _store_dream_as_reflection(
         tags = ["dream", f"dream-{dream_type}", "auto-generated", *[t for t in extra_tags if t]]
         for tag in tags:
             conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)", (mem_id, tag))
+        # The pair was chosen from vectors, so the link carries the checksum it was computed under (NULL on a brain
+        # without the column or a lock: unstamped, and reported as such).
+        _dh = None
+        try:
+            import memory_write as _mw
+            _dh = _mw.derived_stamp(conn, "memory_links")
+        except Exception:
+            _dh = None
         for source_id in (memory_a_id, memory_b_id):
-            conn.execute(
-                """INSERT OR IGNORE INTO memory_links
-                       (source_id, target_id, link_type, strength)
-                   VALUES (?, ?, 'elaborates', 0.6)""",
-                (mem_id, source_id),
-            )
+            if _dh:
+                conn.execute(
+                    """INSERT OR IGNORE INTO memory_links
+                           (source_id, target_id, link_type, strength, weights_hash)
+                       VALUES (?, ?, 'elaborates', 0.6, ?)""",
+                    (mem_id, source_id, _dh),
+                )
+            else:
+                conn.execute(
+                    """INSERT OR IGNORE INTO memory_links
+                           (source_id, target_id, link_type, strength)
+                       VALUES (?, ?, 'elaborates', 0.6)""",
+                    (mem_id, source_id),
+                )
         # The endpoints' taint is the dream's taint (anti-laundering, as RAPTOR and playbooks already do).
         if metas[memory_a_id]["untrusted_source"] or metas[memory_b_id]["untrusted_source"]:
             conn.execute("UPDATE memories SET untrusted_source=1 WHERE id=?", (mem_id,))

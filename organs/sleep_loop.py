@@ -574,17 +574,9 @@ def _any_embeddings(conn) -> bool:
 
 def _legacy_episodics_held(conn, flt, cutoff: str) -> int:
     """How many recent episodic memories hold a vector but no verified stamp on a locked brain: read by nothing else,
-    counted so a night that clusters nothing on a pinned brain says why. 0 on a brain with no lock."""
-    if not flt.locked:
-        return 0
-    vec_ids = f"SELECT memory_id FROM {flt.vec_table}"
-    return int(conn.execute(
-        f"""SELECT COUNT(*) FROM memories m
-            LEFT JOIN {_vl_mw.PROVENANCE_TABLE} p ON p.memory_id = m.id AND p.vec_table = ?
-            WHERE m.kind = 'episodic' AND m.is_archived = 0 AND m.created_at > ?
-              AND m.id IN ({vec_ids})
-              AND (p.memory_id IS NULL OR p.weights_hash = ?)""",
-        (flt.vec_table, cutoff, _vl_mw.WEIGHTS_HASH_UNRESOLVED)).fetchone()[0])
+    counted so a night that clusters nothing on a pinned brain says why. 0 on a brain with no lock. The same figure
+    ships in memory_write.derived_layer_report, where `doctor` and `status` read it."""
+    return _vl_mw.legacy_episodics_held(conn, flt, cutoff)[1]
 
 
 def consolidate_episodics(

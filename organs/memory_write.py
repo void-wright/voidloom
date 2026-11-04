@@ -69,7 +69,7 @@ import logging
 import os
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -1774,6 +1774,160 @@ def coverage_envelope(conn: sqlite3.Connection) -> Dict[str, Any]:
             return {"ok": False, "error": code, "message": str(e), "coverage_basis": "measured",
                     **det["coverage"]}
         return unbuildable(code, str(e))
+
+
+# --------------------------------------------------------------------------
+# THE DERIVED LAYER: the checksum a derived row was computed under.
+#
+# A link strength from a cosine distance, a community's membership and a community
+# summary are all computed from vectors, so after a model change they are numbers
+# from the old space, and vector coverage cannot see them. Those rows carry the
+# lock's checksum (migration_045's column), and the report below names how many do
+# not. It also names the memories a locked brain cannot consolidate: a legacy vector
+# stays searchable, but a centroid over it could not carry the lock's checksum.
+# --------------------------------------------------------------------------
+DERIVED_TABLES = ("memory_links", "memory_communities", "community_summaries")
+
+# The window a night's consolidation reads unless its config says otherwise.
+CONSOLIDATION_LOOKBACK_DAYS = 7
+
+
+def derived_stamp(conn: sqlite3.Connection, table: str) -> Optional[str]:
+    """The lock's checksum for a row a writer is about to compute from vectors, or
+    None when the brain has no readable lock or `table` has no `weights_hash` column
+    (migration_045 not applied). Never raises: a derived writer on a brain with no
+    lock still writes, its row is then UNSTAMPED and the report says so. A writer
+    recording a row a PERSON asserted (`link`) must not call this: that strength was
+    computed under no model."""
+    try:
+        if "weights_hash" not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}:
+            return None
+        return _embedder_lock().resolve(conn)["weights_hash"]
+    except Exception:
+        return None
+
+
+def legacy_episodics_held(conn: sqlite3.Connection, flt: ProvenanceFilter,
+                          cutoff: str) -> Tuple[int, int]:
+    """(all time, since `cutoff`): the active episodic memories on a locked brain that
+    hold a vector no stamp verifies and have not been consolidated. They are readable
+    (the search set's legacy part), so nothing else says they are out of consolidation;
+    a re-embed brings them in. (0, 0) on a brain with no lock, which requires no stamp.
+    One statement, no per-row subquery; raises sqlite3.Error when a table is unreadable.
+    """
+    if not flt.locked:
+        return 0, 0
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE name = 'consolidation_sources'").fetchall()}
+    # IS NOT NULL: `NOT IN` over a set holding one NULL matches nothing.
+    done = ("AND m.id NOT IN (SELECT source_memory_id FROM consolidation_sources "
+            "WHERE source_memory_id IS NOT NULL)" if tables else "")
+    total, recent = conn.execute(
+        f"""SELECT COUNT(*), COALESCE(SUM(m.created_at > ?), 0) FROM memories m
+            LEFT JOIN {PROVENANCE_TABLE} p ON p.memory_id = m.id AND p.vec_table = ?
+            WHERE m.kind = 'episodic' AND m.is_archived = 0
+              AND m.id IN (SELECT memory_id FROM {flt.vec_table}) {done}
+              AND (p.memory_id IS NULL OR p.weights_hash = ?)""",
+        (cutoff, flt.vec_table, WEIGHTS_HASH_UNRESOLVED)).fetchone()
+    return int(total), int(recent)
+
+
+def _consolidation_report(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """The report's consolidation block. A figure that could not be read is None and
+    says why (`unmeasured`), never 0."""
+    out: Dict[str, Any] = {"legacy_held": None, "legacy_held_recent": None,
+                           "lookback_days": CONSOLIDATION_LOOKBACK_DAYS, "basis": None, "hint": None}
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=CONSOLIDATION_LOOKBACK_DAYS)
+              ).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        flt = provenance_filter(conn)
+        out["legacy_held"], out["legacy_held_recent"] = legacy_episodics_held(conn, flt, cutoff)
+    except Exception as e:
+        code = getattr(e, "code", None) or type(e).__name__
+        out["basis"] = f"not measured ({code}: {str(e)[:160]})"
+        out["unmeasured"] = f"consolidation: {code}"
+        return out
+    if not flt.locked:
+        out["basis"] = "no lock on this brain: consolidation requires no stamp, so nothing is held"
+        return out
+    out["basis"] = ("active episodic memories, not yet consolidated, holding a vector with no verified stamp: "
+                    "searchable, but outside consolidation until re-embedded")
+    if out["legacy_held"]:
+        out["hint"] = re_embed_hint(out["legacy_held"], _db_file(conn), flt.tier)
+    return out
+
+
+def derived_layer_report(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """For each derived table: rows computed under a checksum OTHER than the lock's
+    (`stale`), rows stamped under the lock (`current`), and rows carrying no stamp
+    (`unstamped`: written before migration_045, on a brain with no lock, or asserted
+    by a person). Raw counts, derived on this connection for this call, from one
+    GROUP BY per table. A table without the column is UNMEASURED, never 0.
+
+    With no lock there is no current checksum, so nothing is `current` and every
+    stamped row is counted as stale: a stamp names a model this brain no longer
+    promises (`basis` says so). Never raises; `stale_derived` is the figure to read,
+    `unstamped` sits beside it because a row nobody can vouch for is not current.
+
+    `consolidation` counts the legacy memories outside the nightly consolidation.
+    It needs vec0 on the connection; without it the figure is None, never 0."""
+    out: Dict[str, Any] = {"lock_weights_hash": None, "basis": None, "tables": {},
+                           "stale_derived": 0, "unstamped": 0, "current": 0, "total": 0, "unmeasured": []}
+    el = _embedder_lock()
+    whash = None
+    try:
+        whash = el.resolve(conn)["weights_hash"]
+        out["lock_weights_hash"] = whash
+        out["basis"] = "a stamp other than the lock's is stale; no stamp is unstamped; the lock's is current"
+    except el.EmbedderLockError as e:
+        out["basis"] = ("no lock on this brain: no checksum is current, every stamped row counts as stale"
+                        if e.code == "LOCK_MISSING" else
+                        f"lock unreadable ({e.code}): no checksum is current, every stamped row counts as stale")
+    except Exception as e:
+        out["basis"] = f"lock unreadable ({type(e).__name__}): no checksum is current, every stamped row counts as stale"
+    for tab in DERIVED_TABLES:
+        blank = {"total": None, "current": None, "stale": None, "unstamped": None}
+        try:
+            cols = {r[1] for r in conn.execute(f"PRAGMA table_info({tab})").fetchall()}
+            if not cols:
+                out["tables"][tab] = {"present": False, **blank}
+                out["unmeasured"].append(f"{tab}: table absent")
+                continue
+            if "weights_hash" not in cols:
+                n = conn.execute(f"SELECT COUNT(*) FROM {tab}").fetchone()[0]
+                out["tables"][tab] = {"present": True, **blank, "total": int(n),
+                                      "note": "no weights_hash column: migration_045 not applied; UNMEASURED, not 0"}
+                out["unmeasured"].append(f"{tab}: no weights_hash column")
+                continue
+            groups = conn.execute(f"SELECT weights_hash, COUNT(*) FROM {tab} GROUP BY weights_hash").fetchall()
+        except sqlite3.Error as e:
+            out["tables"][tab] = {"present": None, **blank, "error": f"{type(e).__name__}: {e}"}
+            out["unmeasured"].append(f"{tab}: unreadable ({type(e).__name__})")
+            continue
+        hist = {h: int(n) for h, n in groups if h}
+        total = sum(int(n) for _h, n in groups)
+        unstamped = total - sum(hist.values())
+        current = hist.get(whash, 0) if whash else 0
+        stale = total - unstamped - current
+        out["tables"][tab] = {"present": True, "total": total, "current": current, "stale": stale,
+                              "unstamped": unstamped, "histogram": hist}
+        out["stale_derived"] += stale
+        out["unstamped"] += unstamped
+        out["current"] += current
+        out["total"] += total
+    cons = _consolidation_report(conn)
+    gap = cons.pop("unmeasured", None)
+    if gap:
+        out["unmeasured"].append(gap)
+    out["consolidation"] = cons
+    held = cons["legacy_held"]
+    out["line"] = (f"derived layer: {out['stale_derived']} stale (another model's checksum) · "
+                   f"{out['unstamped']} unstamped · {out['current']} current of {out['total']} rows "
+                   f"across {len(DERIVED_TABLES)} tables"
+                   + (f"; {held} legacy episodic memories outside consolidation until re-embedded "
+                      f"({cons['legacy_held_recent']} from the last {cons['lookback_days']} days)" if held else "")
+                   + (f"; UNMEASURED: {'; '.join(out['unmeasured'])}" if out["unmeasured"] else ""))
+    return out
 
 
 def search_set(conn: sqlite3.Connection) -> Optional[ProvenanceFilter]:
