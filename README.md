@@ -446,6 +446,22 @@ Keep that file wherever you keep backups. To restore, stop any scheduled jobs, p
 file back at `~/.claude/memory/claude_memory.db`, and run the self-check. Keep
 `embedder.lock.json` from the same folder with it: it says which model made the
 brain's vectors, and it travels with the brain.
+
+**If recall refuses with `NO_ROWS_FOR_LOCK` after a restore,** the lock beside the
+brain is not the one its vectors were made under: no active memory has a vector
+carrying that lock's checksum. Nothing is lost, and the refusal prints how many
+memories matched. Put back the `embedder.lock.json` that belongs to the backup, or
+embed the brain under the lock it has now:
+
+```bash
+cd ~/.claude/memory && venv/bin/python3 organs/embedding_upgrade.py --db-path claude_memory.db re-embed
+```
+
+Use the same command for a brain restored from before it had a lock. Its vectors
+stay searchable, but `re-embed` is what checks them against the lock.
+`embed_backfill.py` is not the tool for this: it gives vectors to memories that have
+none.
+
 [`docs/RESTORE_MANIFEST.md`](./docs/RESTORE_MANIFEST.md) lists what else a brain
 needs to stand up on another machine.
 
@@ -535,6 +551,9 @@ tier runs through an interpreter outside the brain (no venv); see
   done. Add `--plan` to count the work first. The old vectors are kept:
   `voidloom tier rollback` goes back, and `voidloom tier cleanup --confirm <old table>`
   deletes them once you are sure.
+  `WIZARD_EMBED_MODEL` chooses the model at install only. After that it may only agree
+  with `embedder.lock.json`: set to another model, it stops the brain with
+  `WEIGHTS_MISMATCH`, so unset it and use `tier set`.
 
 ### Writing your own lines in the env file
 
