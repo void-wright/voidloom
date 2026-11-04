@@ -540,12 +540,31 @@ class C12_EngineVectorWritesStamp(_BrainCase):
         mid = _add(self.conn, "engine")
         self.conn.execute(f"INSERT INTO {TABLE} (memory_id, embedding) VALUES (?, ?)",
                           (mid, _stub_encoder("engine")))
-        self.mw.stamp_after_vector_insert(self.conn, mid, "engine", organ="claude_memory.store")
+        self.mw.stamp_after_vector_insert(self.conn, mid, "engine", organ="claude_memory.store",
+                                          table=TABLE, dim=1024)
         self.conn.commit()
         cov = self.mw.provenance_coverage(self.conn)
         self.assertEqual((cov.covered, cov.vectors_without_stamp), (1, 0))
         self.assertEqual(self.conn.execute("SELECT organ FROM embedding_provenance WHERE memory_id=?",
                                            (mid,)).fetchone()[0], "claude_memory.store")
+
+    def test_saboteur_the_stamp_names_the_table_the_write_touched_not_the_metadata(self):
+        """The brain's metadata says one tier and the caller wrote another (an environment override on a pre-lock
+        brain): a stamp that re-resolved would describe a table this write never touched."""
+        mid = _add(self.conn, "engine")
+        row = self.mw.stamp_after_vector_insert(self.conn, mid, "engine", organ="claude_memory.store",
+                                                table="memory_embeddings", dim=768)
+        self.assertEqual((row["vec_table"], row["dim"]), ("memory_embeddings", 768))
+
+    def test_saboteur_stamp_after_vector_insert_has_no_second_resolver(self):
+        """A pre-lock brain whose environment disagrees with its metadata: the write goes to the table the caller
+        resolved, so the stamp must name that table, and nothing here may resolve one of its own."""
+        import inspect
+        sig = inspect.signature(self.mw.stamp_after_vector_insert)
+        for name in ("table", "dim"):
+            self.assertIs(sig.parameters[name].default, inspect.Parameter.empty, name)
+        with self.assertRaises(TypeError):
+            self.mw.stamp_after_vector_insert(self.conn, 1, "x", organ="o")
 
 
 

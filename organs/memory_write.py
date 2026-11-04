@@ -157,53 +157,48 @@ def assert_width(blob: bytes, dim: int) -> None:
 
 
 def default_encoder(text: str, conn: Optional[sqlite3.Connection] = None) -> bytes:
-    """The canonical encoder, forced onto the CALLER'S tier.
+    """The canonical encoder, forced onto the CALLER'S brain.
 
-    FOUND BY THIS MODULE'S OWN ASSERTION, in this round, in my own first draft:
+    FOUND BY THIS MODULE'S OWN ASSERTION, in a first draft:
     the first version delegated straight to `claude_memory._encode`, which asks
-    `_active_embed_model()` which reads a MODULE-LEVEL `DB_PATH`. That is a
-    different question from "which tier is the database this connection is
-    attached to", and on a supervised daytime hand-run out of a staging directory
-    the two answers differed -- the TABLE resolved to jina/1024 from the caller's
-    connection while the ENCODER resolved to nomic/768 from a DB_PATH that did
-    not exist. 28 playbook memories were written with no vector. The width
-    assertion caught every one and tagged every one, which is exactly what it is
-    for, but the right repair is upstream: ask ONE question, of ONE object.
+    `_active_embed_model()` about a MODULE-LEVEL `DB_PATH`. That is a different
+    question from "which tier is the database this connection is attached to",
+    and on a supervised daytime hand-run out of a staging directory the two
+    answers differed -- 28 playbook memories were written with no vector. The
+    width assertion caught every one, but a second brain of the SAME width would
+    pass it, so the repair is upstream: ask ONE question, of ONE object.
 
-    So when a connection is available, the tier is resolved FROM THAT CONNECTION
-    and claude_memory's own documented per-process cache is set to match before
-    the encode. Encoder and table cannot then disagree, by construction.
+    So when a connection is available the brain beside THAT connection decides: its
+    install lock, or for a brain that predates the lock the shipped catalogue entry
+    of the tier it already uses (`embedding_upgrade.brain_lock`), is handed to
+    `_encode`, which hands it to the one loader; the loader refuses (WEIGHTS_MISMATCH)
+    if a different model is already resident in this process. A tier the catalogue
+    does not ship (jina) has no lock path and uses its own encoder. Encoder and table
+    cannot then disagree, by construction, and no process-level cache is set.
+
+    The tier comes from `_TABLE_TO_TIER`, built from `EMBED_TIERS` and bijective on
+    purpose: a binary here once mapped the qwen table to nomic, and one table per
+    model means a fourth tier needs no edit here.
 
     Imported inside the call, not at module scope: `claude_memory` imports
     several of this module's own callers, and a module-scope import is circular.
     """
     import claude_memory                       # lazy: circular at module scope
-    if conn is not None:
-        table, dim = _resolve_tier(conn)
-        # THE BIJECTION, NOT A BINARY. This read
-        #     "jina" if table == "memory_embeddings_v2" else "nomic"
-        # which is a TWO-tier answer to a THREE-tier question: it mapped
-        # `memory_embeddings_v3` -- Qwen3-Embedding-0.6B, the tier the engine
-        # itself calls "the SHIPPED tier" -- to NOMIC, and would have encoded
-        # 768-wide vectors for a 1024-wide table. `assert_width` below catches
-        # that, so nothing was ever corrupted; what it means is that a qwen-tier
-        # brain could not embed AT ALL through this path, every write tagged
-        # `embedding-missing`. Exactly the census-of-two-over-three shape found in
-        # voidloom/_bootstrap the same week.
-        #
-        # claude_memory already owns the inverse map -- `_TABLE_TO_TIER`, built
-        # FROM `EMBED_TIERS` and bijective on purpose ("one table per model, so
-        # reverse-mapping a table name back to a model can never be ambiguous").
-        # Asking it means a fourth tier needs no edit here.
-        tier = getattr(claude_memory, "_TABLE_TO_TIER", {}).get(table)
-        if tier is None:
-            raise EmbeddingUnavailable(
-                f"no embedding tier maps to table {table!r} (dim {dim}); "
-                "claude_memory._TABLE_TO_TIER knows "
-                f"{sorted(getattr(claude_memory, '_TABLE_TO_TIER', {}))}. Refusing "
-                "to guess a model: same dimension is not the same space.")
-        claude_memory._active_model_cache["model"] = tier
-    return claude_memory._encode(text, "search_document")
+    if conn is None:
+        return claude_memory._encode(text, "search_document")
+    table, dim = _resolve_tier(conn)
+    tier = getattr(claude_memory, "_TABLE_TO_TIER", {}).get(table)
+    if tier is None:
+        raise EmbeddingUnavailable(
+            f"no embedding tier maps to table {table!r} (dim {dim}); "
+            "claude_memory._TABLE_TO_TIER knows "
+            f"{sorted(getattr(claude_memory, '_TABLE_TO_TIER', {}))}. Refusing "
+            "to guess a model: same dimension is not the same space.")
+    import embedding_upgrade                   # lazy: it imports this module's callers
+    if tier == "jina":
+        return embedding_upgrade.encode_jina_document(text)
+    return claude_memory._encode(text, "search_document",
+                                 lock=embedding_upgrade.brain_lock(conn, tier=tier))
 
 
 # --------------------------------------------------------------------------
@@ -509,7 +504,8 @@ def attach_embedding(
         # about WHICH MODEL produced it. The producing model lived in ONE MUTABLE
         # metadata row (`active_embedding_model`), so after any tier change the
         # table could not say which of its rows predate the change. `embed_resolver`
-        # refused to guess a TABLE; nothing refused to guess a row's PRODUCER.
+        # refused to guess a TABLE; nothing refused to guess a row's PRODUCER. Now the
+        # stamp carries the checksum the embedder COMPUTED from the bytes it loaded.
         #
         # The trap, kept beside the write because that is where it bites:
         #
@@ -520,7 +516,7 @@ def attach_embedding(
         #     assert a producer for rows nobody re-embedded, and the migration
         #     would look complete the instant it ran. NULL means UNKNOWN, and
         #     UNKNOWN IS NOT ZERO: a backfill must be able to tell "never stamped"
-        #     from "stamped as jina", and a DEFAULT destroys exactly that
+        #     from "stamped under some checksum", and a DEFAULT destroys exactly that
         #     distinction at the moment it is created.
         #
         # `_insert_vector_and_stamp` writes both rows or neither; every stamp
@@ -583,23 +579,27 @@ def unfindable_report(conn: sqlite3.Connection) -> Dict[str, Any]:
 # PER-ROW VECTOR PROVENANCE.
 #
 # THE STAMP is written by the embed call itself, in the SAME savepoint as the
-# vector, by this module alone. THE READER derives its filter from the tier
-# bijection (claude_memory.EMBED_TIERS via _TABLE_TO_TIER) on every call, REFUSES
+# vector, by this module alone, and it carries the checksum THE EMBEDDER COMPUTED
+# from the bytes it loaded (embedder_lock.require_loaded_hash): never a schema
+# DEFAULT, never the lock's string copied over. THE READER opens the install lock
+# beside the connection's database on every call and filters on its `weights_hash`
+# (a brain with no lock falls back to the tier bijection and its whole table), REFUSES
 # with a typed error when no rows match, and reports coverage on every call —
-# success or refusal. DDL lives in migrations/migration_033_embedding_provenance.sql
-# and is read from there, so it has exactly one home. No column has a DEFAULT.
+# success or refusal. DDL lives in migrations/migration_033_* (the sidecar) and
+# migration_042_* (the checksum, the input kind) and is read from there, so it has
+# exactly one home. No column has a DEFAULT.
 #
 # WHY THE TABLE IS ALSO ENSURED AT WRITE TIME
 #     `cmd_init` applies every migration through schema_migrator, so a FRESH brain
-#     has the sidecar. A brain that predates this migration and is upgraded by
+#     has the sidecar. A brain that predates a migration and is upgraded by
 #     replacing the tree (which is how the live tree is deployed: 16 systemd units
 #     ExecStart into organs/) would otherwise fail every embed write until someone
-#     remembered to run `schema_migrator apply`. Ensuring here is idempotent
-#     (IF NOT EXISTS) and costs one file read per process.
+#     remembered to run `schema_migrator apply`. Ensuring here is shape-driven,
+#     statement-at-a-time and inside one savepoint.
 #
 # ⚠ NEVER executescript() ON THIS PATH. Python's sqlite3 documents that
-#     executescript "first issues a COMMIT". Inside attach_embedding's SAVEPOINT
-#     that COMMITS THE VECTOR and destroys the savepoint before the stamp lands —
+#     executescript "first issues a COMMIT". Inside _insert_vector_and_stamp's
+#     SAVEPOINT that COMMITS THE VECTOR and destroys the savepoint before the stamp lands —
 #     the pair that claims to be atomic commits its first half. Found by the
 #     provisional draft's own test on its second run (P-list 2). Statements are
 #     executed one at a time; that opens no transaction and commits nothing.
@@ -932,17 +932,17 @@ def _insert_vector_and_stamp(conn: sqlite3.Connection, memory_id: int, table: st
 
 
 def stamp_after_vector_insert(conn: sqlite3.Connection, memory_id: int, text: str,
-                              *, organ: str) -> Dict[str, Any]:
+                              *, organ: str, table: str, dim: int) -> Dict[str, Any]:
     """For a caller that has ALREADY inserted the vector inside its own open
     transaction (claude_memory's cmd_store / cmd_update / cmd_migrate) and will
-    commit or roll back the whole thing itself. Resolves the tier from the
-    connection so the stamp names the table the caller just wrote.
+    commit or roll back the whole thing itself.
 
-    The atomicity here is the caller's transaction: a raise propagates, the
-    caller does not commit, and memory + vector + stamp are all absent together.
+    `table` and `dim` are REQUIRED and are what the caller wrote: there is no
+    second resolver here that could disagree with the write. The atomicity is the
+    caller's transaction: a raise propagates, the caller does not commit, and
+    memory + vector + stamp are all absent together.
     """
-    table, dim = _resolve_tier(conn)
-    return _stamp_provenance(conn, memory_id, table, dim, text, organ)
+    return _stamp_provenance(conn, memory_id, table, int(dim), text, organ)
 
 
 def centroid_content_hash(member_vectors: Sequence[bytes]) -> str:
@@ -1267,7 +1267,7 @@ def provenance_filter(conn: sqlite3.Connection) -> ProvenanceFilter:
 
 
 # --------------------------------------------------------------------------
-# THE READER. Filter from the bijection, refuse on zero match, coverage always.
+# THE READER. Filter from the lock, refuse on zero match, coverage always.
 # --------------------------------------------------------------------------
 
 @dataclass
