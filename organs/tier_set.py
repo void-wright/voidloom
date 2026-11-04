@@ -342,10 +342,12 @@ def _release_accelerator_cache() -> None:
 
 # A memory that does not fit alone is embedded from its head. The model already cuts a long
 # text at its own window; this only cuts sooner, on a device too small for that window. Measured
-# on an 11 GB card: at the model's window (32,768 tokens) one text asked for 64 GiB, so no retry
-# at full length can ever finish. Both numbers are INVENTED, NOT TUNED: the first retry's length,
-# and the length below which the head says too little to stand for the memory.
-SHORTEN_START_CHARS = 32000
+# on an 11 GB card with Qwen3-Embedding, on token-dense text: at the model's window one text asked
+# for 64 GiB, so no retry at full length can ever finish; 16,000 characters took 1.9 s at a 5.35 GiB
+# peak; 32,000 had not finished after two minutes. The start is that one measurement, on one card.
+# The floor is INVENTED, NOT TUNED: the length below which a head says too little to stand for
+# the memory.
+SHORTEN_START_CHARS = 16000
 SHORTEN_FLOOR_CHARS = 1000
 
 

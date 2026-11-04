@@ -309,11 +309,11 @@ class OutOfMemoryRetry(_Seamed):
     def test_control_a_memory_too_long_alone_is_embedded_from_its_head_and_counted(self):
         import memory_write as mw
         db = self._long_memory()
-        sizes = self._fits_up_to(20000)
+        sizes = self._fits_up_to(10000)
         env = self.ts.set_tier(db, "qwen", batch_size=4)
         self.assertEqual(env["status"], "ok", env)
         self.assertEqual(env["receipt"]["shortened_to_fit"], 1)
-        self.assertIn(16000, sizes, "halved from the first shortened length")
+        self.assertIn(8000, sizes, "halved from the first shortened length")
         c = _connect(db)
         text = c.execute("SELECT content FROM memories WHERE id = 4").fetchone()[0]
         h = c.execute("SELECT content_hash FROM embedding_provenance WHERE memory_id = 4 AND "
