@@ -3,7 +3,8 @@
 
 This is the toolkit's front door. It:
   * parses the v0.1 verb surface (bootstrap, recall, store, context, approvals,
-    agent-context, doctor, capabilities, batch-recall, batch-store) plus the four
+    agent-context, doctor, status, inspect, export, capabilities, batch-recall,
+    batch-store) plus the four
     ORGAN verbs (hooks, instructions, preamble, canary), which dispatch to
     organs/voidloom_<verb>.py::run(argv) -> envelope and print through THIS
     module's _emit exactly once (R1);
@@ -2012,6 +2013,213 @@ def _run_organ(verb: str, args) -> Dict[str, Any]:
     return env
 
 
+def _open_for_verb(args, verb: str) -> Tuple[str, Optional[sqlite3.Connection], Optional[Dict[str, Any]]]:
+    """(db, a read-only connection, None), or (db, None, the typed error) when there is no brain to read."""
+    db = _paths.resolve_db(getattr(args, "db", None))
+    if not os.path.exists(db):
+        return db, None, error("db_missing", f"no brain at {db}", data={"db_path": db}, verb=verb)
+    try:
+        conn = _open_brain_ro(db)
+    except sqlite3.Error as e:
+        return db, None, error("brain_unreadable", f"{type(e).__name__}: {e}", data={"db_path": db}, verb=verb)
+    return db, conn, None
+
+
+def _status_lock(memory_write: Any, conn: sqlite3.Connection) -> Dict[str, Any]:
+    """The lock as the status page shows it. No lock is a state of a brain, not a fault in it."""
+    try:
+        return {"present": True, **memory_write.lock_identity(conn)}
+    except Exception as e:
+        code = getattr(e, "code", type(e).__name__)
+        path = getattr(e, "detail", {}).get("lock")
+        if code == "LOCK_MISSING" and not (path and os.path.lexists(path)):
+            return {"present": False, "note": "no lock on this brain: it predates the lock, or its tier is not one "
+                                              "the package ships. It is searched as a whole table"}
+        return {"present": None, "refusal": code, "message": str(e)}
+
+
+def verb_status(args) -> Dict[str, Any]:
+    """`voidloom status`: this brain's index on one page, without a model: the lock, coverage as matched/total from
+    the provenance reader, the derived layer's stale count, the seed numbers and the counts. Every number is derived
+    on this read-only connection, now."""
+    db, conn, err = _open_for_verb(args, "status")
+    if err:
+        return err
+    _organs_importable()
+    import memory_write
+    try:
+        counts: Dict[str, Any] = {}
+        for label, sql in (("memories_active", "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=0"),
+                           ("memories_archived", "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=1"),
+                           ("memory_links", "SELECT COUNT(*) FROM memory_links"),
+                           ("tags", "SELECT COUNT(DISTINCT tag) FROM memory_tags")):
+            try:
+                counts[label] = conn.execute(sql).fetchone()[0]
+            except sqlite3.Error as e:
+                counts[label] = f"UNMEASURED: {type(e).__name__}"
+        lock = _status_lock(memory_write, conn)
+        coverage = memory_write.coverage_envelope(conn)
+        try:
+            derived = memory_write.derived_layer_report(conn)
+        except Exception as e:
+            derived = {"error": f"{type(e).__name__}: {e}", "stale_derived": None}
+        try:
+            import seed_loader
+            seed: Dict[str, Any] = seed_loader.seed_shape(conn)
+        except Exception as e:
+            seed = {"error": f"{type(e).__name__}: {e}"}
+    finally:
+        conn.close()
+    return ok("status_ok", {"db_path": db, "lock": lock, "coverage": coverage, "derived_layer": derived,
+                            "seed": seed, "counts": counts, "line": derived.get("line")}, verb="status")
+
+
+def _visibility(tags: List[str]) -> Tuple[str, str]:
+    """(visibility, why): the one `visibility:<x>` tag, else the literal "unclassified"."""
+    found = sorted({t.split(":", 1)[1] for t in tags if t.startswith("visibility:") and t.split(":", 1)[1]})
+    if len(found) == 1:
+        return found[0], "one visibility:<x> tag"
+    if not found:
+        return "unclassified", "no visibility tag"
+    return "unclassified", f"{len(found)} conflicting visibility tags"
+
+
+def _model_stamp(conn: sqlite3.Connection, memory_id: int,
+                 active_table: Optional[str]) -> Tuple[Optional[Dict[str, Any]], int]:
+    """(the stamp to show, how many the memory has). During or after `tier set` a memory has one stamp per table: the
+    one on the table the brain searches comes first, then the newest. Read by column name, so a sidecar in an older
+    shape answers with the columns it has."""
+    try:
+        cur = conn.execute("SELECT * FROM embedding_provenance WHERE memory_id = ?", (memory_id,))
+        cols = [d[0] for d in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    except sqlite3.Error as e:
+        return {"unreadable": f"{type(e).__name__}: {e}"}, 0
+    if not rows:
+        return None, 0
+    rows.sort(key=lambda r: (r.get("vec_table") == active_table, str(r.get("embedded_at") or "")), reverse=True)
+    return rows[0], len(rows)
+
+
+def _memory_record(conn: sqlite3.Connection, memory_id: int, active_table: Optional[str]) -> Optional[Dict[str, Any]]:
+    """One memory as `inspect` and `export` show it, or None when there is no such row."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(memories)").fetchall()]
+    row = conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
+    if row is None:
+        return None
+    rec = dict(zip(cols, row))
+    tags = [r[0] for r in conn.execute("SELECT tag FROM memory_tags WHERE memory_id = ? ORDER BY tag", (memory_id,))]
+    visibility, basis = _visibility(tags)
+    stamp, stamps = _model_stamp(conn, memory_id, active_table)
+    return {"id": memory_id, "text": rec.get("content"), "summary": rec.get("summary"),
+            "seed": bool(rec["seed"]) if "seed" in rec else None, "origin": rec.get("origin"),
+            "visibility": visibility, "visibility_basis": basis, "category": rec.get("category"),
+            "kind": rec.get("kind"), "importance": rec.get("importance"), "is_archived": rec.get("is_archived"),
+            "created_at": rec.get("created_at"), "tags": tags, "model_stamp": stamp, "stamps": stamps}
+
+
+def _active_filter(memory_write: Any, conn: sqlite3.Connection) -> Any:
+    """The brain's search filter for a report, or None when it cannot be built (the coverage envelope names why)."""
+    try:
+        return memory_write.provenance_filter(conn)
+    except Exception:
+        return None
+
+
+def verb_inspect(args) -> Dict[str, Any]:
+    """`voidloom inspect <id>`: for any memory id, its text, seed flag, origin, visibility (or the literal
+    "unclassified"), model stamp and index coverage, from the brain and the provenance sidecar. No model."""
+    db, conn, err = _open_for_verb(args, "inspect")
+    if err:
+        return err
+    _organs_importable()
+    import memory_write
+    mid = int(args.id)
+    try:
+        flt = _active_filter(memory_write, conn)
+        try:
+            data = _memory_record(conn, mid, flt.vec_table if flt else None)
+        except sqlite3.Error as e:
+            return error("brain_unreadable", f"{type(e).__name__}: {e}", data={"id": mid, "db_path": db},
+                         verb="inspect")
+        if data is None:
+            return error("not_found", f"no memory with id {mid} in {db}", data={"id": mid, "db_path": db},
+                         verb="inspect")
+        # Whether a search can reach this row now: the reader's own membership test, then archived rows out.
+        in_search_set = None
+        if flt is not None:
+            try:
+                in_search_set = (memory_write.read_vector(conn, mid, flt=flt) is not None
+                                 and not data["is_archived"])
+            except sqlite3.Error:
+                in_search_set = None
+        coverage = memory_write.coverage_envelope(conn)
+    finally:
+        conn.close()
+    data.update({"in_search_set": in_search_set, "search_rule": flt.search_rule if flt else None,
+                 "index_coverage": {k: coverage.get(k) for k in ("ok", "matched", "total", "coverage", "error")
+                                    if k in coverage},
+                 "db_path": db})
+    return ok("inspect_ok", data, verb="inspect")
+
+
+def verb_export(args) -> Dict[str, Any]:
+    """`voidloom export --ids 1,2,3`: an EXPLICIT selection as plain JSON records. `--all` REFUSES, typed
+    EXPORT_ALL_REFUSED, naming the unbuilt wards: a full-corpus export needs a visibility classification on every
+    memory and a scrub gate over the text, and neither exists. The unclassified count is derived on the spot."""
+    db, conn, err = _open_for_verb(args, "export")
+    if err:
+        return err
+    _organs_importable()
+    import memory_write
+    try:
+        if getattr(args, "all", False):
+            try:
+                total = conn.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=0").fetchone()[0]
+                # the same rule `_visibility` applies to one memory: exactly one distinct tag classifies it
+                classified = conn.execute(
+                    "SELECT COUNT(*) FROM (SELECT t.memory_id FROM memory_tags t JOIN memories m ON m.id = t.memory_id "
+                    "WHERE COALESCE(m.is_archived,0)=0 AND t.tag LIKE 'visibility:_%' "
+                    "GROUP BY t.memory_id HAVING COUNT(DISTINCT t.tag) = 1)").fetchone()[0]
+            except sqlite3.Error as e:
+                return error("brain_unreadable", f"{type(e).__name__}: {e}", data={"db_path": db}, verb="export")
+            return refused("EXPORT_ALL_REFUSED",
+                           f"a full-corpus export is refused until the wards exist: {total - classified} of {total} "
+                           "active memories carry no visibility classification, and no scrub gate ships. "
+                           "Export an explicit selection with --ids.",
+                           verb="export",
+                           data={"unbuilt_wards": ["a visibility classification on every memory (a `visibility:<x>` tag)",
+                                                   "a scrub gate over the exported text (the seed denylist covers the seed, not the corpus)"],
+                                 "unclassified": total - classified, "active": total, "db_path": db})
+        ids_arg = getattr(args, "ids", None)
+        if not ids_arg:
+            return error("no_selection", "export needs an explicit selection: --ids 1,2,3 (--all refuses, typed)",
+                         data={"db_path": db}, verb="export")
+        try:
+            ids = sorted({int(x) for x in str(ids_arg).replace(" ", "").split(",") if x})
+        except ValueError:
+            return error("bad_selection", f"--ids must be integers separated by commas, got {ids_arg!r}", verb="export")
+        if not ids:
+            return error("no_selection", "export needs an explicit selection: --ids 1,2,3 (--all refuses, typed)",
+                         data={"db_path": db}, verb="export")
+        flt = _active_filter(memory_write, conn)
+        records: List[Dict[str, Any]] = []
+        missing: List[int] = []
+        try:
+            for mid in ids:
+                rec = _memory_record(conn, mid, flt.vec_table if flt else None)
+                if rec is None:
+                    missing.append(mid)
+                else:
+                    records.append(rec)
+        except sqlite3.Error as e:
+            return error("brain_unreadable", f"{type(e).__name__}: {e}", data={"db_path": db}, verb="export")
+    finally:
+        conn.close()
+    return ok("export_ok", {"selection": "explicit", "requested": len(ids), "exported": len(records),
+                            "missing_ids": missing, "records": records, "db_path": db}, verb="export")
+
+
 def verb_hooks(args) -> Dict[str, Any]:
     return _run_organ("hooks", args)
 
@@ -2712,6 +2920,29 @@ def build_parser() -> argparse.ArgumentParser:
                              "preamble": verb_preamble, "canary": verb_canary,
                              "thinker": verb_thinker, "dream": verb_dream,
                              "persona": verb_persona, "tier": verb_tier}[_verb])
+
+    # status, inspect, export: read-only views of the brain, no model
+    sp = sub.add_parser("status", help="this brain's index on one page: lock, coverage matched/total, "
+                                       "the derived layer's stale count, the seed numbers (no model).")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_status)
+
+    sp = sub.add_parser("inspect", help="one memory by id: text, seed flag, origin, visibility "
+                                        "(or \"unclassified\"), model stamp, index coverage.")
+    sp.add_argument("id", type=int, help="the memory id")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_inspect)
+
+    sp = sub.add_parser("export", help="an EXPLICIT selection of memories as plain JSON (--ids 1,2,3); "
+                                       "--all refuses, typed, naming the unbuilt wards.")
+    sp.add_argument("--ids", default=None, help="comma-separated memory ids (the explicit selection)")
+    sp.add_argument("--all", action="store_true",
+                    help="full-corpus export: REFUSED (EXPORT_ALL_REFUSED) until the wards exist")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_export)
 
     # recall
     sp = sub.add_parser("recall", help="hybrid retrieval over the brain.")
