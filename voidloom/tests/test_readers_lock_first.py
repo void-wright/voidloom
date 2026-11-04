@@ -49,8 +49,10 @@ def make_brain(d: Path, rows, lock_tier=None) -> Path:
     c = sqlite3.connect(db)
     c.executescript(
         "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);"
-        "CREATE TABLE memories (id INTEGER PRIMARY KEY, content TEXT, is_archived INTEGER DEFAULT 0);"
+        "CREATE TABLE memories (id INTEGER PRIMARY KEY, content TEXT, is_archived INTEGER DEFAULT 0, "
+        "created_at TEXT DEFAULT '2020-01-01 00:00:00');"
         "INSERT INTO memories(id, content) VALUES (1, 'a'), (2, 'b');")
+    importlib.import_module("memory_write").ensure_provenance_table(c)   # doctor reads through the sidecar
     for table, dim, _model in (NOMIC, JINA, QWEN):
         c.execute(f"CREATE TABLE {table} (memory_id INTEGER PRIMARY KEY, embedding BLOB)")
         c.execute(f"INSERT INTO {table} VALUES (1, ?)", (b"\0" * 4 * dim,))
