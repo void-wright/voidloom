@@ -3,7 +3,8 @@
 
 This is the toolkit's front door. It:
   * parses the v0.1 verb surface (bootstrap, recall, store, context, approvals,
-    agent-context, doctor, capabilities, batch-recall, batch-store) plus the four
+    agent-context, doctor, status, inspect, export, capabilities, batch-recall,
+    batch-store) plus the four
     ORGAN verbs (hooks, instructions, preamble, canary), which dispatch to
     organs/voidloom_<verb>.py::run(argv) -> envelope and print through THIS
     module's _emit exactly once (R1);
@@ -29,7 +30,8 @@ import os
 import re
 import sqlite3  # stdlib; used only to type-match the engine's read-only error
 import sys
-from typing import Any, Dict, List, Optional, Sequence
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from . import __version__
 from . import _agent_context
@@ -441,118 +443,268 @@ def _doctor_gpu_declaration() -> Dict[str, Any]:
     return out
 
 
+def _open_brain_ro(db: str) -> sqlite3.Connection:
+    """A read-only connection with vec0 when the stack has it; never a model. The path goes through `as_uri`, so `#`
+    and `?` in it stay part of the path, and text that is not valid UTF-8 decodes with replacement, so one damaged
+    row cannot stop a verb that reads it.
+
+    A WAL brain on media nobody may write to cannot open read-only, because SQLite wants its -shm file. With no write-
+    ahead log beside it there is nothing `immutable` could miss, so that open is used; with one, the failure stands."""
+    uri = Path(db).resolve().as_uri()
+    conn = sqlite3.connect(uri + "?mode=ro", uri=True)
+    try:
+        conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone()
+    except sqlite3.OperationalError:
+        conn.close()
+        wal = str(Path(db).resolve()) + "-wal"
+        if os.path.exists(wal) and os.path.getsize(wal):
+            raise
+        conn = sqlite3.connect(uri + "?immutable=1", uri=True)
+    except sqlite3.Error:
+        conn.close()
+        raise
+    conn.text_factory = lambda b: b.decode("utf-8", "replace")
+    try:
+        import sqlite_vec           # the active table is usually vec0
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+    except Exception:
+        pass
+    return conn
+
+
+def _organs_importable() -> None:
+    od = str(_paths.organ_dir())
+    if od not in sys.path:
+        sys.path.insert(0, od)
+
+
+def _derived_layer(db_path: Optional[str]) -> Dict[str, Any]:
+    """The derived layer's stale count on the brain's own read-only connection. Never raises: `doctor` must answer on
+    a broken brain as well as a healthy one."""
+    if not db_path or not os.path.exists(db_path):
+        return {"error": "no brain at the resolved path", "stale_derived": None}
+    try:
+        _organs_importable()
+        import memory_write
+        conn = _open_brain_ro(db_path)
+        try:
+            return memory_write.derived_layer_report(conn)
+        finally:
+            conn.close()
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}", "stale_derived": None}
+
+
 def _embedding_coherence(db_path: Optional[str]) -> Dict[str, Any]:
-    """Does the brain's recorded embedding tier AGREE with the bytes in its table?
+    """The brain's embedding check with the derived layer's stale count beside it, on every path, so a brain whose
+    vectors cannot be measured still reports what was computed from them."""
+    out = _tier_coherence(db_path)
+    out["derived_layer"] = _derived_layer(db_path)
+    return out
 
-    CRUCIBLE-3 D6-F7: `metadata.active_embedding_dim` is WRITTEN BY TWO SITES
-    (`organs/claude_memory.py:965`, `organs/embedding_upgrade.py:894`) AND READ BY
-    NONE -- a value written to a store with no read path, which is the UNBOUND
-    class. D6 named it exactly: *"the brain writes down the one number that would
-    catch all three [of my findings] — `metadata.active_embedding_dim` — and
-    nothing reads it."*
 
-    This is that reader. It compares the RECORDED dim against the width of a
-    vector actually stored in the active table, so a 768/1024 mismatch — which
-    the engine logs to stderr and then drops from an envelope that says
-    `status: ok` — becomes a named check on the health verb instead.
+def _flag_set(value: Any) -> bool:
+    return str(value if value is not None else "").strip().lower() not in ("", "0", "false", "no", "off")
 
-    Never raises: every failure is a returned reason, because `doctor` must
-    answer on a broken brain as well as a healthy one. "Cannot tell" is its own
-    state and is not folded into "fine".
+
+def _keyword_only(metadata_value: Any) -> bool:
+    """Is THIS brain declared keyword-only? The same answer the front door gives (`VOIDLOOM_TIER0_ONLY` over
+    `metadata.tier0_only`), read for the brain being examined rather than the one the process resolved."""
+    env = os.environ.get("VOIDLOOM_TIER0_ONLY")
+    return _flag_set(env) if env is not None else _flag_set(metadata_value)
+
+
+def _unstamped_since_lock(conn: sqlite3.Connection, table: str, sidecar: str, locked_at: Any) -> int:
+    """Vectors with no stamp on memories written after the lock. An unstamped vector from before the lock is legacy,
+    which `init` pins and the search set admits; every writer stamps once a lock exists, so one written after it is a
+    write nobody vouched for. Without a readable time on the lock or the row the two cannot be told apart, so every
+    unstamped row counts."""
+    sql = (f"SELECT COUNT(*) FROM memories m WHERE m.id IN (SELECT memory_id FROM {table}) "
+           f"AND m.id NOT IN (SELECT memory_id FROM {sidecar} WHERE vec_table = ?)")
+    args: Tuple[Any, ...] = (table,)
+    dated = any(r[1] == "created_at" for r in conn.execute("PRAGMA table_info(memories)").fetchall())
+    if dated and conn.execute("SELECT datetime(?)", (locked_at,)).fetchone()[0] is not None:
+        sql += " AND datetime(m.created_at) >= datetime(?)"
+        args += (locked_at,)
+    return int(conn.execute(sql, args).fetchone()[0])
+
+
+def _coverage_refusal(out: Dict[str, Any]) -> Optional[str]:
+    """The reader's refusal, when it is a fault in THIS brain. Absent a lock the brain made no promise about stamps, so
+    a table with none is the legal state of every brain older than the lock; and a brain declared keyword-only has no
+    vectors to answer for. Everything else the reader refuses stands."""
+    cov = out.get("coverage") or {}
+    if cov.get("ok") is not False:
+        return None
+    code = cov.get("error")
+    if out.get("tier0_only") and (out.get("lockless") or not cov.get("vectors")):
+        return None
+    if out.get("lockless"):
+        if code == "NO_ROWS_FOR_MODEL":
+            return None if not (cov.get("stamped_foreign") or cov.get("stamped_without_vector")) else code
+        if code == "LOCK_MISSING" and not out.get("stranded_vectors"):
+            return None                            # no lock, no tier, no vectors: a keyword brain, as Tier 0 builds one
+    return code or "unreadable"
+
+
+def _stranded_vectors(conn: sqlite3.Connection, tables: Sequence[str]) -> List[str]:
+    """The vector tables holding rows on a brain that names no tier: it had one and lost the record of it, and
+    nothing will search them. A table that cannot be read says nothing either way."""
+    held = []
+    for table in tables:
+        try:
+            if conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone():
+                held.append(table)
+        except sqlite3.Error:
+            continue
+    return held
+
+
+def _provenance_defects(conn: Optional[sqlite3.Connection], out: Dict[str, Any], memory_write: Any) -> Dict[str, int]:
+    """The rows the reader counts that are faults here, by name. The reader's own `defects` also counts legacy rows,
+    which are a declared state: 'unresolved' stamps and pre-lock vectors on a locked brain, and every unstamped vector
+    on a brain with no lock. Those stay visible in the coverage figures and never decide the verdict."""
+    cov = out.get("coverage") or {}
+    orphans = int(cov.get("stamped_without_vector") or 0)
+    if out.get("lockless"):
+        return {"stamped_without_vector": orphans, "stamped_foreign": int(cov.get("stamped_foreign") or 0)}
+    unstamped = int(cov.get("vectors_without_stamp") or 0)
+    if unstamped and conn is not None:
+        unstamped = _unstamped_since_lock(conn, cov["vec_table"], memory_write.PROVENANCE_TABLE,
+                                          (out.get("lock") or {}).get("locked_at"))
+    return {"vectors_without_stamp": unstamped, "stamped_without_vector": orphans,
+            "stamped_foreign": int(cov.get("stamped_foreign_hash") or 0),
+            "inconsistent": len(cov.get("inconsistent") or [])}
+
+
+def _coverage_note(out: Dict[str, Any], table: Optional[str]) -> Optional[str]:
+    cov = out.get("coverage") or {}
+    matched, total = cov.get("matched"), cov.get("total")
+    if not total or matched is None:
+        return None
+    if out.get("lockless"):
+        vectors = cov.get("vectors")
+        if not table:
+            return f"no lock and no recorded tier: recall over these {total} live memories is keyword-only."
+        if not vectors:
+            return (f"{total} live memories and ZERO vectors in {table}: every recall over this brain is "
+                    f"keyword-only, whatever `mode` reports.")
+        return (f"no lock on this brain, so the whole of {table} is searched: {vectors} vector(s) for {total} live "
+                f"memories, {matched} of them stamped.")
+    notes = []
+    if matched < total:
+        notes.append(f"{total - matched} of {total} live memories are outside the search set; those are reachable "
+                     f"by keyword only.")
+    legacy = cov.get("legacy_unverified")
+    if isinstance(legacy, dict) and legacy.get("legacy"):
+        notes.append(f"legacy_unverified: {legacy.get('text')}. {legacy.get('hint', '')}".strip())
+    return " ".join(notes) or None
+
+
+def _tier_coherence(db_path: Optional[str]) -> Dict[str, Any]:
+    """Does this brain agree with what it promised? Reported from the provenance reader the search itself runs on.
+
+    The lock beside the database (its tier, model and checksum, whether the catalogue ships it, whether the snapshot is
+    on this machine), then coverage as matched/total under that lock, stamps and not rows: a table full of another
+    model's vectors has every row and none of the coverage. A brain with no lock is a legal state, not a refusal: it
+    predates the lock or runs a tier the catalogue does not ship, its tier comes from `metadata`, and it is searched as
+    a whole table.
+
+    Never raises: every failure is a returned reason, because `doctor` must answer on a broken brain as well as a
+    healthy one. "Cannot tell" is its own state and is not folded into "fine". Nothing here loads a model.
     """
-    out: Dict[str, Any] = {"recorded_dim": None, "recorded_table": None,
-                           "recorded_model": None, "observed_dim": None,
-                           "agrees": None, "reason": None}
+    out: Dict[str, Any] = {"lock": None, "lock_path": None, "shipped": None, "snapshot_present": None,
+                           "catalogue_hash": None, "lockless": None, "coverage": None,
+                           "recorded_dim": None, "recorded_table": None, "recorded_model": None,
+                           "observed_dim": None, "agrees": None, "reason": None}
     if not db_path or not os.path.exists(db_path):
         out["reason"] = "no brain at the resolved path"
         return out
+    table: Optional[str] = None
+    defects: Dict[str, int] = {}
     try:
-        import sqlite3
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        _organs_importable()
+        import embed_resolver as _er  # type: ignore
+        import embedder_lock
+        import memory_write
+        desc = embedder_lock.describe(db_path)
+        for key in ("lock", "lock_path", "shipped", "snapshot_present", "catalogue_hash"):
+            out[key] = desc.get(key)
+        refusal = desc.get("refusal")
+        # The reader says LOCK_MISSING for a lock it cannot open, too. Only a file that is not there is lock-less.
+        out["lockless"] = bool(refusal and refusal.get("error") == "LOCK_MISSING"
+                               and not os.path.lexists(out["lock_path"] or ""))
+        if refusal and not out["lockless"]:
+            out["refusal"] = refusal
+            out["reason"] = f"{refusal.get('error')}: {refusal.get('message')}"
+        conn = _open_brain_ro(db_path)
         try:
-            try:
-                import sqlite_vec           # the active table is usually vec0
-                conn.enable_load_extension(True)
-                sqlite_vec.load(conn)
-                conn.enable_load_extension(False)
-            except Exception:
-                pass
+            out["coverage"] = memory_write.coverage_envelope(conn)
+            if out.get("refusal"):
+                return out
             rows = dict(conn.execute(
-                "SELECT key, value FROM metadata WHERE key IN "
-                "('active_embedding_dim','active_embedding_table','active_embedding_model')"
-            ).fetchall())
+                "SELECT key, value FROM metadata WHERE key IN ('active_embedding_dim','active_embedding_table',"
+                "'active_embedding_model','tier0_only')").fetchall())
             out["recorded_dim"] = rows.get("active_embedding_dim")
             out["recorded_table"] = rows.get("active_embedding_table")
             out["recorded_model"] = rows.get("active_embedding_model")
-            tab = out["recorded_table"]
+            out["tier0_only"] = _keyword_only(rows.get("tier0_only"))
+            table = out["recorded_table"]
             # THE INSTALL LOCK FIRST (organs/embed_resolver.py): on a brain with a lock the lock names the
             # table and its width, and the metadata rows only echo it. `voidloom tier set` moves both in one
             # transaction, so a disagreement means a switch was interrupted after the lock moved; re-running
             # the same `tier set` finishes it. A brain with no lock is read from metadata, as before.
-            locked = None
             try:
-                od = str(_paths.organ_dir())
-                if od not in sys.path:
-                    sys.path.insert(0, od)
-                import embed_resolver as _er  # type: ignore
                 locked = _er._from_lock(conn)
-            except ImportError:
-                locked = None
             except Exception as e:
-                out["reason"] = f"{getattr(e, 'code', type(e).__name__)}: {e}"
+                code = getattr(e, "code", type(e).__name__)
+                out["refusal"] = {"error": code, "message": str(e)}
+                out["reason"] = f"{code}: {e}"
                 return out
             out["table_source"] = "lock" if locked else "metadata"
             if locked:
-                tab = locked[0]
+                table = locked[0]
                 out["resolved_table"], out["resolved_dim"] = locked
-                if out["recorded_table"] and out["recorded_table"] != tab:
+                if out["recorded_table"] and out["recorded_table"] != table:
                     out["metadata_disagrees"] = (
-                        f"the install lock names {tab} but metadata records {out['recorded_table']}: a "
+                        f"the install lock names {table} but metadata records {out['recorded_table']}: a "
                         f"`voidloom tier set` was interrupted after the lock moved; run it again to finish")
-            if not tab:
-                out["reason"] = "the brain records no active_embedding_table"
+            cov = out["coverage"]
+            if out["lockless"] and not table:
+                out["stranded_vectors"] = _stranded_vectors(conn, sorted(_er._DIM_FOR))
+            refused_by_reader = _coverage_refusal(out)
+            if refused_by_reader:
+                out["coverage_refusal"] = refused_by_reader
+                out["reason"] = f"{refused_by_reader}: {cov.get('message')}"
+                if cov.get("histogram"):
+                    out["present_hashes"] = cov["histogram"]
+            note = _coverage_note(out, table)
+            if note:
+                out["coverage_note"] = note
+            if not table:
+                out["reason"] = out["reason"] or "the brain records no active_embedding_table"
                 return out
-            # CRUCIBLE-3 D6-F2: COVERAGE, which is the number nobody could see.
-            # The shipped seed pack -- 100% of a fresh brain's content -- is loaded
-            # through the Tier-0 engine, whose own header says "embedding deferred
-            # to Tier 1", and NOTHING EVER PERFORMS THE DEFERRAL: no installer
-            # step, no CLI verb. Measured on a fresh install: 66 memories, 0
-            # vectors in all three tables, while recall reported mode "hybrid".
-            # The existing backfill (embedding_upgrade.py cmd_re_embed) is hardcoded
-            # to Jina -> memory_embeddings_v2 and is NOT a generic backfill, so
-            # wiring it would write the wrong tier's vectors on a nomic install.
-            # Closing the gap needs a tier-aware backfill; until that exists, the
-            # gap is at least VISIBLE here rather than silent.
+            if cov.get("ok") or cov.get("coverage_basis") == "measured":
+                defects = {k: v for k, v in _provenance_defects(conn, out, memory_write).items() if v}
+            # The width is read from a row the search can reach, by the search's own reader: the question is how wide
+            # the vectors it runs over are, not how wide some row in the table happens to be.
             try:
-                total = conn.execute(
-                    "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=0"
-                ).fetchone()[0]
-                vecs = conn.execute(f"SELECT COUNT(*) FROM {tab}").fetchone()[0]
-                out["memories_live"] = total
-                out["vectors_in_active_table"] = vecs
-                out["unembedded"] = max(0, total - vecs) if total is not None else None
-                if total and vecs == 0:
-                    out["coverage_note"] = (
-                        f"{total} live memories and ZERO vectors in {tab}: every recall "
-                        f"over this brain is keyword-only, whatever `mode` reports. No "
-                        f"shipped verb performs the embedding deferral the Tier-0 loader "
-                        f"promises.")
-                elif total and vecs < total:
-                    out["coverage_note"] = (
-                        f"{total - vecs} of {total} live memories have no vector in {tab}; "
-                        f"those are reachable by keyword only.")
+                flt = memory_write.provenance_filter(conn)
+                row = conn.execute(
+                    f"SELECT m.id FROM memories m WHERE m.id IN (SELECT memory_id FROM {flt.vec_table}) "
+                    f"AND {flt.member_sql('m')} LIMIT 1", flt.search_set_params).fetchone()
+                blob = memory_write.read_vector(conn, row[0], flt=flt) if row else None
             except Exception as e:
-                out["coverage_error"] = f"{type(e).__name__}: {e}"
-            row = conn.execute(f"SELECT embedding FROM {tab} LIMIT 1").fetchone()
-            if row is None or row[0] is None:
-                out["reason"] = f"{tab} holds no vector to measure"
-                return out
-            blob = row[0]
+                out["reason"] = out["reason"] or f"{type(e).__name__}: {e}"
+                blob = None
             out["observed_dim"] = (len(blob) // 4) if isinstance(blob, (bytes, bytearray)) else None
         finally:
             conn.close()
     except Exception as e:
         out["reason"] = f"{type(e).__name__}: {e}"
+        out["unreadable"] = True
         return out
     try:
         rec = int(out["recorded_dim"]) if out["recorded_dim"] is not None else None
@@ -561,14 +713,34 @@ def _embedding_coherence(db_path: Optional[str]) -> Dict[str, Any]:
     if out.get("resolved_dim") is not None:
         rec = int(out["resolved_dim"])          # the lock's width is the promise when there is a lock
     if rec is None or out["observed_dim"] is None:
-        out["reason"] = "one side is unknown; not compared"
-        return out
-    out["agrees"] = (rec == out["observed_dim"])
-    if not out["agrees"]:
-        out["reason"] = (f"the brain records {rec}-dim vectors for {out.get('resolved_table') or out['recorded_table']} "
-                         f"but the table holds {out['observed_dim']}-dim vectors — semantic "
-                         f"recall over this table cannot be trusted")
+        out["reason"] = out["reason"] or (f"{table} holds no vector to measure" if out["observed_dim"] is None
+                                          else "one side is unknown; not compared")
+    else:
+        out["agrees"] = (rec == out["observed_dim"])
+        if not out["agrees"]:
+            out["reason"] = (f"the brain records {rec}-dim vectors for {table} but the table holds "
+                             f"{out['observed_dim']}-dim vectors — semantic recall over this table cannot be trusted")
+    if defects:
+        out["provenance_defects"] = defects
+        out["agrees"] = False
+        out["reason"] = (f"{sum(defects.values())} provenance defect(s): "
+                         f"{defects.get('vectors_without_stamp', 0)} vector(s) without a stamp, "
+                         f"{defects.get('stamped_without_vector', 0)} stamp(s) without a vector, "
+                         f"{defects.get('stamped_foreign', 0)} under another model, "
+                         f"{defects.get('inconsistent', 0)} inconsistent shape(s)")
     return out
+
+
+def _brain_fault(coherence: Dict[str, Any]) -> Optional[str]:
+    """The one-line reason this brain is not sound, from its embedding check, or None. "Cannot tell" with nothing
+    wrong named is not a fault: an empty table has no vector to measure, and that is not a defect."""
+    if coherence.get("refusal"):
+        return f"embedder lock: {coherence['refusal'].get('error')}"
+    if coherence.get("coverage_refusal"):
+        return f"provenance reader: {coherence['coverage_refusal']}"
+    if coherence.get("unreadable") or coherence.get("agrees") is False:
+        return coherence.get("reason")
+    return None
 
 
 def _render_recall_human(env: Dict[str, Any], code: str, head: str) -> Optional[str]:
@@ -1546,8 +1718,9 @@ def verb_doctor(args) -> Dict[str, Any]:
     # freshly-installed hook: `healthy: True` beside `FIRED:
     # INSTALLED_NEVER_FIRED`, `OBEYED: NEVER`, `codex: NOT_INSTALLED`.
     #
-    # Two questions, two answers:
-    #   brain_healthy   -- is the MACHINE sound? guard, db, engine, warnings.
+    # Three questions, three answers:
+    #   brain_healthy   -- is the BRAIN sound? guard, db, engine, lock, provenance reader.
+    #   host_healthy    -- is the HOST's hook config sound? settings parse, dead commands.
     #   promise_healthy -- is the PROMISE kept?  the AND of the ladder.
     # Folding OBEYED into a single flag was the rejected option: every fresh
     # install would read "unhealthy" until a session obeys, which is
@@ -1594,7 +1767,22 @@ def verb_doctor(args) -> Dict[str, Any]:
     # WIZARD_CUDA_DEVICE '-1' / 'none' -- Drew's ruling (memory anchor vl_gpu_minus1_ruling): it means NO GPU to every
     # consumer, so doctor reports it as an informational "CPU only", never a warning (iteration 5; iteration 3 warned).
     _gpu_decl = _doctor_gpu_declaration()
-    brain_healthy = brain_healthy and not _warnings
+    # A host fact does not decide brain health: a 0-byte settings file is the host's to answer for, beside the hook
+    # state, and the brain beneath it may be perfectly sound. What decides the brain is the brain's own checks, and
+    # `reason` names the first one that failed.
+    host_healthy = not _warnings
+    _coh = _embedding_coherence(brain.get("db_path"))
+    _reason: Optional[str] = None
+    if not guard.ok:
+        _reason = "the local-filesystem guard refused this path"
+    elif not brain.get("db_present"):
+        _reason = f"no brain at {brain.get('db_path')}"
+    elif not engine_health.get("importable"):
+        _reason = f"engine not importable: {engine_health.get('error')}"
+    else:
+        _reason = _brain_fault(_coh)
+    if _reason:
+        brain_healthy = False
     # The ladder, read rather than printed. A platform that is NOT_INSTALLED is
     # not a broken promise -- nothing was promised there -- so the AND runs over
     # the platforms that carry one of our elements. With none installed the
@@ -1609,6 +1797,8 @@ def verb_doctor(args) -> Dict[str, Any]:
                            for v in _promised.values()))
     report = {
         "brain_healthy": brain_healthy,
+        "reason": _reason,
+        "host_healthy": host_healthy,
         "promise_healthy": promise_healthy,
         "checks": {
             "local_fs_guard": guard.as_dict(),
@@ -1618,8 +1808,8 @@ def verb_doctor(args) -> Dict[str, Any]:
             "engine_importable": engine_health,
             "models_present": brain.get("models_present"),
             "models_detail": models,
-            # D6-F7: active_embedding_dim finally has a reader.
-            "embedding_coherence": _embedding_coherence(brain.get("db_path")),
+            # the lock and the provenance reader's coverage, from the reader itself
+            "embedding_coherence": _coh,
             "gpu_declaration": _gpu_decl,
             "gpu_pin": _doctor_gpu_pin(),
             # round 2, M5: the backend, cpu_only and the proof label, beside the pin
@@ -1823,6 +2013,213 @@ def _run_organ(verb: str, args) -> Dict[str, Any]:
                      verb=verb)
     env.setdefault("verb", verb)
     return env
+
+
+def _open_for_verb(args, verb: str) -> Tuple[str, Optional[sqlite3.Connection], Optional[Dict[str, Any]]]:
+    """(db, a read-only connection, None), or (db, None, the typed error) when there is no brain to read."""
+    db = _paths.resolve_db(getattr(args, "db", None))
+    if not os.path.exists(db):
+        return db, None, error("db_missing", f"no brain at {db}", data={"db_path": db}, verb=verb)
+    try:
+        conn = _open_brain_ro(db)
+    except sqlite3.Error as e:
+        return db, None, error("brain_unreadable", f"{type(e).__name__}: {e}", data={"db_path": db}, verb=verb)
+    return db, conn, None
+
+
+def _status_lock(memory_write: Any, conn: sqlite3.Connection) -> Dict[str, Any]:
+    """The lock as the status page shows it. No lock is a state of a brain, not a fault in it."""
+    try:
+        return {"present": True, **memory_write.lock_identity(conn)}
+    except Exception as e:
+        code = getattr(e, "code", type(e).__name__)
+        path = getattr(e, "detail", {}).get("lock")
+        if code == "LOCK_MISSING" and not (path and os.path.lexists(path)):
+            return {"present": False, "note": "no lock on this brain: it predates the lock, or its tier is not one "
+                                              "the package ships. It is searched as a whole table"}
+        return {"present": None, "refusal": code, "message": str(e)}
+
+
+def verb_status(args) -> Dict[str, Any]:
+    """`voidloom status`: this brain's index on one page, without a model: the lock, coverage as matched/total from
+    the provenance reader, the derived layer's stale count, the seed numbers and the counts. Every number is derived
+    on this read-only connection, now."""
+    db, conn, err = _open_for_verb(args, "status")
+    if err:
+        return err
+    _organs_importable()
+    import memory_write
+    try:
+        counts: Dict[str, Any] = {}
+        for label, sql in (("memories_active", "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=0"),
+                           ("memories_archived", "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=1"),
+                           ("memory_links", "SELECT COUNT(*) FROM memory_links"),
+                           ("tags", "SELECT COUNT(DISTINCT tag) FROM memory_tags")):
+            try:
+                counts[label] = conn.execute(sql).fetchone()[0]
+            except sqlite3.Error as e:
+                counts[label] = f"UNMEASURED: {type(e).__name__}"
+        lock = _status_lock(memory_write, conn)
+        coverage = memory_write.coverage_envelope(conn)
+        try:
+            derived = memory_write.derived_layer_report(conn)
+        except Exception as e:
+            derived = {"error": f"{type(e).__name__}: {e}", "stale_derived": None}
+        try:
+            import seed_loader
+            seed: Dict[str, Any] = seed_loader.seed_shape(conn)
+        except Exception as e:
+            seed = {"error": f"{type(e).__name__}: {e}"}
+    finally:
+        conn.close()
+    return ok("status_ok", {"db_path": db, "lock": lock, "coverage": coverage, "derived_layer": derived,
+                            "seed": seed, "counts": counts, "line": derived.get("line")}, verb="status")
+
+
+def _visibility(tags: List[str]) -> Tuple[str, str]:
+    """(visibility, why): the one `visibility:<x>` tag, else the literal "unclassified"."""
+    found = sorted({t.split(":", 1)[1] for t in tags if t.startswith("visibility:") and t.split(":", 1)[1]})
+    if len(found) == 1:
+        return found[0], "one visibility:<x> tag"
+    if not found:
+        return "unclassified", "no visibility tag"
+    return "unclassified", f"{len(found)} conflicting visibility tags"
+
+
+def _model_stamp(conn: sqlite3.Connection, memory_id: int,
+                 active_table: Optional[str]) -> Tuple[Optional[Dict[str, Any]], int]:
+    """(the stamp to show, how many the memory has). During or after `tier set` a memory has one stamp per table: the
+    one on the table the brain searches comes first, then the newest. Read by column name, so a sidecar in an older
+    shape answers with the columns it has."""
+    try:
+        cur = conn.execute("SELECT * FROM embedding_provenance WHERE memory_id = ?", (memory_id,))
+        cols = [d[0] for d in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    except sqlite3.Error as e:
+        return {"unreadable": f"{type(e).__name__}: {e}"}, 0
+    if not rows:
+        return None, 0
+    rows.sort(key=lambda r: (r.get("vec_table") == active_table, str(r.get("embedded_at") or "")), reverse=True)
+    return rows[0], len(rows)
+
+
+def _memory_record(conn: sqlite3.Connection, memory_id: int, active_table: Optional[str]) -> Optional[Dict[str, Any]]:
+    """One memory as `inspect` and `export` show it, or None when there is no such row."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(memories)").fetchall()]
+    row = conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
+    if row is None:
+        return None
+    rec = dict(zip(cols, row))
+    tags = [r[0] for r in conn.execute("SELECT tag FROM memory_tags WHERE memory_id = ? ORDER BY tag", (memory_id,))]
+    visibility, basis = _visibility(tags)
+    stamp, stamps = _model_stamp(conn, memory_id, active_table)
+    return {"id": memory_id, "text": rec.get("content"), "summary": rec.get("summary"),
+            "seed": bool(rec["seed"]) if "seed" in rec else None, "origin": rec.get("origin"),
+            "visibility": visibility, "visibility_basis": basis, "category": rec.get("category"),
+            "kind": rec.get("kind"), "importance": rec.get("importance"), "is_archived": rec.get("is_archived"),
+            "created_at": rec.get("created_at"), "tags": tags, "model_stamp": stamp, "stamps": stamps}
+
+
+def _active_filter(memory_write: Any, conn: sqlite3.Connection) -> Any:
+    """The brain's search filter for a report, or None when it cannot be built (the coverage envelope names why)."""
+    try:
+        return memory_write.provenance_filter(conn)
+    except Exception:
+        return None
+
+
+def verb_inspect(args) -> Dict[str, Any]:
+    """`voidloom inspect <id>`: for any memory id, its text, seed flag, origin, visibility (or the literal
+    "unclassified"), model stamp and index coverage, from the brain and the provenance sidecar. No model."""
+    db, conn, err = _open_for_verb(args, "inspect")
+    if err:
+        return err
+    _organs_importable()
+    import memory_write
+    mid = int(args.id)
+    try:
+        flt = _active_filter(memory_write, conn)
+        try:
+            data = _memory_record(conn, mid, flt.vec_table if flt else None)
+        except sqlite3.Error as e:
+            return error("brain_unreadable", f"{type(e).__name__}: {e}", data={"id": mid, "db_path": db},
+                         verb="inspect")
+        if data is None:
+            return error("not_found", f"no memory with id {mid} in {db}", data={"id": mid, "db_path": db},
+                         verb="inspect")
+        # Whether a search can reach this row now: the reader's own membership test, then archived rows out.
+        in_search_set = None
+        if flt is not None:
+            try:
+                in_search_set = (memory_write.read_vector(conn, mid, flt=flt) is not None
+                                 and not data["is_archived"])
+            except sqlite3.Error:
+                in_search_set = None
+        coverage = memory_write.coverage_envelope(conn)
+    finally:
+        conn.close()
+    data.update({"in_search_set": in_search_set, "search_rule": flt.search_rule if flt else None,
+                 "index_coverage": {k: coverage.get(k) for k in ("ok", "matched", "total", "coverage", "error")
+                                    if k in coverage},
+                 "db_path": db})
+    return ok("inspect_ok", data, verb="inspect")
+
+
+def verb_export(args) -> Dict[str, Any]:
+    """`voidloom export --ids 1,2,3`: an EXPLICIT selection as plain JSON records. `--all` REFUSES, typed
+    EXPORT_ALL_REFUSED, naming the unbuilt wards: a full-corpus export needs a visibility classification on every
+    memory and a scrub gate over the text, and neither exists. The unclassified count is derived on the spot."""
+    db, conn, err = _open_for_verb(args, "export")
+    if err:
+        return err
+    _organs_importable()
+    import memory_write
+    try:
+        if getattr(args, "all", False):
+            try:
+                total = conn.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=0").fetchone()[0]
+                # the same rule `_visibility` applies to one memory: exactly one distinct tag classifies it
+                classified = conn.execute(
+                    "SELECT COUNT(*) FROM (SELECT t.memory_id FROM memory_tags t JOIN memories m ON m.id = t.memory_id "
+                    "WHERE COALESCE(m.is_archived,0)=0 AND t.tag LIKE 'visibility:_%' "
+                    "GROUP BY t.memory_id HAVING COUNT(DISTINCT t.tag) = 1)").fetchone()[0]
+            except sqlite3.Error as e:
+                return error("brain_unreadable", f"{type(e).__name__}: {e}", data={"db_path": db}, verb="export")
+            return refused("EXPORT_ALL_REFUSED",
+                           f"a full-corpus export is refused until the wards exist: {total - classified} of {total} "
+                           "active memories carry no visibility classification, and no scrub gate ships. "
+                           "Export an explicit selection with --ids.",
+                           verb="export",
+                           data={"unbuilt_wards": ["a visibility classification on every memory (a `visibility:<x>` tag)",
+                                                   "a scrub gate over the exported text (the seed denylist covers the seed, not the corpus)"],
+                                 "unclassified": total - classified, "active": total, "db_path": db})
+        ids_arg = getattr(args, "ids", None)
+        if not ids_arg:
+            return error("no_selection", "export needs an explicit selection: --ids 1,2,3 (--all refuses, typed)",
+                         data={"db_path": db}, verb="export")
+        try:
+            ids = sorted({int(x) for x in str(ids_arg).replace(" ", "").split(",") if x})
+        except ValueError:
+            return error("bad_selection", f"--ids must be integers separated by commas, got {ids_arg!r}", verb="export")
+        if not ids:
+            return error("no_selection", "export needs an explicit selection: --ids 1,2,3 (--all refuses, typed)",
+                         data={"db_path": db}, verb="export")
+        flt = _active_filter(memory_write, conn)
+        records: List[Dict[str, Any]] = []
+        missing: List[int] = []
+        try:
+            for mid in ids:
+                rec = _memory_record(conn, mid, flt.vec_table if flt else None)
+                if rec is None:
+                    missing.append(mid)
+                else:
+                    records.append(rec)
+        except sqlite3.Error as e:
+            return error("brain_unreadable", f"{type(e).__name__}: {e}", data={"db_path": db}, verb="export")
+    finally:
+        conn.close()
+    return ok("export_ok", {"selection": "explicit", "requested": len(ids), "exported": len(records),
+                            "missing_ids": missing, "records": records, "db_path": db}, verb="export")
 
 
 def verb_hooks(args) -> Dict[str, Any]:
@@ -2525,6 +2922,29 @@ def build_parser() -> argparse.ArgumentParser:
                              "preamble": verb_preamble, "canary": verb_canary,
                              "thinker": verb_thinker, "dream": verb_dream,
                              "persona": verb_persona, "tier": verb_tier}[_verb])
+
+    # status, inspect, export: read-only views of the brain, no model
+    sp = sub.add_parser("status", help="this brain's index on one page: lock, coverage matched/total, "
+                                       "the derived layer's stale count, the seed numbers (no model).")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_status)
+
+    sp = sub.add_parser("inspect", help="one memory by id: text, seed flag, origin, visibility "
+                                        "(or \"unclassified\"), model stamp, index coverage.")
+    sp.add_argument("id", type=int, help="the memory id")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_inspect)
+
+    sp = sub.add_parser("export", help="an EXPLICIT selection of memories as plain JSON (--ids 1,2,3); "
+                                       "--all refuses, typed, naming the unbuilt wards.")
+    sp.add_argument("--ids", default=None, help="comma-separated memory ids (the explicit selection)")
+    sp.add_argument("--all", action="store_true",
+                    help="full-corpus export: REFUSED (EXPORT_ALL_REFUSED) until the wards exist")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_export)
 
     # recall
     sp = sub.add_parser("recall", help="hybrid retrieval over the brain.")

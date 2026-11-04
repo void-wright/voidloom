@@ -24,7 +24,7 @@ Design invariants (all enforced by the test-suite):
      rows. Each row carries a ``fits(probe)`` predicate computed from probe
      FACTS (gpu memory, compute capability, torch-cuda-usable). The chosen tier
      is the first row whose predicate is satisfied. There is NO hardcoded
-     ``if gpu: jina else: nomic`` ladder -- new hardware slots into the right
+     ``if gpu: qwen else: nomic`` ladder -- new hardware slots into the right
      tier purely by satisfying a predicate, so the table survives new GPUs
      (sm_86 Ampere laptop, sm_121 Blackwell, ...) without edits.
 
@@ -547,17 +547,17 @@ def _gpu_mem(probe: Dict[str, Any]) -> int:
 TIER_TABLE: List[TierSpec] = [
     TierSpec(
         name="GPU-HIGH",
-        embed_model="jina",
+        embed_model="qwen3-0.6b",
         min_gpu_mem_mb=20000,
         fits=lambda p: _cuda_truly_usable(p) and _gpu_mem(p) >= 20000,
-        rationale=">=20GB CUDA GPU -> full resident pack + a resident big embedder.",
+        rationale=">=20GB CUDA GPU -> full resident pack + the shipped GPU embedder (Qwen3-Embedding-0.6B).",
     ),
     TierSpec(
         name="GPU-MID",
-        embed_model="jina",
+        embed_model="qwen3-0.6b",
         min_gpu_mem_mb=8000,
         fits=lambda p: _cuda_truly_usable(p) and _gpu_mem(p) >= 8000,
-        rationale=">=8GB CUDA GPU -> jina v5 1024-dim + the small-encoder pack.",
+        rationale=">=8GB CUDA GPU -> Qwen3-Embedding-0.6B 1024-dim + the small-encoder pack.",
     ),
     TierSpec(
         name="GPU-LOW",
@@ -747,8 +747,10 @@ def capability_block(probe: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
             "L5-X Adaptive Loom capability probe. ADDITIVE block (X4): the "
             "install-time hardware detection result. M0 owns the manifest; this "
             "is folded in additively and never disturbs M0's hardware/model/"
-            "routing blocks or M3's organs block. Modules read active_embedding "
-            "+ tier here instead of probing per-module. Regenerate at install "
+            "routing blocks or M3's organs block. `install_time_embedding_choice` "
+            "records what the detector CHOSE at install; the install lock "
+            "(<brain>/embedder.lock.json) is what the brain PROMISED, and no organ "
+            "derives its tier from this manifest. Regenerate at install "
             "via: python3 capability/detect.py --json"
         ),
         "schema_version": 1,
@@ -769,12 +771,12 @@ def capability_block(probe: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "accelerators": p.get("accelerators", []),
         "ram_bytes": p.get("ram_bytes"),
         "reranker_fits": p.get("reranker_fits", {}),
-        "active_embedding": {
+        "install_time_embedding_choice": {
             "model": p.get("chosen_embed_model", SAFE_DEFAULT_MODEL),
             "repo_id": p.get("chosen_embed_repo", EMBED_MODELS[SAFE_DEFAULT_MODEL]["repo_id"]),
             "embed_dim": p.get("chosen_embed_dim", EMBED_MODELS[SAFE_DEFAULT_MODEL]["embed_dim"]),
         },
-        "active_embedding_table": _embedding_tier_map(p),
+        "install_time_tier_map": _embedding_tier_map(p),
         "degraded": p.get("degraded", True),
         "tier_rationale": p.get("tier_rationale", ""),
     }

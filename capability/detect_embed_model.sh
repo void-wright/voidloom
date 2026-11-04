@@ -4,8 +4,8 @@
 # ============================================================================
 # Thin, fail-soft shell wrapper around capability/detect.py. Replaces the
 # 4-line binary detect_embed_model() in install.sh with the rich stdlib
-# detector while preserving the EXACT install.sh contract: echo "jina" or
-# "nomic" (or the qwen3-0.6b tier model) to stdout, honour WIZARD_EMBED_MODEL.
+# detector while preserving the EXACT install.sh contract: echo "qwen3-0.6b" or
+# "nomic" to stdout, honour WIZARD_EMBED_MODEL.
 #
 # THE TIER-0 GUARANTEE: this is pure shell + a stdlib python3 invocation. No
 # venv, no torch, no third-party tool. If python3 or the detector is somehow
@@ -77,7 +77,7 @@ fi
 # (only reached if python3/detector are unavailable; preserves old behaviour)
 if [ "$MODE" = "model" ]; then
     if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
-        echo "jina"
+        echo "qwen3-0.6b"
     else
         echo "nomic"
     fi

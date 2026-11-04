@@ -99,6 +99,30 @@ TOOLKIT: Dict[str, Any] = {
             "when": "Before handing Voidloom to a new machine (decision D1).",
         },
         {
+            "name": "status",
+            "purpose": ("This brain's index on one page, read-only and with no model: the lock, coverage as "
+                        "matched/total, the derived layer's stale count (links, communities and summaries "
+                        "computed under another model), the seed numbers, the counts."),
+            "args": {"--json": "flag; structured envelope"},
+            "when": "Is the index whole; how much derived state is stale?",
+        },
+        {
+            "name": "inspect",
+            "purpose": ("One memory by id, read-only: text, seed flag, origin, visibility (or the literal "
+                        "\"unclassified\"), model stamp, whether a search can reach it, index coverage."),
+            "args": {"id": "int; the memory id", "--json": "flag; structured envelope"},
+            "when": "Re-read one memory with its provenance and model stamp.",
+        },
+        {
+            "name": "export",
+            "purpose": ("An EXPLICIT selection of memories as plain JSON records, read-only. --all is REFUSED "
+                        "(EXPORT_ALL_REFUSED, exit 3), naming the wards a full-corpus export would need."),
+            "args": {"--ids": "str; comma-separated memory ids",
+                     "--all": "flag; refused, typed",
+                     "--json": "flag; structured envelope"},
+            "when": "Hand a few named memories to another tool.",
+        },
+        {
             "name": "hooks",
             "purpose": ("The SessionStart hook, per platform: `install --platform "
                         "{claude,codex}` (dry-run by default; --yes writes ONE "

@@ -343,6 +343,8 @@ class TestAgentContext(unittest.TestCase):
         # 2026-09-28, the dream fix (Tranche A, A5/A7): the owner's dream verbs (backfill / confirm / show /
         # watch). Admitted deliberately.
         "dream",
+        # Read-only views of the brain, no model. Admitted deliberately.
+        "status", "inspect", "export",
         # 2026-10-12, the Persona Forge: status / forge / declare / decline. Admitted deliberately.
         "persona",
         # 2026-10-30, tier set: the one route that changes a brain's embedding model (re-embeds every memory, keeps
