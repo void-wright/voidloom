@@ -121,6 +121,26 @@ def resolve(conn: sqlite3.Connection) -> tuple[str, int]:
     return table, _DIM_FOR[table]
 
 
+def declared_table(conn: sqlite3.Connection) -> tuple:
+    """(table, source, refusal) for an INSTALLER's read of what the brain declares, lock first.
+
+    The installer's own gates read the declaration raw (an empty string means "declares no Tier-1 table") rather
+    than refuse, so this does not raise:
+      * a lock beside the database names the table: (table, "lock", "");
+      * a lock that is present but unusable: ("", "lock", <its refusal code, e.g. LOCK_MALFORMED>) -- never the
+        metadata row, which the lock overrides;
+      * no lock (a pre-lock brain): (metadata.active_embedding_table or "", "metadata", "").
+    sqlite errors on the metadata read propagate, as the callers' own reads did."""
+    try:
+        from_lock = _from_lock(conn)
+    except EmbedTierUnresolved as e:
+        return "", "lock", e.code or "LOCK_MALFORMED"
+    if from_lock is not None:
+        return from_lock[0], "lock", ""
+    row = conn.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
+    return (str(row[0]).strip() if row and row[0] is not None else ""), "metadata", ""
+
+
 def resolve_table(conn: sqlite3.Connection) -> str:
     return resolve(conn)[0]
 

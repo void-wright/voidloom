@@ -61,6 +61,15 @@ All notable changes to Voidloom are recorded here. The format follows
   refused (`ENV_DIR_FOREIGN`); an unmarked one is used as before. **If your sidecars live in an
   older, differently named directory,** set `VOIDLOOM_ENV_DIR` or `WIZARD_ENV_FILE` to it, or
   opt in and mark it.
+- **The installer reads the brain's embedding table from the install lock first**, at every
+  site that used to read the metadata row directly: the tier gate and post-condition of an
+  ambient upgrade, the install record, the brain sanity check, Step C's declaration and the
+  Tier-1 verify gate. A lock that cannot be used is reported by its code and is never replaced
+  by the metadata row. One function does the reading (`organs/embed_resolver.py`,
+  `declared_table`).
+- **`install.ps1` stamps the vectors it writes.** Its post-install embed of the seed pack
+  inserted vectors with no provenance stamp, and it imported the engine from the wrong
+  directory. It now uses `organs/embed_backfill.py`, the same writer `install.sh` uses.
 - Measuring coverage took 13 to 14 seconds on a brain with 28,063 vectors, because each count
   looked up the vector table once per row. The same counts now take about 0.1 seconds.
 - Six more queries looked up the vector table once per memory: the backfill count and its row

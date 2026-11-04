@@ -137,7 +137,7 @@ WIZARD_READ_ONLY = {"WIZARD_PYTHON_BIN": "an interpreter: executed, never a writ
 #   CITE install.sh:178 WIZARD_CLAUDE_HOME
 #   CITE install.sh:197 WIZARD_ENV_FILE
 #   CITE install.sh:215 WIZARD_CONFIG_DIR
-#   CITE install.sh:823 WIZARD_CONFIG_PATH
+#   CITE install.sh:828 WIZARD_CONFIG_PATH
 #   CITE cron/_config_dir.sh:9 WIZARD_CONFIG_DIR
 #   CITE install/install_crons.sh:118 WIZARD_LIBRARY_HOME
 #   CITE install/install_crons.sh:123 WIZARD_LIBRARY_HOME

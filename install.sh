@@ -692,19 +692,23 @@ brain_decl() {   # the brain's own declarations, read without writing: "<active_
     # The package had rejected this exact read once already (the dry-run note above).
     # Prints NOTHING when the brain cannot be read, so an unreadable brain never passes as
     # a declaration (the gate refuses an empty table; the post-condition refuses empty).
-    "$PY_SYS" - "$DB_PATH" <<'PYEOF' 2>/dev/null
+    # The table is read LOCK FIRST (organs/embed_resolver.declared_table): an install lock beside the brain names it,
+    # and a lock that cannot be used prints its refusal code in the table's place, never the metadata row.
+    "$PY_SYS" - "$DB_PATH" "${PKG_ROOT}/organs" <<'PYEOF' 2>/dev/null
 import os, sqlite3, sys, urllib.request   # the URI is ESCAPED (iteration 4, LOW 2: a '?' or '#' in the path would cut it short)
 db = sys.argv[1]
+sys.path.insert(0, sys.argv[2])
+import embed_resolver
 try:
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db)), uri=True)
     try:
-        t = c.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
+        t, _src, refusal = embed_resolver.declared_table(c)
         z = c.execute("SELECT value FROM metadata WHERE key='tier0_only'").fetchone()
     finally:
         c.close()
 except sqlite3.Error:
     sys.exit(0)
-print("%s|%s" % (t[0] if t else "", z[0] if z else ""))
+print("%s|%s" % (t or refusal, z[0] if z else ""))
 PYEOF
 }
 # A refusal names where the SHAPE came from (the flag, or <brain>/INSTALL_RECORD on a run with no
@@ -751,6 +755,7 @@ if [ -n "$TIER1_AMBIENT" ] || [ "$REC_SHAPE" = "ambient" ]; then
         memory_embeddings_v3) AMBIENT_TIER="qwen" ;;
         memory_embeddings_v2) AMBIENT_TIER="jina" ;;
         memory_embeddings)    AMBIENT_TIER="nomic" ;;
+        LOCK_*) refuse_shape "the install lock beside ${DB_PATH} cannot be used (${DECL_TABLE}); it overrides the brain's metadata, so there is no Tier 1 to keep until it is repaired." ;;
         *) refuse_shape "the brain at ${DB_PATH} declares no Tier-1 table (metadata.active_embedding_table='${DECL_TABLE}'): there is no ambient Tier 1 to keep." ;;
     esac
     # (f) the brain declares keyword-only
@@ -2891,8 +2896,10 @@ except OSError:
 rec["db"] = e("REC_DB")
 try:
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(e("REC_DB"))), uri=True)
-    t = c.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
-    rec["active_embedding_table"] = t[0] if t else ""
+    sys.path.insert(0, os.path.join(pkg, "organs"))
+    import embed_resolver                       # lock first: the install lock beside the brain names the table
+    _t, _src, _ref = embed_resolver.declared_table(c)
+    rec["active_embedding_table"] = _t or (("unreadable: %s" % _ref) if _ref else "")
     try:
         rec["schema_migrations_journal_rows"] = str(c.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0])
     except sqlite3.Error:
@@ -3380,9 +3387,11 @@ else
     fi
 
     # B.2 — sanity: required tables present + the embedding tier matches the DB.
-    "$PY_SYS" - "$DB_PATH" "$EMBED_TABLE" "$BRAIN_DIR" <<'PYEOF' || die "the installed brain DB failed its sanity check."
+    "$PY_SYS" - "$DB_PATH" "$EMBED_TABLE" "$BRAIN_DIR" "${PKG_ROOT}/organs" <<'PYEOF' || die "the installed brain DB failed its sanity check."
 import os, pathlib, sqlite3, sys, urllib.request   # escaped URIs (iteration 4, LOW 2)
 db, want_tab, brain_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, sys.argv[4])
+import embed_resolver   # the active table is read lock first (embed_resolver.declared_table)
 try:
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db)), uri=True)
 except Exception as e:
@@ -3421,8 +3430,8 @@ if _missing:
 for _u in _unmeasurable:
     sys.stderr.write(f"UNMEASURABLE: {_u}\n")
 n = c.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=0").fetchone()[0]
-row = c.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
-active = (row[0] if row else "(none)")
+_t, _src, _ref = embed_resolver.declared_table(c)
+active = _t or (f"(unreadable: {_ref})" if _ref else "(none)")
 if want_tab not in tabs and active != "(none)":
     sys.stderr.write(f"WARN: chosen embed table {want_tab} not in DB (active={active}); semantic recall may differ.\n")
 c.close()
@@ -3832,9 +3841,11 @@ PYEOF
 
 hd_t1_declare() {   # bash 3.2 (macOS /bin/bash) cannot parse a heredoc inside $( ): the command and its heredoc live here, called as $(hd_t1_declare) (round 2, B2)
     EMBED_TABLE="$EMBED_TABLE" EMBED_DIM="$EMBED_DIM" EMBED_REPO="$EMBED_REPO" \
-        ENGINE_REGISTRY="$ENGINE_REGISTRY" "$VENV_PY" - "$DB_PATH" <<'T1_DECLARE_PY'
+        ENGINE_REGISTRY="$ENGINE_REGISTRY" ORGANS_DIR="${PKG_ROOT}/organs" "$VENV_PY" - "$DB_PATH" <<'T1_DECLARE_PY'
 import os, sqlite3, sys
 db = sys.argv[1]
+sys.path.insert(0, os.environ["ORGANS_DIR"])
+import embed_resolver   # lock first: a locked brain's table is the lock's, and its metadata is never re-declared here
 tab, dim, repo = os.environ["EMBED_TABLE"], int(os.environ["EMBED_DIM"]), os.environ["EMBED_REPO"]
 
 
@@ -3865,8 +3876,11 @@ try:
     c.enable_load_extension(True)
     sqlite_vec.load(c)
     c.enable_load_extension(False)
-    row = c.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
-    declared = (str(row[0]).strip() if row and row[0] is not None else "")
+    declared, _src, _ref = embed_resolver.declared_table(c)
+    if _ref:
+        print("ERROR\tthe install lock beside the brain cannot be used (%s); it overrides the metadata, so nothing "
+              "was changed" % _ref)
+        sys.exit(0)
     if declared and declared not in KNOWN:
         print("ERROR\tthe brain declares an unknown embedding table %r; nothing was changed" % declared)
         sys.exit(0)
@@ -3916,14 +3930,16 @@ T1_DECLARE_PY
 
 hd_t1_verify() {   # bash 3.2 (macOS /bin/bash) cannot parse a heredoc inside $( ): the command and its heredoc live here, called as $(hd_t1_verify) (round 2, B2)
     WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" \
-        WIZARD_LIBRARY_HOME="$BRAIN_DIR" BRAIN_DIR="$BRAIN_DIR" "$VENV_PY" - <<'T1_VERIFY_PY'
+        WIZARD_LIBRARY_HOME="$BRAIN_DIR" BRAIN_DIR="$BRAIN_DIR" ORGANS_DIR="${PKG_ROOT}/organs" "$VENV_PY" - <<'T1_VERIFY_PY'
 import json, os, sqlite3, subprocess, sys, urllib.request   # escaped URI (iteration 4, LOW 2)
+sys.path.insert(0, os.environ["ORGANS_DIR"])
+import embed_resolver   # the tier to verify is read lock first (embed_resolver.declared_table)
 db = os.environ["WIZARD_LIBRARY_DB"]
 brain = os.environ["BRAIN_DIR"]          # the dir that CONTAINS the laid voidloom/ package
 
 # The active tier's table is a sqlite-vec VIRTUAL table, so counting it needs the
 # extension loaded exactly as the engine loads it; the venv has it (pip just put it there).
-vectors, tab, count_err = None, None, None
+vectors, tab, count_err, lock_refusal = None, None, None, None
 try:
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db)), uri=True)
     try:
@@ -3933,8 +3949,8 @@ try:
         c.enable_load_extension(False)
     except Exception:
         pass
-    row = c.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
-    tab = row[0] if row else None
+    tab, _src, lock_refusal = embed_resolver.declared_table(c)
+    tab = tab or None
     if tab:
         try:
             vectors = c.execute(f"SELECT COUNT(*) FROM {tab}").fetchone()[0]
@@ -3944,6 +3960,10 @@ try:
 except Exception as e:
     count_err = str(e)
 
+if not tab and lock_refusal:
+    print(f"  Tier 1 NOT VERIFIED: the install lock beside the brain cannot be used ({lock_refusal}); it names "
+          f"the tier, so there is no tier to verify until it is repaired.", file=sys.stderr)
+    sys.exit(1)
 if not tab:
     print("  Tier 1 NOT VERIFIED: the brain declares no active_embedding_table, so there is no "
           "semantic tier to verify (keyword results prove nothing about it).", file=sys.stderr)

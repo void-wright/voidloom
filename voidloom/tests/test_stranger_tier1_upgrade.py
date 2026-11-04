@@ -152,7 +152,7 @@ class TestB1ATier0BornBrainIsDeclaredAtTier1(_Scratch):
 
     def _declare(self, db, table="memory_embeddings", dim="768", repo="nomic-ai/nomic-embed-text-v1.5"):
         env = dict(os.environ, EMBED_TABLE=table, EMBED_DIM=dim, EMBED_REPO=repo,
-                   ENGINE_REGISTRY=_engine_registry_tsv(ROOT))
+                   ENGINE_REGISTRY=_engine_registry_tsv(ROOT), ORGANS_DIR=str(ROOT / "organs"))
         p = subprocess.run([sys.executable, "-", str(db)], input=self.block, capture_output=True, text=True,
                            env=env, timeout=120)
         self.assertEqual(p.returncode, 0, p.stderr[-800:])
@@ -295,7 +295,7 @@ class TestB1TheVerifyGateRefusesWhatIsNotTier1(_Scratch):
 
     def _gate(self, db):
         env = dict(os.environ, WIZARD_LIBRARY_DB=str(db), WIZARD_LIBRARY_HOME=str(self.brain), BRAIN_DIR=str(self.brain),
-                   BRAIN_ORGANS=str(self.brain / "organs"), WIZARD_EMBED_MODEL="nomic")
+                   BRAIN_ORGANS=str(self.brain / "organs"), ORGANS_DIR=str(ROOT / "organs"), WIZARD_EMBED_MODEL="nomic")
         env.pop("PYTHONPATH", None)
         return subprocess.run([sys.executable, "-"], input=self.block, capture_output=True, text=True, env=env,
                               timeout=120, cwd=str(self.tmp))
@@ -1073,7 +1073,7 @@ class TestTheTierRegistryHasOneSource(_Scratch):
             self.skipTest("sqlite_vec is not importable by %s" % sys.executable)
         db = self._tier0_brain()
         env = dict(os.environ, EMBED_TABLE="memory_embeddings", EMBED_DIM="768",
-                   EMBED_REPO="nomic-ai/nomic-embed-text-v1.5", ENGINE_REGISTRY="")
+                   EMBED_REPO="nomic-ai/nomic-embed-text-v1.5", ENGINE_REGISTRY="", ORGANS_DIR=str(ROOT / "organs"))
         p = subprocess.run([sys.executable, "-", str(db)], input=_heredoc_after("hd_t1_declare() {"), capture_output=True,
                            text=True, env=env, timeout=120)
         self.assertTrue(p.stdout.startswith("ERROR\tthe engine's tier registry"), p.stdout + p.stderr)

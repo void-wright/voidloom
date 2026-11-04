@@ -535,28 +535,22 @@ sys.exit(0)
             & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") init *> $null
             if ($LASTEXITCODE -eq 0) {
                 Say "  full CLI init OK (vec0 embedding table ready, $EmbedTier $EmbedDim-dim)"
-                # Re-embed seeded memories using the full CLI's own encoder for this tier.
+                # Embed the seeded memories through organs/embed_backfill.py, the writer install.sh uses: every
+                # vector goes through memory_write.attach_embedding, so it lands with its provenance stamp (the
+                # checksum of the model that made it). The raw INSERT this replaced wrote vectors with no stamp.
                 $reembedPy = @'
-import sys, sqlite3
+import os, sys
 db_path, brain_dir = sys.argv[1], sys.argv[2]
-sys.path.insert(0, brain_dir)
-import sqlite_vec
-import claude_memory as cm
-conn = sqlite3.connect(db_path)
-conn.enable_load_extension(True); sqlite_vec.load(conn); conn.enable_load_extension(False)
-table = cm._active_embed_table()
-rows = conn.execute("SELECT id, content FROM memories WHERE is_archived=0").fetchall()
-have = {r[0] for r in conn.execute(f"SELECT memory_id FROM {table}").fetchall()}
-todo = [(mid, c) for mid, c in rows if mid not in have]
-n = 0
-for mid, content in todo:
-    conn.execute(f"INSERT OR REPLACE INTO {table} (memory_id, embedding) VALUES (?, ?)", (mid, cm._encode(content, "search_document")))
-    n += 1
-conn.commit(); conn.close()
-print(f"  re-embedded {n} memories into {table} ({cm._active_embed_dim()}-dim)")
+sys.path.insert(0, os.path.join(brain_dir, "organs"))
+import embed_backfill
+res = embed_backfill.backfill(db_path)
+print(f"  re-embedded {res.get('embedded')} memories into {res.get('table')} ({res.get('dim')}-dim): "
+      f"{res.get('status')}, {res.get('unembedded_after')} without a vector")
+sys.exit({"ok": 0, "incomplete": 1, "refused": 3}.get(res.get("status"), 1))
 '@
                 $tmp2 = Join-Path $env:TEMP "wl_reembed.py"; Set-Content -Path $tmp2 -Value $reembedPy -Encoding UTF8
                 & $VenvPy $tmp2 $DbPath $BrainDir
+                if ($LASTEXITCODE -ne 0) { Warn "embedding the seed pack did not complete (rc $LASTEXITCODE); re-run: & `"$VenvPy`" `"$BrainDir\organs\embed_backfill.py`" `"$DbPath`"" }
                 Remove-Item $tmp2 -ErrorAction SilentlyContinue
                 & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") recall --query "how do I capture knowledge as I work" --top_k 1 *> $null
                 if ($LASTEXITCODE -eq 0) {

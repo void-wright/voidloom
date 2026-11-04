@@ -346,7 +346,7 @@ class TestTheFourConditionsAndTheRecordRefuseByName(_AmbientHome):
         self.assertIn('[ "$TIER_AFTER" = "$TIER_BEFORE" ]', sh)
         fn = re.search(r"^brain_decl\(\) \{.*?^\}\n", sh, re.M | re.S)
         self.assertIsNotNone(fn, "install.sh defines no brain_decl()")
-        (self.tmp / "decl.sh").write_text(fn.group(0) + 'PY_SYS="$1"; DB_PATH="$2"; brain_decl\n', encoding="utf-8")
+        (self.tmp / "decl.sh").write_text(fn.group(0) + 'PY_SYS="$1"; DB_PATH="$2"; PKG_ROOT="%s"; brain_decl\n' % ROOT, encoding="utf-8")
         self._brain()
 
         def decl():
