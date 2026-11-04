@@ -89,27 +89,88 @@ def serialize_f32(vec) -> bytes:
     return struct.pack(f"{len(vec)}f", *vec)
 
 
+def _organs():
+    d = os.path.dirname(os.path.abspath(__file__))
+    if d not in sys.path:
+        sys.path.insert(0, d)
+
+
+def _store_lock() -> Dict[str, Any]:
+    """THE SHIPPED CATALOGUE ENTRY for nomic (organs/embedders.lock.json, tier 'cpu'), the
+    model this store's 768-wide table holds. Not the install lock beside this database:
+    that one is the BRAIN's, and names whatever tier the brain uses, while this store is
+    always nomic. So the loader, the stamp and the search set here all take this entry."""
+    _organs()
+    import embedder_lock
+    lock = dict(embedder_lock.catalogue_tiers()["cpu"])
+    lock["tier"] = "cpu"
+    if lock["model_id"] != NOMIC_MODEL_NAME or int(lock["dim"]) != NOMIC_DIM:
+        raise ValueError("the shipped cpu tier is %s/%s, this store is %s/%d"
+                         % (lock["model_id"], lock["dim"], NOMIC_MODEL_NAME, NOMIC_DIM))
+    return lock
+
+
+def _search_filter():
+    """The search set of this store, in the shape every reader takes: the rows stamped
+    under the shipped nomic checksum, and the legacy rows from before the store stamped."""
+    _organs()
+    import memory_write
+    lock = _store_lock()
+    return memory_write.ProvenanceFilter(
+        vec_table=lock["vec_table"], dim=int(lock["dim"]), weights_hash=lock["weights_hash"],
+        model_id=lock["model_id"], revision=lock["revision"], tier=lock["tier"], lock_path=None)
+
+
+def _coverage(conn: sqlite3.Connection):
+    """The reader, for this store. Typed refusals propagate (NO_ROWS_FOR_LOCK and the rest)."""
+    import memory_write
+    return memory_write._lock_coverage(conn, _search_filter())
+
+
+def _coverage_or_exit(conn: sqlite3.Connection):
+    try:
+        return _coverage(conn)
+    except Exception as e:
+        code = getattr(e, "code", None)
+        if not code:
+            raise
+        conn.close()
+        _error(f"{code}: {e}")
+
+
+def _coverage_envelope(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Coverage for a caller that always carries it: figures, and the refusal if there is one."""
+    try:
+        return {"ok": True, **_coverage(conn).as_dict()}
+    except Exception as e:
+        code = getattr(e, "code", None)
+        if not code:
+            raise
+        figures = getattr(e, "coverage", None)
+        total = conn.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
+        return {"ok": False, "error": code, "message": str(e),
+                **(figures.as_dict() if figures is not None else {"matched": 0, "total": int(total)})}
+
+
+def _write_vector(conn: sqlite3.Connection, memory_id: int, text: str, vec: bytes, organ: str) -> None:
+    """The vector and its stamp, as one unit, in the caller's open transaction. The stamp
+    names the checksum the resident embedder computed, for this text."""
+    _organs()
+    import memory_write
+    memory_write.attach_under_lock(conn, memory_id, text, vec, lock=_store_lock(), organ=organ)
+
+
 def _load_model():
     if "model" in _model_cache:
         return _model_cache["model"]
     try:
-        # Loaded THROUGH THE SHIPPED CATALOGUE ENTRY for nomic (organs/embedders.lock.json,
-        # tier 'cpu'), the model this store's 768-wide table holds: the model and its
-        # remote-code repository at their pinned revisions, checksum-verified before
-        # instantiation, read from the verified snapshot directory. Not the brain's own
-        # install lock -- that names whatever tier the BRAIN uses, and this database is
-        # always nomic. A by-name load resolved the remote code at the hub's moving `main`,
+        # The model and its remote-code repository at their pinned revisions,
+        # checksum-verified before instantiation, read from the verified snapshot
+        # directory. A by-name load resolved the remote code at the hub's moving `main`,
         # which a cache holding only the pinned bytes cannot satisfy offline.
-        _here = os.path.dirname(os.path.abspath(__file__))
-        if _here not in sys.path:
-            sys.path.insert(0, _here)
+        _organs()
         import embedding_upgrade as _eu
-        lock = dict(_eu._lock_module().catalogue_tiers()["cpu"])
-        lock["tier"] = "cpu"
-        if lock["model_id"] != NOMIC_MODEL_NAME or int(lock["dim"]) != NOMIC_DIM:
-            raise ValueError("the shipped cpu tier is %s/%s, this store is %s/%d"
-                             % (lock["model_id"], lock["dim"], NOMIC_MODEL_NAME, NOMIC_DIM))
-        model, _ = _eu.get_locked_embedder(lock)
+        model, _ = _eu.get_locked_embedder(_store_lock())
         _model_cache["model"] = model
         return model
     except Exception as e:
@@ -136,6 +197,10 @@ def _get_conn() -> sqlite3.Connection:
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
+    _organs()
+    import memory_write
+    memory_write.ensure_provenance_table(conn)     # a store from before the sidecar keeps working
+    conn.commit()
     return conn
 
 
@@ -166,6 +231,10 @@ def cmd_init(args):
         "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
         ("created_at", datetime.now().isoformat()),
     )
+    conn.commit()
+    _organs()
+    import memory_write
+    memory_write.ensure_provenance_table(conn)
     conn.commit()
 
     tables = [r[0] for r in conn.execute(
@@ -203,10 +272,7 @@ def cmd_store(args):
     )
     memory_id = cursor.lastrowid
 
-    conn.execute(
-        "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
-        (memory_id, embedding),
-    )
+    _write_vector(conn, memory_id, args.content, embedding, "website_memory.store")
 
     if args.tags:
         for tag in args.tags.split(","):
@@ -236,8 +302,10 @@ def cmd_recall(args):
     conn = _get_conn()
 
     query_vec = _encode(args.query, "search_query")
+    cov = _coverage_or_exit(conn)
+    flt = cov.filter
 
-    sql = """
+    sql = f"""
         SELECT
             emb.memory_id,
             emb.distance,
@@ -249,12 +317,13 @@ def cmd_recall(args):
             m.access_count,
             m.created_at,
             m.last_accessed
-        FROM memory_embeddings AS emb
+        FROM {flt.vec_table} AS emb
         JOIN memories AS m ON m.id = emb.memory_id
         WHERE emb.embedding MATCH ?
           AND k = ?
+          AND emb.{flt.search_set_sql}
     """
-    params = [query_vec, args.top_k * 3]
+    params = [query_vec, args.top_k * 3, *flt.search_set_params]
 
     rows = conn.execute(sql, params).fetchall()
 
@@ -312,6 +381,7 @@ def cmd_recall(args):
         "query": args.query,
         "results": results,
         "result_count": len(results),
+        "coverage": cov.as_dict(),
         "time_ms": int((time.time() - t0) * 1000),
     })
 
@@ -420,11 +490,7 @@ def cmd_update(args):
 
     if args.content:
         embedding = _encode(args.content, "search_document")
-        conn.execute("DELETE FROM memory_embeddings WHERE memory_id = ?", (args.id,))
-        conn.execute(
-            "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
-            (args.id, embedding),
-        )
+        _write_vector(conn, args.id, args.content, embedding, "website_memory.update")
 
     if args.tags:
         conn.execute("DELETE FROM memory_tags WHERE memory_id = ?", (args.id,))
@@ -459,6 +525,7 @@ def cmd_delete(args):
 
     if args.hard:
         conn.execute("DELETE FROM memory_embeddings WHERE memory_id = ?", (args.id,))
+        conn.execute("DELETE FROM embedding_provenance WHERE memory_id = ?", (args.id,))
         conn.execute("DELETE FROM memory_tags WHERE memory_id = ?", (args.id,))
         conn.execute("DELETE FROM memory_links WHERE source_id = ? OR target_id = ?", (args.id, args.id))
         conn.execute("DELETE FROM access_log WHERE memory_id = ?", (args.id,))
@@ -560,11 +627,8 @@ def cmd_stats(args):
     ).fetchall():
         importance_dist[row[0]] = row[1]
 
-    embedding_count = 0
-    try:
-        embedding_count = conn.execute("SELECT COUNT(*) FROM memory_embeddings").fetchone()[0]
-    except Exception:
-        pass
+    coverage = _coverage_envelope(conn)
+    embedding_count = int(coverage.get("matched") or 0)
 
     conn.close()
 
@@ -574,6 +638,7 @@ def cmd_stats(args):
         "total_memories": total,
         "archived_memories": archived,
         "embedded_memories": embedding_count,
+        "coverage": coverage,
         "unique_tags": tags_count,
         "total_links": links_count,
         "by_category": by_category,
@@ -630,6 +695,8 @@ def cmd_maintain(args):
     deduped = 0
     linked = 0
     if not args.skip_dedup:
+        import memory_write
+        flt = _search_filter()
         categories = [r[0] for r in conn.execute(
             "SELECT DISTINCT category FROM memories WHERE is_archived = 0"
         ).fetchall()]
@@ -643,14 +710,10 @@ def cmd_maintain(args):
             if len(mems) < 2:
                 continue
 
-            embeddings = {}
-            for mem_id, content in mems:
-                row = conn.execute(
-                    "SELECT embedding FROM memory_embeddings WHERE memory_id = ?", (mem_id,)
-                ).fetchone()
-                if row:
-                    vec = struct.unpack(f"{NOMIC_DIM}f", row[0])
-                    embeddings[mem_id] = vec
+            # Only vectors in the search set are compared: a row under other weights is in
+            # another space, and a distance across spaces would archive on noise.
+            blobs = memory_write.read_vectors(conn, [mem_id for mem_id, _c in mems], flt=flt)
+            embeddings = {mem_id: struct.unpack(f"{flt.dim}f", blob) for mem_id, blob in blobs.items()}
 
             ids = list(embeddings.keys())
             for i in range(len(ids)):
@@ -826,10 +889,7 @@ def cmd_migrate(args):
             )
             memory_id = cursor.lastrowid
 
-            conn.execute(
-                "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
-                (memory_id, embedding),
-            )
+            _write_vector(conn, memory_id, mem["content"], embedding, organ="website_memory.migrate")
 
             for tag in mem.get("tags", []):
                 conn.execute(

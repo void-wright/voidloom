@@ -12,7 +12,7 @@ Usage (in any Wizard Library module)::
     from wizard_config import config
 
     db_path = config.db_path           # Path to the narrative memory DB
-    model   = config.embed_model       # "jinaai/jina-embeddings-v5-text-small"
+    model   = config.embed_model       # "nomic-ai/nomic-embed-text-v1.5" (the catalogue's cpu tier)
     device  = config.embed_device      # "cuda:0" or "cpu"
     skills  = config.skills_dir        # Path to persona-skill folders
 
@@ -27,7 +27,7 @@ Profiles
 --------
 The template config file ships with three profiles:
 
-- ``desktop``  — Jina v5 on GPU, WSL2 cron, full power (Tier 1, Drew's desktop)
+- ``desktop``  — Qwen3-Embedding-0.6B on GPU, WSL2 cron, full power (Tier 1, a desktop)
 - ``laptop``   — Nomic v1.5 on CPU, systemd-only cron, portable (Tier 2, Drew's laptop)
 - ``teammate`` — Nomic v1.5 on CPU, no cron, blank persona (Tier 3, teammates)
 
@@ -38,7 +38,7 @@ overridden on top of a profile.
 Design references:
   - Memory #4032 (brain power tiers)
   - Memory #3674 (WSL2 HYBRID cron pattern)
-  - Memory #4021 (Jina v5 decision)
+  - The install lock chooses a brain's tier (organs/embedder_lock.py); these fields only report a default
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 _PROFILES: Dict[str, Dict[str, Any]] = {
     "desktop": {
-        "embed_model": "jinaai/jina-embeddings-v5-text-small",
+        "embed_model": "Qwen/Qwen3-Embedding-0.6B",
         "embed_dim": 1024,
         "embed_device": "auto",
         "embed_prefix_query": "Query",
@@ -201,8 +201,8 @@ class WizardConfig:
     module_dir: str = ""  # Directory containing Wizard Library modules
 
     # --- Embedding model ---
-    embed_model: str = "jinaai/jina-embeddings-v5-text-small"
-    embed_dim: int = 1024
+    embed_model: str = "nomic-ai/nomic-embed-text-v1.5"   # the catalogue's default (cpu) tier; the lock decides
+    embed_dim: int = 768                                  # the width of that default
     embed_device: str = "auto"  # "auto", "cuda:0", "cpu"
     embed_prefix_query: str = "Query"
     embed_prefix_document: str = "Document"

@@ -9,7 +9,7 @@ None (with a logged reason) and NEVER raises into a caller. A half-provisioned
 machine still runs.
 
 Why a registry-dict abstraction (the Model Garden):
-  Today the only local models are jina (embedder) + bge (reranker), each behind
+  Today the local models are the brain's embedder + the reranker, each behind
   its OWN ad-hoc lazy loader. Downstream L5 organs (the belief engine D, the
   salience/affect gate G, the consolidation pipeline) each would otherwise
   re-invent model loading. The Garden unifies the existing three loaders AND
@@ -119,7 +119,7 @@ ROLE_BURST = "dual-card-burst"      # MUST go through gpu_guard.acquire()
 class ModelSpec:
     """A single model the Garden can serve.
 
-    key             : the Garden handle (get_model('jina'), etc.).
+    key             : the Garden handle (get_model('qwen'), etc.).
     repo_id         : HuggingFace repo id (for cache-presence probing + load).
     role            : ROLE_RESIDENT (default) or ROLE_BURST (gpu_guard-gated).
     loader_type     : one of the LOADER_* tags above.
@@ -171,7 +171,7 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
         key="qwen",
         repo_id="Qwen/Qwen3-Embedding-0.6B",
         role=ROLE_RESIDENT,
-        loader_type=LOADER_QWEN,   # its OWN loader: the jina loader hardcodes jina
+        loader_type=LOADER_QWEN,
         device="cuda:0",
         footprint_mb=1500,
         enable_default=True,
@@ -284,7 +284,7 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
 # ============================================================
 # Process-level model cache (per Garden key).
 # ============================================================
-# For jina/nomic/reranker the actual model object lives in the EXISTING loader's
+# For qwen/nomic/reranker the actual model object lives in the EXISTING loader's
 # module-global cache; we cache a *reference* here so the Garden doesn't re-route
 # through the delegate on every call. For the encoder pack we own the cache.
 # Cache value of None means "load attempted and failed/absent — do not retry"
@@ -585,7 +585,7 @@ def get_model(key: str, *, force: bool = False, manifest: Optional[dict] = None)
     """Lazy, process-cached accessor for a RESIDENT model.
 
     Routing:
-      jina/nomic/reranker  -> the 3 EXISTING loaders (delegate; their cache).
+      qwen/nomic/reranker  -> the EXISTING loaders (delegate; their cache).
       nli/gliner/zeroshot/emotion -> load via the right library on cuda:0.
       a BURST model (dream_llm) -> NOT served here; use get_burst_model(). We
         return None + a logged reason (graceful — never raise) so a caller that

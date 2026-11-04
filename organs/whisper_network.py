@@ -108,6 +108,19 @@ VALID_OBSERVATION_TYPES = (
 # it already uses); this organ names none of them.
 
 
+def _torch_device(torch_mod) -> str:
+    """THE device for this organ (handoff round 1, lane L1): voidloom_device.torch_device() -- the backend's pin first,
+    then the backend's own API (CUDA, ROCm, MPS, XPU); 'cpu' on any degraded, refused or unconfirmed basis. Replaces
+    the per-organ `"cuda:0" if _cuda_usable(torch) else "cpu"`, which could only ever say CUDA or CPU."""
+    try:
+        from voidloom_device import torch_device as _td
+    except ImportError:
+        import sys as _s
+        _s.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from voidloom_device import torch_device as _td
+    return _td(torch_mod)
+
+
 def is_whisper_migration_applied(conn: sqlite3.Connection) -> bool:
     """Check if migration_009 (whisper_network) has been applied."""
     try:
