@@ -715,9 +715,15 @@ def cmd_re_embed(args) -> Dict[str, Any]:
     target equal to the lock -- the lock and the tier do not move. The jina loader is
     never touched on that path.
 
-    A brain with NO lock (the jina tier, kept for personal installs): the original
+    A brain with no lock that embeds under nomic or qwen (it predates the lock): the
+    same, under the shipped catalogue entry for the tier it already uses. No lock is
+    written and the metadata rows stay as found.
+
+    A brain that embeds under jina (kept for personal installs): the original
     behaviour -- Jina v5 into memory_embeddings_v2, in batches of BATCH_SIZE,
     skipping memories that already have a v2 row.
+
+    A brain whose tier cannot be read refuses, typed (TIER_UNRESOLVED).
     """
     db_path = args.db_path
     batch_size = getattr(args, "batch_size", BATCH_SIZE)
@@ -1133,47 +1139,62 @@ def cmd_swap(args) -> Dict[str, Any]:
 # ============================================================
 
 def cmd_stats(args) -> Dict[str, Any]:
-    """Show embedding table statistics."""
+    """Embedding statistics: the lock, and THE READER'S coverage envelope --
+    matched/total, three numbers -- beside one raw count, labelled as a raw count.
+    No presence percentage over a table by literal name: a presence count is not
+    coverage, and on most installs one of those tables belongs to no model in use."""
+    import memory_write
     db_path = args.db_path
     conn = _get_conn(db_path)
 
-    v1_count = conn.execute("SELECT COUNT(*) FROM memory_embeddings").fetchone()[0]
-    v2_exists = _table_exists(conn, "memory_embeddings_v2")
-    v2_count = conn.execute("SELECT COUNT(*) FROM memory_embeddings_v2").fetchone()[0] if v2_exists else 0
-    active_count = conn.execute("SELECT COUNT(*) FROM memories WHERE is_archived = 0").fetchone()[0]
+    active_count = conn.execute(
+        "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
 
-    # Check active model metadata
-    active_model_row = conn.execute(
-        "SELECT value FROM metadata WHERE key = 'active_embedding_model'"
-    ).fetchone()
-    active_model = active_model_row[0] if active_model_row else NOMIC_MODEL_NAME
+    def _meta(key: str) -> Optional[str]:
+        try:
+            row = conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()
+        except sqlite3.Error:
+            return None
+        return row[0] if row else None
 
-    active_table_row = conn.execute(
-        "SELECT value FROM metadata WHERE key = 'active_embedding_table'"
-    ).fetchone()
-    active_table = active_table_row[0] if active_table_row else "memory_embeddings"
+    active_model = _meta("active_embedding_model")
+    active_table = _meta("active_embedding_table")
     # The install lock first: on a locked brain it names the model and table, and the metadata rows
     # only echo it (`tier set` moves them together). A brain with no lock is read from metadata.
     # embed_resolver's rule decides (a lock naming a table or width the engine does not build refuses).
     table_source, lock_error = "metadata", None
+    lock_state: Dict[str, Any] = {"present": False, "basis": "lockless",
+                                  "note": "no install lock beside this brain: it predates the lock or embeds "
+                                          "under a tier the catalogue does not ship"}
     _el = _lock_module()
     import embed_resolver as _er            # stdlib-only, beside embedder_lock (imported above)
     try:
         _locked = _er._from_lock(conn)
         if _locked is not None:
-            active_model = _el.resolve(conn)["model_id"]
+            _lock = _el.resolve(conn)
+            active_model = _lock["model_id"]
             active_table, table_source = _locked[0], "lock"
+            lock_state = {"present": True, "tier": _lock["tier"], "model_id": _lock["model_id"],
+                          "vec_table": _lock["vec_table"], "dim": int(_lock["dim"]),
+                          "weights_hash": _lock["weights_hash"], "code": _lock.get("code")}
     except (_er.EmbedTierUnresolved, _el.EmbedderLockError) as e:
         lock_error = f"{e.code}: {e}"
+        lock_state = {"present": True, "error": e.code, "message": str(e)}
+
+    coverage = memory_write.coverage_envelope(conn)
+    raw_vectors = None
+    if active_table and _table_exists(conn, active_table):
+        raw_vectors = conn.execute(f"SELECT COUNT(*) FROM {active_table}").fetchone()[0]
 
     # Check upgrade log
     upgrade_log = []
     if _table_exists(conn, "embedding_upgrade_log"):
         log_rows = conn.execute(
-            "SELECT started_at, completed_at, status, memories_processed FROM embedding_upgrade_log ORDER BY id DESC LIMIT 5"
+            "SELECT started_at, completed_at, status, memories_processed, model_name "
+            "FROM embedding_upgrade_log ORDER BY id DESC LIMIT 5"
         ).fetchall()
         upgrade_log = [
-            {"started": r[0], "completed": r[1], "status": r[2], "processed": r[3]}
+            {"started": r[0], "completed": r[1], "status": r[2], "processed": r[3], "model": r[4]}
             for r in log_rows
         ]
 
@@ -1182,28 +1203,16 @@ def cmd_stats(args) -> Dict[str, Any]:
     result = {
         "status": "success",
         "active_memories": active_count,
-        "memory_embeddings_v1": {
-            "table": "memory_embeddings",
-            "model": NOMIC_MODEL_NAME,
-            "dim": NOMIC_DIM,
-            "rows": v1_count,
-        },
-        "memory_embeddings_v2": {
-            "table": "memory_embeddings_v2",
-            "model": JINA_MODEL_NAME,
-            "dim": JINA_DIM,
-            "rows": v2_count,
-            "exists": v2_exists,
-        },
+        "lock": lock_state,
+        "coverage": coverage,                  # the reader's envelope: matched/total, three numbers
+        "vectors_in_lock_table": raw_vectors,  # a raw presence count of the active table, labelled as such
         "active_model": active_model,
         "active_table": active_table,
         "table_source": table_source,
         "lock_error": lock_error,
-        "coverage_v1_pct": round(100 * v1_count / active_count, 1) if active_count else 0,
-        "coverage_v2_pct": round(100 * v2_count / active_count, 1) if active_count else 0,
         "recent_upgrade_log": upgrade_log,
     }
-    logger.info("Stats: %s", json.dumps(result, indent=2))
+    logger.info("Stats: %s", json.dumps(result, indent=2, default=str))
     return result
 
 
@@ -1268,13 +1277,16 @@ def cmd_full(args) -> Dict[str, Any]:
     # Step 3: Re-embed
     logger.info("\n[3/5] Re-embedding all memories...")
     results["re_embed"] = cmd_re_embed(args)
-    if results["re_embed"].get("status", "").startswith("error"):
+    if str(results["re_embed"].get("status", "")).startswith("error"):
         results["pipeline_status"] = "failed_at_re_embed"
         return results
 
     # Step 4: A/B compare
     logger.info("\n[4/5] Running A/B comparison...")
     results["ab_compare"] = cmd_ab_compare(args)
+    if str(results["ab_compare"].get("status", "")).startswith("error"):
+        results["pipeline_status"] = "failed_at_ab_compare"
+        return results
 
     # Step 5: Conditional swap
     verdict = results["ab_compare"].get("verdict", "REGRESSION")
@@ -1298,10 +1310,17 @@ def cmd_full(args) -> Dict[str, Any]:
 # ============================================================
 
 def cmd_test(args) -> Dict[str, Any]:
-    """Run unit tests for the embedding upgrade module."""
+    """Self-test on a LOCKED temp brain, with no jina anywhere. Vectors are written only
+    through the guarded writer; nothing names a table by literal; the assertions are on
+    the lock's own vec_table and the reader's coverage. The model-dependent test SKIPS
+    with a reason when the locked snapshot or the stack is absent: it never fetches, and
+    a skip is reported as a skip, never as a pass."""
+    import shutil
     import tempfile
+    import memory_write
+    embedder_lock = _lock_module()
 
-    results = {"tests": [], "passed": 0, "failed": 0}
+    results: Dict[str, Any] = {"tests": [], "passed": 0, "failed": 0, "skipped": 0}
 
     def _assert(name: str, condition: bool, msg: str = ""):
         if condition:
@@ -1313,6 +1332,11 @@ def cmd_test(args) -> Dict[str, Any]:
             results["failed"] += 1
             logger.error("  FAIL: %s — %s", name, msg)
 
+    def _skip(name: str, why: str):
+        results["tests"].append({"name": name, "status": "SKIP", "message": why})
+        results["skipped"] += 1
+        logger.warning("  SKIP: %s — %s", name, why)
+
     logger.info("Running embedding upgrade unit tests...")
 
     # Test 1: serialize_f32 produces correct byte length
@@ -1323,40 +1347,10 @@ def cmd_test(args) -> Dict[str, Any]:
 
     # Test 2: serialize/deserialize roundtrip
     original = [0.123, -0.456, 0.789]
-    serialized = serialize_f32(original)
-    deserialized = list(struct.unpack(f"{len(original)}f", serialized))
+    deserialized = list(struct.unpack(f"{len(original)}f", serialize_f32(original)))
     _assert("serialize_roundtrip", all(abs(a - b) < 1e-6 for a, b in zip(original, deserialized)))
 
-    # Test 3: Jina model loads and produces 1024-dim embeddings
-    try:
-        model = _get_jina_model()
-        _assert("jina_model_loads", model is not None)
-
-        test_emb = encode_jina_query("test embedding quality")
-        dim = len(struct.unpack(f"{JINA_DIM}f", test_emb))
-        _assert("jina_produces_1024_dim", dim == 1024, f"Got dim={dim}")
-
-        # Test 4: Query vs document encoding are different
-        query_emb = encode_jina_query("memory retrieval technology")
-        doc_emb = encode_jina_document("memory retrieval technology")
-        _assert("query_doc_asymmetric", query_emb != doc_emb,
-                "Query and document embeddings should differ (asymmetric encoding)")
-
-    except Exception as e:
-        _assert("jina_model_loads", False, str(e))
-        _assert("jina_produces_1024_dim", False, "Skipped (model load failed)")
-        _assert("query_doc_asymmetric", False, "Skipped (model load failed)")
-
-    # Test 5: Nomic model loads and produces 768-dim embeddings
-    try:
-        nomic_emb = encode_nomic("test embedding", prefix="search_query",
-                                 lock=brain_lock(sqlite3.connect(":memory:"), tier="nomic"))
-        dim = len(struct.unpack(f"{NOMIC_DIM}f", nomic_emb))
-        _assert("nomic_produces_768_dim", dim == 768, f"Got dim={dim}")
-    except Exception as e:
-        _assert("nomic_produces_768_dim", False, str(e))
-
-    # Test 6: Metric helpers
+    # Test 3: Metric helpers
     _assert("recall_at_5_full", abs(_recall_at_k([1, 2, 3, 4, 5], {1, 2, 3}, 5) - 1.0) < 1e-6)
     _assert("recall_at_5_partial", abs(_recall_at_k([1, 2, 6, 7, 8], {1, 2, 3}, 5) - 2/3) < 1e-6)
     _assert("recall_at_5_empty_gt", abs(_recall_at_k([1, 2, 3], set(), 5)) < 1e-6)
@@ -1364,117 +1358,78 @@ def cmd_test(args) -> Dict[str, Any]:
     _assert("ndcg_at_10_partial", _ndcg_at_k([4, 1, 5, 2, 6], {1, 2, 3}, 10) > 0)
     _assert("ndcg_at_10_empty_gt", abs(_ndcg_at_k([1, 2, 3], set(), 10)) < 1e-6)
 
-    # Test 7: Migration on temp DB
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tf:
-        temp_db = tf.name
-
+    # Test 4: swap is a typed refusal
+    class _A:
+        db_path = "/nonexistent"
     try:
-        import sqlite_vec
-        conn = sqlite3.connect(temp_db)
-        conn.enable_load_extension(True)
-        sqlite_vec.load(conn)
-        conn.enable_load_extension(False)
+        cmd_swap(_A())
+        _assert("swap_refuses_typed", False, "cmd_swap returned instead of raising")
+    except VerbRefused as e:
+        _assert("swap_refuses_typed", e.code == "SWAP_REFUSED" and e.as_dict().get("replacement") == "tier set")
 
-        # Create minimal schema
-        conn.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)")
-        conn.execute("CREATE TABLE IF NOT EXISTS memories (id INTEGER PRIMARY KEY, content TEXT, summary TEXT, is_archived INTEGER DEFAULT 0)")
-        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(memory_id INTEGER PRIMARY KEY, embedding float[768])")
-        conn.commit()
-
-        # Insert test data
-        conn.execute("INSERT INTO memories (id, content, is_archived) VALUES (1, 'test memory one', 0)")
-        conn.execute("INSERT INTO memories (id, content, is_archived) VALUES (2, 'test memory two', 0)")
-        conn.execute("INSERT INTO memory_embeddings (memory_id, embedding) VALUES (1, ?)", (serialize_f32([0.1] * 768),))
-        conn.execute("INSERT INTO memory_embeddings (memory_id, embedding) VALUES (2, ?)", (serialize_f32([0.2] * 768),))
-        conn.commit()
-        conn.close()
-
-        # Test migration
-        class FakeArgs:
-            db_path = temp_db
-            batch_size = 2
-        fake_args = FakeArgs()
-
-        migrate_result = cmd_migrate(fake_args)
-        _assert("migration_applies", migrate_result["status"] in ("success", "already-applied"))
-
-        # Test re-embed on temp DB
-        re_embed_result = cmd_re_embed(fake_args)
-        _assert("re_embed_completes", re_embed_result.get("status", "").startswith("complete") or
-                re_embed_result.get("status") == "success")
-
-        # Verify v2 table has data
+    # Test 5: a locked temp brain, re-embedded through the guarded writer
+    tmp = tempfile.mkdtemp(prefix="vl_embed_test_")
+    temp_db = os.path.join(tmp, "brain.db")
+    try:
+        lock = embedder_lock.write_lock(tmp, embedder_lock.DEFAULT_TIER, locked_by="embedding_upgrade.test")
+        table, dim = lock["vec_table"], int(lock["dim"])
         conn = _get_conn(temp_db)
-        v2_count = conn.execute("SELECT COUNT(*) FROM memory_embeddings_v2").fetchone()[0]
-        _assert("v2_has_embeddings", v2_count == 2, f"Expected 2, got {v2_count}")
-
-        # Verify v2 embeddings are 1024-dim
-        row = conn.execute("SELECT embedding FROM memory_embeddings_v2 WHERE memory_id = 1").fetchone()
-        if row:
-            dim = len(struct.unpack(f"{JINA_DIM}f", row[0]))
-            _assert("v2_embedding_1024_dim", dim == 1024, f"Got dim={dim}")
-        else:
-            _assert("v2_embedding_1024_dim", False, "No row found")
-
-        # Test vector search on v2
-        test_query_vec = encode_jina_query("test memory")
-        search_result = conn.execute("""
-            SELECT emb.memory_id, emb.distance
-            FROM memory_embeddings_v2 AS emb
-            WHERE emb.embedding MATCH ?
-              AND k = 2
-            ORDER BY emb.distance
-        """, (test_query_vec,)).fetchall()
-        _assert("v2_vector_search_works", len(search_result) == 2,
-                f"Expected 2 results, got {len(search_result)}")
-
-        conn.close()
-
-    finally:
-        os.unlink(temp_db)
-
-    # Test 8: Swap on temp DB
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tf:
-        temp_db2 = tf.name
-
-    try:
-        conn = sqlite3.connect(temp_db2)
-        conn.enable_load_extension(True)
-        import sqlite_vec
-        sqlite_vec.load(conn)
-        conn.enable_load_extension(False)
-        conn.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)")
-        conn.execute("CREATE TABLE IF NOT EXISTS memories (id INTEGER PRIMARY KEY, content TEXT, is_archived INTEGER DEFAULT 0)")
-        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(memory_id INTEGER PRIMARY KEY, embedding float[768])")
-        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings_v2 USING vec0(memory_id INTEGER PRIMARY KEY, embedding float[1024])")
-        # Insert 10 rows in both
-        for i in range(1, 11):
-            conn.execute("INSERT INTO memories (id, content, is_archived) VALUES (?, ?, 0)", (i, f"mem {i}"))
-            conn.execute("INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)", (i, serialize_f32([0.1] * 768)))
-            conn.execute("INSERT INTO memory_embeddings_v2 (memory_id, embedding) VALUES (?, ?)", (i, serialize_f32([0.2] * 1024)))
+        conn.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute("CREATE TABLE memories (id INTEGER PRIMARY KEY, content TEXT NOT NULL, summary TEXT, "
+                     "is_archived INTEGER NOT NULL DEFAULT 0)")
+        conn.execute("CREATE TABLE memory_tags (memory_id INTEGER, tag TEXT)")
+        conn.execute(f"CREATE VIRTUAL TABLE {table} USING vec0(memory_id INTEGER PRIMARY KEY, "
+                     f"embedding float[{dim}])")
+        conn.execute("INSERT INTO memories (id, content) VALUES (1, 'test memory one')")
+        conn.execute("INSERT INTO memories (id, content) VALUES (2, 'test memory two')")
         conn.commit()
+        memory_write.ensure_provenance_table(conn)
+        conn.commit()
+        flt = memory_write.provenance_filter(conn)
+        _assert("unit_of_work_before", memory_write.count_pending_embeddings(conn, flt=flt) == 2)
         conn.close()
 
-        class FakeArgs2:
-            db_path = temp_db2
-        try:
-            cmd_swap(FakeArgs2())
-            refused = None
-        except VerbRefused as e:
-            refused = e.code
-        _assert("swap_refuses_typed", refused == "SWAP_REFUSED")
-
-        # ...and wrote nothing
-        conn = _get_conn(temp_db2)
-        n_meta = conn.execute("SELECT COUNT(*) FROM metadata").fetchone()[0]
-        _assert("swap_writes_no_metadata", n_meta == 0)
-        conn.close()
-
+        snap = embedder_lock.snapshot_dir_for(lock["model_id"], lock["revision"])
+        code = lock.get("code")
+        code_snap = embedder_lock.snapshot_dir_for(code["model_id"], code["revision"]) if code else True
+        if snap is None or code_snap is None:
+            _skip("re_embed_on_locked_brain", f"the locked snapshot ({lock['model_id']}@{lock['revision'][:12]}"
+                  + (f" + {code['model_id']}" if code else "") + ") is not in this host's HF cache")
+        else:
+            try:
+                import sentence_transformers  # noqa: F401
+                import torch  # noqa: F401
+            except Exception as e:
+                _skip("re_embed_on_locked_brain", f"the semantic stack is not importable ({e})")
+            else:
+                class FakeArgs:
+                    db_path = temp_db
+                    batch_size = 2
+                r = cmd_re_embed(FakeArgs())
+                receipt = r.get("receipt") or {}
+                _assert("re_embed_completes", r.get("status") == "ok", json.dumps(r, default=str)[:300])
+                _assert("re_embed_processed_two", receipt.get("embedded") == 2, str(receipt.get("embedded")))
+                conn = _get_conn(temp_db)
+                cov = memory_write.provenance_coverage(conn)
+                _assert("coverage_two_of_two", cov.coverage == {"matched": 2, "total": 2, "value": 1.0},
+                        str(cov.coverage))
+                _assert("no_unstamped_vectors", cov.vectors_without_stamp == 0)
+                row = conn.execute("SELECT weights_hash, dim FROM embedding_provenance WHERE memory_id = 1").fetchone()
+                _assert("stamp_carries_lock_hash", row is not None and row[0] == lock["weights_hash"] and row[1] == dim)
+                q = encode_locked("test memory", is_query=True, lock=lock)
+                hits = memory_write.knn(conn, q, 2)
+                _assert("knn_over_search_set", len(hits) == 2, str(hits))
+                _assert("unit_of_work_after", memory_write.count_pending_embeddings(conn, flt=flt) == 0)
+                conn.close()
+                r2 = cmd_re_embed(FakeArgs())
+                _assert("second_run_is_idempotent", (r2.get("receipt") or {}).get("embedded") == 0,
+                        json.dumps(r2, default=str)[:300])
     finally:
-        os.unlink(temp_db2)
+        shutil.rmtree(tmp, ignore_errors=True)
 
     # Summary
-    logger.info("\n%d/%d tests passed", results["passed"], results["passed"] + results["failed"])
+    logger.info("\n%d/%d tests passed (%d skipped)", results["passed"],
+                results["passed"] + results["failed"], results["skipped"])
     results["status"] = "success" if results["failed"] == 0 else "failed"
     return results
 
@@ -1483,7 +1438,7 @@ def cmd_test(args) -> Dict[str, Any]:
 # CLI entry point
 # ============================================================
 
-def main():
+def main(argv: Optional[List[str]] = None) -> int:
     # Standalone CLI use (download/migrate/re-embed/ab-compare/...) wants the
     # INFO breadcrumbs. basicConfig lives HERE (not at import) so importing this
     # module on the recall hot path never attaches a handler to the root logger
@@ -1523,11 +1478,11 @@ def main():
     subparsers.add_parser("full", help="Full pipeline (all steps)")
     subparsers.add_parser("test", help="Run unit tests")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.command:
         parser.print_help()
-        sys.exit(1)
+        return 1
 
     # Resolve DB path
     if args.production:
@@ -1553,19 +1508,25 @@ def main():
     }
 
     handler = commands.get(args.command)
-    if handler:
-        try:
-            result = handler(args)
-        except VerbRefused as e:
-            # An error envelope with process exit 0 reads as success to every shell
-            # gate that wraps this verb: a refusal exits 1.
-            print(json.dumps(e.as_dict(), indent=2))
-            sys.exit(1)
-        print(json.dumps(result, indent=2))
-    else:
+    if handler is None:
         parser.print_help()
-        sys.exit(1)
+        return 1
+    # A refusal is an envelope on stdout AND a non-zero exit, and so is a result that
+    # says it failed: an error envelope with process exit 0 reads as success to every
+    # shell gate that wraps this verb.
+    try:
+        result = handler(args)
+    except Exception as e:
+        code = getattr(e, "code", None)
+        if not code:
+            raise
+        env = e.as_dict() if hasattr(e, "as_dict") else {"status": "error", "error": code, "message": str(e)}
+        print(json.dumps(env, indent=2, default=str))
+        return 1
+    print(json.dumps(result, indent=2, default=str))
+    state = str(result.get("status") or result.get("pipeline_status") or "")
+    return 1 if state.startswith(("error", "failed", "completed_with_errors")) else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

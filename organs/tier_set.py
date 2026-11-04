@@ -77,19 +77,30 @@ CATALOGUE_TO_ENGINE = {v: k for k, v in SHIPPED_TARGETS.items()}
 
 
 def re_embed_under_lock(db: Path, *, batch_size: Optional[int] = None) -> Optional[Dict[str, Any]]:
-    """`re-embed` on a LOCKED brain: embed every memory that lacks a vector stamped under
-    the brain's OWN lock (new, edited, legacy 'unresolved', or missing rows) and change
-    nothing else -- the same core as `tier set` with the target equal to the lock.
-    Returns None for a brain with no lock (its tier is not a shipped one, e.g. jina):
-    the caller keeps its own path for that tier."""
-    lock = _installed_lock(Path(db).resolve())
+    """`re-embed` under the brain's OWN model: embed every memory that lacks a vector stamped
+    under it (new, edited, legacy 'unresolved', or missing rows) and change nothing else.
+
+    A LOCKED brain: the same core as `tier set` with the target equal to the lock.
+    A brain with NO lock that embeds under a shipped tier (it predates the lock): the shipped
+    catalogue entry for the tier it already uses. The vectors and stamps move; the metadata
+    rows do not, and no lock is written: pinning a brain is `init`'s act, not this verb's.
+    Returns None only for a brain that really embeds under a tier the catalogue does not ship
+    (jina): the caller keeps its own path for that tier. A brain whose tier cannot be read
+    refuses, TIER_UNRESOLVED: no lock is not the same fact as jina."""
+    db = Path(db).resolve()
+    lock = _installed_lock(db)
     if lock is None:
-        return None
+        engine_tier = _prelock_engine_tier(db)
+        if engine_tier is None:
+            return None
+        return _re_embed_prelock(db, engine_tier, batch_size or BATCH_SIZE)
     engine_tier = CATALOGUE_TO_ENGINE.get(lock["tier"])
     if engine_tier is None:
         raise TierRefused("LOCK_NOT_SHIPPED", f"the install lock names tier {lock['tier']!r}, which this "
                           f"package does not ship ({sorted(CATALOGUE_TO_ENGINE)})")
     return set_tier(db, engine_tier, batch_size=batch_size or BATCH_SIZE)
+
+
 # Every vector table the engine knows (claude_memory.EMBED_TIERS), for cleanup.
 KNOWN_TABLES = ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3")
 METADATA_KEYS = ("active_embedding_table", "active_embedding_model", "active_embedding_dim")
@@ -139,7 +150,7 @@ def _open(db: Path, *, readonly: bool = False) -> sqlite3.Connection:
     import sqlite_vec
     import memory_write
     if readonly:
-        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=60.0)
+        conn = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True, timeout=60.0)
     else:
         conn = sqlite3.connect(str(db), timeout=60.0)
     conn.isolation_level = None            # transactions are explicit in this module
@@ -190,6 +201,25 @@ def _installed_lock(db: Path) -> Optional[Dict[str, Any]]:
         raise TierRefused(e.code, str(e), **{k: v for k, v in e.detail.items()})
 
 
+def _prelock_engine_tier(db: Path) -> Optional[str]:
+    """The shipped tier a brain with no lock already uses (the engine's key), or None when
+    the table it resolves to belongs to no catalogue tier. Refuses when it resolves to nothing."""
+    import embed_resolver
+    conn = None
+    try:
+        conn = _open(db, readonly=True)
+        table, _dim = embed_resolver.resolve(conn)
+    except Exception as e:                  # noqa: BLE001 -- reported, never guessed
+        raise TierRefused("TIER_UNRESOLVED", f"the brain's current tier cannot be read: {e}")
+    finally:
+        if conn is not None:
+            conn.close()
+    for cat, entry in embedder_lock.catalogue_tiers().items():
+        if entry["vec_table"] == table and cat in CATALOGUE_TO_ENGINE:
+            return CATALOGUE_TO_ENGINE[cat]
+    return None
+
+
 def _source(conn: sqlite3.Connection, db: Path) -> Dict[str, Any]:
     import embed_resolver
     lock = _installed_lock(db)
@@ -218,12 +248,18 @@ _PENDING_SQL = """
 """
 
 
+def _stamps_readable(conn: sqlite3.Connection) -> bool:
+    """False for a brain with no sidecar, or one from before stamps carried a checksum: none of
+    its rows can name a checksum, so every memory is work (a real run rebuilds the sidecar first)."""
+    return "weights_hash" in {r[1] for r in conn.execute("PRAGMA table_info(embedding_provenance)")}
+
+
 def pending_ids(conn: sqlite3.Connection, lock: Dict[str, Any]) -> List[int]:
     """Every memory (archived included) WITHOUT a vector in the target table whose
     stamp names the target's checksum, width and the memory's CURRENT text. A legacy
     'unresolved' stamp never matches: bytes nobody checked are re-embedded."""
     t = lock["vec_table"]
-    if not _table_exists(conn, t):
+    if not _table_exists(conn, t) or not _stamps_readable(conn):
         return [r[0] for r in conn.execute("SELECT id FROM memories ORDER BY id")]
     return [r[0] for r in conn.execute(
         _PENDING_SQL.format(t=t),
@@ -273,16 +309,62 @@ def _receipt(data_dir: Path, receipt: Dict[str, Any]) -> None:
         os.fsync(h.fileno())
 
 
+def _ensure_sidecar(conn: sqlite3.Connection) -> None:
+    """A brain from before the sidecar, or from before stamps carried a checksum, gets the
+    current shape (existing rows carried forward as 'unresolved') before the first stamp."""
+    import memory_write
+    try:
+        memory_write.ensure_provenance_table(conn)
+    except memory_write.ProvenanceUnreadable as e:
+        raise TierRefused("PROVENANCE_UNREADABLE", str(e))
+
+
 def _ensure_target_table(conn: sqlite3.Connection, lock: Dict[str, Any]) -> None:
     conn.execute(f"CREATE VIRTUAL TABLE IF NOT EXISTS {lock['vec_table']} USING vec0("
                  f"memory_id INTEGER PRIMARY KEY, embedding float[{int(lock['dim'])}])")
 
 
+def _is_out_of_memory(e: BaseException) -> bool:
+    import voidloom_device
+    return voidloom_device.is_out_of_memory(e)
+
+
+def _release_accelerator_cache() -> None:
+    import voidloom_device
+    voidloom_device.empty_cache()
+
+
+def _encode_rows(rows: List[Any], texts: List[str], lock: Dict[str, Any],
+                 failed: Dict[int, str]) -> List[Any]:
+    """[(row, text, vector)] for `rows`. A batch that runs out of memory on the accelerator
+    is retried one item at a time, so one long memory cannot stop the whole run at the same
+    batch on every rerun. An item that does not fit alone goes in `failed`, id -> why. Any
+    other error is the caller's: it is not a property of one long memory."""
+    try:
+        return list(zip(rows, texts, _encode(texts, lock)))
+    except (RuntimeError, MemoryError) as e:
+        if not _is_out_of_memory(e):
+            raise
+    _release_accelerator_cache()
+    done = []
+    for row, text in zip(rows, texts):
+        try:
+            done.append((row, text, _encode([text], lock)[0]))
+        except (RuntimeError, MemoryError) as e:
+            if not _is_out_of_memory(e):
+                raise
+            failed[int(row[0])] = f"out of memory embedding {len(text)} characters alone"
+            _release_accelerator_cache()
+    return done
+
+
 def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *,
-               batch_size: int, in_txn: bool) -> int:
+               batch_size: int, in_txn: bool, failed: Optional[Dict[int, str]] = None) -> int:
     """Embed `ids` under `lock`. Outside a transaction: one transaction per batch
-    (kill-and-resume safe). Inside one (the flip): no commits here."""
+    (kill-and-resume safe). Inside one (the flip): no commits here. Ids that could not
+    be embedded are recorded in `failed`, and the rest of the batch still lands."""
     import memory_write
+    failed = {} if failed is None else failed
     done = 0
     for start in range(0, len(ids), batch_size):
         chunk = ids[start:start + batch_size]
@@ -290,11 +372,11 @@ def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *
         rows = conn.execute(f"SELECT id, content FROM memories WHERE id IN ({marks}) ORDER BY id",
                             chunk).fetchall()
         texts = [c or "" for _i, c in rows]
-        vecs = _encode(texts, lock) if rows else []
+        encoded = _encode_rows(rows, texts, lock, failed) if rows else []
         if not in_txn:
             conn.execute("BEGIN IMMEDIATE")
         try:
-            for (mid, _c), text, vec in zip(rows, texts, vecs):
+            for (mid, _c), text, vec in encoded:
                 memory_write.attach_under_lock(conn, mid, text, vec, lock=lock, organ=ORGAN)
             if not in_txn:
                 conn.execute("COMMIT")
@@ -302,24 +384,54 @@ def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *
             if not in_txn:
                 conn.execute("ROLLBACK")
             raise
-        done += len(rows)
+        done += len(encoded)
     return done
 
 
-def _log_start(conn: sqlite3.Connection, lock: Dict[str, Any], total: int) -> Optional[str]:
+def _converge(conn: sqlite3.Connection, lock: Dict[str, Any], batch_size: int) -> int:
+    """Embed the pending rows until a pass finds nothing new; refuse, naming them, when a
+    row could not be embedded. Finished rows are committed and reused by the next run."""
+    built = 0
+    failed: Dict[int, str] = {}
+    for _pass in range(FLIP_ATTEMPTS):
+        todo = [i for i in pending_ids(conn, lock) if i not in failed]
+        more = _embed_ids(conn, todo, lock, batch_size=batch_size, in_txn=False, failed=failed)
+        built += more
+        if not more:
+            break
+    if failed:
+        ids = sorted(failed)
+        raise TierRefused(
+            "COVERAGE_INCOMPLETE",
+            f"{len(ids)} memor(ies) could not be embedded even alone on this device (first: "
+            f"{failed[ids[0]]}); {built} were embedded and are kept for the next run, nothing switched. "
+            "Free the accelerator, or run on the CPU, and re-run.",
+            unembedded=ids[:50], unembedded_total=len(ids), embedded=built)
+    return built
+
+
+def _log_start(conn: sqlite3.Connection, lock: Dict[str, Any], total: int, *,
+               notes: str = "tier set") -> Optional[str]:
     if not _table_exists(conn, "embedding_upgrade_log"):
         return None
     cols = {r[1] for r in conn.execute("PRAGMA table_info(embedding_upgrade_log)")}
     started = _now()
     if "weights_hash" in cols:
         conn.execute("INSERT INTO embedding_upgrade_log (started_at, model_name, embedding_dim, memories_total, "
-                     "status, weights_hash, notes) VALUES (?, ?, ?, ?, 'in_progress', ?, 'tier set')",
-                     (started, lock["model_id"], int(lock["dim"]), total, lock["weights_hash"]))
+                     "status, weights_hash, notes) VALUES (?, ?, ?, ?, 'in_progress', ?, ?)",
+                     (started, lock["model_id"], int(lock["dim"]), total, lock["weights_hash"], notes))
     else:
         conn.execute("INSERT INTO embedding_upgrade_log (started_at, model_name, embedding_dim, memories_total, "
-                     "status, notes) VALUES (?, ?, ?, ?, 'in_progress', 'tier set')",
-                     (started, lock["model_id"], int(lock["dim"]), total))
+                     "status, notes) VALUES (?, ?, ?, ?, 'in_progress', ?)",
+                     (started, lock["model_id"], int(lock["dim"]), total, notes))
     return started
+
+
+def _log_failed(conn: sqlite3.Connection, started: Optional[str], notes: str, message: str) -> None:
+    """A run that stopped short says so in the history instead of reading in_progress for ever."""
+    if started is not None:
+        conn.execute("UPDATE embedding_upgrade_log SET completed_at = ?, status = 'failed', error_message = ? "
+                     "WHERE started_at = ? AND notes = ?", (_now(), message, started, notes))
 
 
 def _set_metadata(conn: sqlite3.Connection, values: Dict[str, Optional[str]]) -> None:
@@ -486,16 +598,16 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
         t0 = time.time()
         conn.execute("BEGIN IMMEDIATE")
         _ensure_target_table(conn, lock)
+        _ensure_sidecar(conn)
         pop = _population(conn)
         started = _log_start(conn, lock, pop["memories"])
         conn.execute("COMMIT")
 
-        built = 0
-        for _pass in range(FLIP_ATTEMPTS):                      # converge OUTSIDE the write lock
-            more = _embed_ids(conn, pending_ids(conn, lock), lock, batch_size=batch_size, in_txn=False)
-            built += more
-            if not more:
-                break
+        try:
+            built = _converge(conn, lock, batch_size)           # converge OUTSIDE the write lock
+        except TierRefused as e:
+            _log_failed(conn, started, "tier set", e.message)
+            raise
         build_s = time.time() - t0
 
         # ---- THE FLIP: one write transaction; nothing lands between check and switch ----
@@ -505,7 +617,7 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
             late = pending_ids(conn, lock)
             if len(late) > FLIP_GAP_CAP:
                 conn.execute("ROLLBACK")
-                built += _embed_ids(conn, late, lock, batch_size=batch_size, in_txn=False)
+                built += _converge(conn, lock, batch_size)
                 continue
             break
         else:
@@ -570,6 +682,49 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                 "cleanup": f"voidloom tier cleanup --confirm {from_table}" if from_table != t else None}
     finally:
         conn.close()
+
+
+def _re_embed_prelock(db: Path, engine_tier: str, batch_size: int) -> Dict[str, Any]:
+    lock = target_lock(engine_tier)
+    _refuse_env_pin(engine_tier)
+    data_dir = db.parent
+    with _Mutex(data_dir):
+        conn = _open(db)
+        try:
+            src = _source(conn, db)
+            _refuse_same_table_change(src, lock)
+            try:
+                _load(lock)                                     # refusal: the brain is as found
+            except embedder_lock.EmbedderLockError as e:
+                raise TierRefused(e.code, str(e), **{k: v for k, v in e.detail.items()},
+                                  target=engine_tier, usage=USAGE)
+            t0 = time.time()
+            conn.execute("BEGIN IMMEDIATE")
+            _ensure_target_table(conn, lock)
+            _ensure_sidecar(conn)
+            pop = _population(conn)
+            started = _log_start(conn, lock, pop["memories"], notes="re-embed")
+            conn.execute("COMMIT")
+            try:
+                built = _converge(conn, lock, batch_size)
+            except TierRefused as e:
+                _log_failed(conn, started, "re-embed", e.message)
+                raise
+            if started is not None:
+                conn.execute("UPDATE embedding_upgrade_log SET completed_at = ?, memories_processed = ?, "
+                             "status = 'completed' WHERE started_at = ? AND notes = 're-embed'",
+                             (_now(), built, started))
+            cov = _coverage(conn, lock)
+        finally:
+            conn.close()
+    receipt = {"at": _now(), "action": "re-embed", "by": "re-embed", "db": str(db),
+               "basis": "catalogue (no install lock beside this brain; none was written)",
+               "to": {"tier": lock["tier"], "vec_table": lock["vec_table"], "model_id": lock["model_id"],
+                      "weights_hash": lock["weights_hash"]},
+               "embedded": built, "reused": pop["memories"] - built, "coverage": cov, "population": pop,
+               "already_on_target": True}
+    _receipt(data_dir, receipt)
+    return {"status": "ok", "action": "re-embed", "receipt": receipt, "total_s": round(time.time() - t0, 2)}
 
 
 def _read_preimage(data_dir: Path) -> Dict[str, Any]:
