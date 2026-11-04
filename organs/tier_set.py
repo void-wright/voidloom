@@ -241,8 +241,9 @@ _PENDING_SQL = """
      WHERE NOT EXISTS (
            SELECT 1 FROM embedding_provenance p
             WHERE p.memory_id = m.id AND p.vec_table = :t AND p.weights_hash = :h
-              AND p.dim = :d AND p.input_kind = 'text'
-              AND p.content_hash = vl_sha256(m.content)
+              AND p.dim = :d
+              AND (p.input_kind = 'centroid'
+                   OR (p.input_kind = 'text' AND p.content_hash = vl_sha256(m.content)))
               AND m.id IN (SELECT memory_id FROM {t}))
      ORDER BY m.id
 """
@@ -256,7 +257,8 @@ def _stamps_readable(conn: sqlite3.Connection) -> bool:
 
 def pending_ids(conn: sqlite3.Connection, lock: Dict[str, Any]) -> List[int]:
     """Every memory (archived included) WITHOUT a vector in the target table whose
-    stamp names the target's checksum, width and the memory's CURRENT text. A legacy
+    stamp names the target's checksum, width and the memory's CURRENT text, or, for a
+    consolidated memory, a centroid of its members under that checksum. A legacy
     'unresolved' stamp never matches: bytes nobody checked are re-embedded."""
     t = lock["vec_table"]
     if not _table_exists(conn, t) or not _stamps_readable(conn):
@@ -358,6 +360,116 @@ def _encode_rows(rows: List[Any], texts: List[str], lock: Dict[str, Any],
     return done
 
 
+# A consolidated memory's vector is the average of its members', not an embedding of its text.
+# The text is a template ("Distilled from 3 episodic memories..."): measured on a copy of a
+# 25,009-vector brain, 240 queries from 80 such memories' members, the centroid ranked the memory
+# in the top 10 for 235 and a text vector for 62 (median rank 2 against 52.5). So a change of
+# vectors rebuilds the average from the members' vectors under the new weights.
+CONSOLIDATION_PROJECT = "sleep-loop-consolidation"
+
+
+def _member_ids(raw: Any) -> List[int]:
+    try:
+        ids = json.loads(raw) if raw else []
+    except (TypeError, ValueError):
+        return []
+    return sorted({int(i) for i in ids if isinstance(i, int)}) if isinstance(ids, list) else []
+
+
+def derived_members(conn: sqlite3.Connection, ids: List[int]) -> Dict[int, List[int]]:
+    """{memory id: its member ids} for those of `ids` whose vector is a centroid: by a centroid
+    stamp on any table, else (a row from before stamps) by the consolidation that wrote it."""
+    out: Dict[int, List[int]] = {}
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(memories)")}
+    stamped = _stamps_readable(conn)
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        marks = ",".join("?" * len(chunk))
+        if stamped:
+            for mid, inputs in conn.execute(
+                    f"SELECT memory_id, inputs FROM embedding_provenance WHERE input_kind = 'centroid' "
+                    f"AND memory_id IN ({marks})", chunk).fetchall():
+                out.setdefault(int(mid), _member_ids(inputs))
+        if {"source_project", "derived_from"} <= cols:
+            for mid, raw in conn.execute(
+                    f"SELECT id, derived_from FROM memories WHERE source_project = ? AND id IN ({marks})",
+                    [CONSOLIDATION_PROJECT, *chunk]).fetchall():
+                out.setdefault(int(mid), _member_ids(raw))
+    return {m: v for m, v in out.items() if v}
+
+
+def _verified_vectors(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any]) -> Dict[int, bytes]:
+    """The vectors of `ids` in the lock's table whose stamp carries its checksum at its width."""
+    t, marks = lock["vec_table"], ",".join("?" * len(ids))
+    good = {r[0] for r in conn.execute(
+        f"SELECT memory_id FROM embedding_provenance WHERE vec_table = ? AND weights_hash = ? AND dim = ? "
+        f"AND memory_id IN ({marks})", [t, lock["weights_hash"], int(lock["dim"]), *ids]).fetchall()}
+    return {int(m): bytes(v) for m, v in conn.execute(
+        f"SELECT memory_id, embedding FROM {t} WHERE memory_id IN ({marks})", ids).fetchall() if m in good}
+
+
+def _write_centroid(conn: sqlite3.Connection, memory_id: int, members: List[int], vectors: List[bytes],
+                    lock: Dict[str, Any], organ: str) -> None:
+    """A rebuilt centroid and its stamp, both or neither. Every member is verified under `lock`,
+    which need not be the installed one: `tier set` builds the target while the old tier serves."""
+    import memory_write
+    from datetime import datetime as _dt
+    from sleep_loop import _centroid_embedding
+    table, dim = lock["vec_table"], int(lock["dim"])
+    row = {"memory_id": int(memory_id), "vec_table": table, "model_id": lock["model_id"],
+           "model_ref": lock["revision"], "weights_hash": lock["weights_hash"], "dim": dim,
+           "content_hash": memory_write.centroid_content_hash(vectors),
+           "embedded_at": _dt.now(timezone.utc).isoformat(timespec="seconds"), "organ": organ,
+           "input_kind": "centroid", "inputs": json.dumps(members)}
+    cols = memory_write.PROVENANCE_COLUMNS
+    conn.execute("SAVEPOINT rebuilt_centroid")
+    try:
+        conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (int(memory_id),))
+        conn.execute(f"INSERT INTO {table} (memory_id, embedding) VALUES (?, ?)",
+                     (int(memory_id), _centroid_embedding(vectors)))
+        conn.execute(f"INSERT OR REPLACE INTO {memory_write.PROVENANCE_TABLE} ({', '.join(cols)}) "
+                     f"VALUES ({', '.join(':' + c for c in cols)})", row)
+        conn.execute("RELEASE SAVEPOINT rebuilt_centroid")
+    except BaseException:
+        conn.execute("ROLLBACK TO SAVEPOINT rebuilt_centroid")
+        conn.execute("RELEASE SAVEPOINT rebuilt_centroid")
+        raise
+
+
+def rebuild_centroids(conn: sqlite3.Connection, derived: Dict[int, List[int]], lock: Dict[str, Any], *,
+                      organ: str = ORGAN) -> Dict[str, Any]:
+    """Rebuild each centroid whose members all hold a verified vector under `lock`.
+    {'rebuilt': n, 'waiting': ids whose members are not all there yet, 'orphaned': ids with a
+    member that no longer exists, so no average can be rebuilt}."""
+    out: Dict[str, Any] = {"rebuilt": 0, "waiting": [], "orphaned": []}
+    for mid in sorted(derived):
+        members = derived[mid]
+        vecs = _verified_vectors(conn, members, lock)
+        if len(vecs) == len(members):
+            _write_centroid(conn, mid, members, [vecs[i] for i in members], lock, organ)
+            out["rebuilt"] += 1
+            continue
+        marks = ",".join("?" * len(members))
+        alive = conn.execute(f"SELECT COUNT(*) FROM memories WHERE id IN ({marks})", members).fetchone()[0]
+        out["waiting" if alive == len(members) else "orphaned"].append(mid)
+    return out
+
+
+def _embed_pending(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *, batch_size: int,
+                   in_txn: bool, failed: Optional[Dict[int, str]] = None) -> int:
+    """Embed `ids`: text rows first, then the centroids over them. A centroid with a member that
+    is gone takes a text vector, the only one it can still have."""
+    derived = derived_members(conn, ids)
+    plain = [i for i in ids if i not in derived]
+    done = _embed_ids(conn, plain, lock, batch_size=batch_size, in_txn=in_txn, failed=failed)
+    if derived:
+        res = rebuild_centroids(conn, derived, lock)
+        done += res["rebuilt"]
+        if res["orphaned"]:
+            done += _embed_ids(conn, res["orphaned"], lock, batch_size=batch_size, in_txn=in_txn, failed=failed)
+    return done
+
+
 def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *,
                batch_size: int, in_txn: bool, failed: Optional[Dict[int, str]] = None) -> int:
     """Embed `ids` under `lock`. Outside a transaction: one transaction per batch
@@ -395,7 +507,7 @@ def _converge(conn: sqlite3.Connection, lock: Dict[str, Any], batch_size: int) -
     failed: Dict[int, str] = {}
     for _pass in range(FLIP_ATTEMPTS):
         todo = [i for i in pending_ids(conn, lock) if i not in failed]
-        more = _embed_ids(conn, todo, lock, batch_size=batch_size, in_txn=False, failed=failed)
+        more = _embed_pending(conn, todo, lock, batch_size=batch_size, in_txn=False, failed=failed)
         built += more
         if not more:
             break
@@ -451,15 +563,16 @@ def _set_metadata(conn: sqlite3.Connection, values: Dict[str, Optional[str]]) ->
 def _coverage(conn: sqlite3.Connection, lock: Dict[str, Any]) -> Dict[str, int]:
     """Two-sided coverage of the target table, by queries INDEPENDENT of pending_ids:
     `total` counts every memory with no WHERE; `matched` counts memories holding a
-    target vector whose stamp names the target checksum, width and current text;
+    target vector whose stamp names the target checksum and width, and its current text
+    or the centroid of its members;
     `stamps_without_memory` is the other side. The switch needs matched == total and
     no stamp without its memory."""
     t = lock["vec_table"]
     total = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
     matched = conn.execute(
         f"SELECT COUNT(*) FROM memories m JOIN embedding_provenance p ON p.memory_id = m.id "
-        f" WHERE p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? AND p.input_kind = 'text' "
-        f"   AND p.content_hash = vl_sha256(m.content) "
+        f" WHERE p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? "
+        f"   AND (p.input_kind = 'centroid' OR (p.input_kind = 'text' AND p.content_hash = vl_sha256(m.content))) "
         f"   AND m.id IN (SELECT memory_id FROM {t})",
         (t, lock["weights_hash"], int(lock["dim"]))).fetchone()[0]
     orphan_stamps = conn.execute(
@@ -627,7 +740,7 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                               f"another writer added more than {FLIP_GAP_CAP} memories between each of "
                               f"{FLIP_ATTEMPTS} attempts to switch; stop it and re-run (finished rows are kept)")
         try:
-            gap = _embed_ids(conn, late, lock, batch_size=batch_size, in_txn=True) if late else 0
+            gap = _embed_pending(conn, late, lock, batch_size=batch_size, in_txn=True) if late else 0
             conn.execute(f"DELETE FROM {t} WHERE memory_id NOT IN (SELECT id FROM memories)")
             orphans = conn.execute("DELETE FROM embedding_provenance WHERE vec_table = ? AND memory_id NOT IN "
                                    "(SELECT id FROM memories)", (t,)).rowcount

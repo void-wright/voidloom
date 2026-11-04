@@ -113,7 +113,7 @@ def count_unembedded(conn: sqlite3.Connection, table: str) -> int:
     if flt is not None:
         if not _sidecar_ready(conn):
             return conn.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
-        return memory_write.count_pending_embeddings(conn, flt=flt)
+        return len(_pending_rows(conn, table, None))
     # One uncorrelated `IN (SELECT memory_id FROM <vec table>)`, never a per-row EXISTS: a correlated look-up does
     # one vec0 point read per memory (~0.4 ms each; measured 10.76 s on a 31,904-memory brain, 0.016 s this way). The
     # vec0 `memory_id` is its INTEGER PRIMARY KEY, so it is never NULL and NOT IN cannot go empty on a NULL.
@@ -130,8 +130,15 @@ def _pending_rows(conn: sqlite3.Connection, table: str, limit: Optional[int]) ->
     flt = _locked_filter(conn)
     cap = f" LIMIT {int(limit)}" if limit else ""
     if flt is not None and _sidecar_ready(conn):
-        return [{"id": mid, "content": content}
-                for mid, content in memory_write.pending_embeddings(conn, flt=flt, limit=limit)]
+        # A consolidated memory stamped as a centroid under the lock is done: its vector is the
+        # average of its members, on purpose, and a text vector would bury it.
+        done = {r[0] for r in conn.execute(
+            f"SELECT memory_id FROM embedding_provenance WHERE input_kind = 'centroid' AND vec_table = ? "
+            f"AND weights_hash = ? AND dim = ? AND memory_id IN (SELECT memory_id FROM {flt.vec_table})",
+            flt.search_set_params).fetchall()}
+        rows = [{"id": mid, "content": content}
+                for mid, content in memory_write.pending_embeddings(conn, flt=flt) if mid not in done]
+        return rows[:limit] if limit else rows
     where = "" if flt is not None else f"  AND m.id NOT IN (SELECT memory_id FROM {table}) "
     return [dict(r) for r in conn.execute(
         f"SELECT m.id, m.content FROM memories m WHERE COALESCE(m.is_archived, 0) = 0 {where}"
@@ -248,6 +255,16 @@ def backfill(db_path: str, limit: Optional[int] = None,
         if _locked_filter(conn) is not None:
             memory_write.ensure_provenance_table(conn)
             lock = embedder_lock.resolve(conn)
+            # A consolidated memory waits for its members, then takes their average; one
+            # whose member is gone can only take a text vector, below.
+            import tier_set
+            derived = tier_set.derived_members(conn, [r["id"] for r in rows])
+            if derived:
+                res = tier_set.rebuild_centroids(conn, derived, lock, organ="embed_backfill")
+                out["embedded"] += res["rebuilt"]
+                out["centroids_waiting_for_members"] = len(res["waiting"])
+                keep = set(res["orphaned"])
+                rows = [r for r in rows if r["id"] not in derived or r["id"] in keep]
         for n, r in enumerate(rows, 1):
             if lock is not None:
                 res = _replace_under_lock(conn, r["id"], r["content"] or "", lock)

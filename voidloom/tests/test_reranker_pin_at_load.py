@@ -44,7 +44,10 @@ def _rec(api):
     return f
 class Fake:
     unk_token_id = 0
-    def to(self, d): return self
+    def to(self, d):
+        with open(LOG, "a") as h:
+            h.write(json.dumps({"api": "to"}) + "\n")
+        return self
     def eval(self): return self
     def convert_tokens_to_ids(self, t): return {"yes": 9, "no": 2}[t]
     def encode(self, s, add_special_tokens=False): return [1]
@@ -125,8 +128,8 @@ class LoadTimeVerification(_FakeHub):
         self.assertTrue(out["loaded"], out)
         self.assertEqual(out["pin"]["computed"], entry["weights_hash"])
         calls = self._calls()
-        self.assertEqual([c["api"] for c in calls], ["tokenizer", "model"])
-        for c in calls:
+        self.assertEqual([c["api"] for c in calls], ["tokenizer", "model", "to"])
+        for c in calls[:2]:
             self.assertEqual((c["arg0"], c["local_files_only"]), (REPO, "<absent>"), "public's form, by name")
 
     def test_saboteur_a_swapped_file_refuses_typed_and_nothing_loads(self):
@@ -152,9 +155,11 @@ class LoadTimeVerification(_FakeHub):
                     hub, organs, fakes, _e = self._world(absent=True)
                     self.log = self.tmp / "calls.jsonl"
                     out = self._load(hub, organs, fakes, offline=offline)
+                    placed = [c for c in self._calls() if c["api"] == "to"]
                 finally:
                     self.tmp = keep
                 self.assertFalse(out["loaded"], "a load that found no verified bytes is not a load")
+                self.assertEqual(placed, [], "bytes nobody hashed never reach a device")
                 self.assertTrue(out["reason"].startswith("SNAPSHOT_ABSENT"), out)
                 self.assertIsNone(out["pin"])
 
@@ -171,7 +176,7 @@ class LoadTimeVerification(_FakeHub):
                 finally:
                     self.tmp = keep
                 self.assertTrue(calls)
-                for c in calls:
+                for c in calls[:2]:
                     self.assertTrue(c["hub_flag"], c)
                     self.assertEqual(c["env"], "1")
                 self.assertIsNone(out["env_after"], "the variable is put back")
