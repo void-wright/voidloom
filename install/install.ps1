@@ -146,6 +146,57 @@ function Invoke-PyOut {
     if ($Exe -eq "py -3") { & py -3 @ArgList } else { & $Exe @ArgList }
 }
 
+# `init` under the venv, its words kept. A typed refusal has nothing to do with the interpreter and a retry cannot repair
+# it, so it stops the install and is shown; anything else is returned, with the engine's last line in $script:InitCause
+# for the caller's message. Stderr is folded in and stringified: a raw error record would not read as the engine's line.
+function Invoke-BrainInit {
+    $lines = @(& $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") init 2>&1 | ForEach-Object { "$_" } | Where-Object { $_.Trim() })
+    $rc = $LASTEXITCODE
+    $script:InitCause = ""
+    if ($rc -ne 0 -and $lines.Count -gt 0) {
+        $last = $lines[$lines.Count - 1]
+        $script:InitCause = $last.Substring(0, [Math]::Min(300, $last.Length))
+    }
+    if ($rc -ne 0 -and $script:InitCause -match 'LOCK_NOT_SHIPPED|WEIGHTS_MISMATCH|LOCK_MALFORMED') {
+        Die "init refused, typed: $($script:InitCause). Fix the cause and re-run."
+    }
+    return $rc
+}
+
+# The seed load. The denylist runs over the whole pack before the first write, and a hit refuses the load, rc 4, naming
+# the class and offset and never the matched text: a damaged package, and it stops the install. Any other failure is a
+# note, because an empty brain is a working brain.
+function Invoke-SeedLoad {
+    $lines = @(Invoke-PyOut $PySys @($Lite, "load-seed", "--file", $Seed) 2>&1 | ForEach-Object { "$_" } | Where-Object { $_.Trim() })
+    $rc = $LASTEXITCODE
+    $last = if ($lines.Count -gt 0) { $lines[$lines.Count - 1] } else { "" }
+    if ($rc -eq 4) {
+        Die "the seed pack FAILED its denylist scrub (seed\seed_denylist.json); nothing was loaded. A pack that carries a developer path, a client or person name, a hostname or a secret-shaped string is a damaged package: get a fresh copy. The scrub's report: $last"
+    }
+    if ($rc -ne 0) { Warn "seed pack present but load-seed returned rc $rc -- continuing; the brain is usable, just emptier" }
+}
+
+# The doctrine query set through the shipped recall, on THIS install: its real number, or why there is none. Offline:
+# everything it needs was fetched and verified already, so a fetch here would be a defect, not a repair.
+function Invoke-SeedSelfTest {
+    if (-not ((Test-Path (Join-Path $BrainDir "organs\seed_loader.py")) -and (Test-Path (Join-Path $BrainDir "seed\seed_doctrine_queries.json")))) { return }
+    $prevOffline = $env:HF_HUB_OFFLINE
+    $env:HF_HUB_OFFLINE = "1"
+    $lines = @(& $VenvPy $Lite seed-self-test 2>$null | ForEach-Object { "$_" } | Where-Object { $_.Trim() })
+    $rc = $LASTEXITCODE
+    $env:HF_HUB_OFFLINE = $prevOffline
+    $said = ""
+    if ($lines.Count -gt 0) {
+        try {
+            $d = $lines[$lines.Count - 1] | ConvertFrom-Json
+            if ($d.line) { $said = "$($d.line)" } elseif ($d.error) { $said = "$($d.error)" }
+        } catch { $said = "" }
+    }
+    if ($rc -eq 0) { Say "  $said" }
+    elseif ($rc -eq 5) { Warn "$said -- the brain works, but recall on the seed fell below the bar on this install." }
+    else { Warn "seed doctrine self-test did not run (rc $rc$(if ($said) { ": $said" })); to run it yourself: `$env:WIZARD_LIBRARY_DB='$DbPath'; & `"$VenvPy`" `"$Lite`" seed-self-test" }
+}
+
 # THE EMBEDDING TIER (tier1-upgrade loop, iteration 4). This installer builds the CPU tier, chosen ONCE here by its key.
 # Its table, width and model repo are READ from the engine's own registry, organs\claude_memory.py EMBED_TIERS, by
 # AST -- exactly as install.sh's C.declare reads it -- and typed nowhere else in this file. Unreadable registry: Tier 1
@@ -373,7 +424,7 @@ print(f"  DB created. {res['brain_objects']} objects, "
 
     Say "  loading agnostic seed pack via lite CLI"
     $env:WIZARD_LIBRARY_DB = $DbPath
-    Invoke-Py $PySys @($Lite, "load-seed", "--file", $Seed) | Out-Null
+    Invoke-SeedLoad
 
     # VERIFY the brain is alive via the shipped self_check.py — the SAME command
     # the teammate runs — which exercises the real recall path against the seed
@@ -459,7 +510,7 @@ if ($Tier0Only) {
             # the pre-download below fetches exactly the bytes it names. init is idempotent:
             # on a locked brain it never re-points the lock; a tier the shipped catalogue does
             # not carry gets no lock, and the pre-download keeps its by-name path.
-            & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") init *> $null
+            $null = Invoke-BrainInit
 
             # PRE-DOWNLOAD the models this host will ACTUALLY load.
             #
@@ -536,8 +587,7 @@ sys.exit(0)
                 Warn "  & `"$VenvPy`" `"$BrainDir\organs\model_fetch.py`" --db `"$DbPath`"   (fetches the pinned bytes the install lock names)"
             }
 
-            & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") init *> $null
-            if ($LASTEXITCODE -eq 0) {
+            if ((Invoke-BrainInit) -eq 0) {
                 Say "  full CLI init OK (vec0 embedding table ready, $EmbedTier $EmbedDim-dim)"
                 # Embed the seeded memories through organs/embed_backfill.py, the writer install.sh uses: every
                 # vector goes through memory_write.attach_embedding, so it lands with its provenance stamp (the
@@ -555,13 +605,14 @@ sys.exit({"ok": 0, "incomplete": 1, "refused": 3}.get(res.get("status"), 1))
                 $tmp2 = Join-Path $env:TEMP "wl_reembed.py"; Set-Content -Path $tmp2 -Value $reembedPy -Encoding UTF8
                 & $VenvPy $tmp2 $DbPath $BrainDir
                 if ($LASTEXITCODE -ne 0) { Warn "embedding the seed pack did not complete (rc $LASTEXITCODE); re-run: & `"$VenvPy`" `"$BrainDir\organs\embed_backfill.py`" `"$DbPath`"" }
+                else { Invoke-SeedSelfTest }
                 Remove-Item $tmp2 -ErrorAction SilentlyContinue
                 & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") recall --query "how do I capture knowledge as I work" --top_k 1 *> $null
                 if ($LASTEXITCODE -eq 0) {
                     Say "  Tier 1 VERIFIED — semantic recall is live."
                     $Tier1Ok = $true
                 } else { $Tier1Skip = "semantic recall verification did not succeed" }
-            } else { $Tier1Skip = "full CLI init failed (sqlite_vec/model load)" }
+            } else { $Tier1Skip = "full CLI init failed: $(if ($script:InitCause) { $script:InitCause } else { 'no output' })" }
         } else { $Tier1Skip = "pip install of the heavy stack failed (network or build tools)" }
     } else { $Tier1Skip = "venv creation failed" }
 

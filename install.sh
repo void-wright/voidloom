@@ -980,6 +980,8 @@ def active(step):
         # program is missing is a fact of the run, so the step is active whenever the run MAY install it
         return env.get("INSTALL_THINKER_CLI", "0") == "1" and bool(env.get("THINKER_FLAG_GIVEN")) and \
             ans in ("claude", "codex", "kimi", "gemini")
+    if w == "run-time":
+        return False                      # a roster unit's own read of the manager, when it runs; never the installer's
     raise SystemExit("write_set.json: unknown `when` %r" % w)
 out = {"installer": "install.sh", "os": env["OS"],
        "invocation": {"dry_run": dry, "tier0_only": tier0, "with_crons": crons,
@@ -3321,9 +3323,16 @@ else
         BRAIN_CREATED=1
         # umask 077 for the creators below: the file is born owner-only, so there is
         # no instant in which a brain with memories in it is readable by others.
-        if ( umask 077; WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$PY_SYS" "${BRAIN_DIR}/organs/claude_memory.py" init >/dev/null 2>&1 ); then
+        # The engine's own words are kept: the fallback below must name the true cause, and a typed refusal has
+        # nothing to do with the interpreter. init's last line is its envelope. ${TMPDIR}/tmp.* is the declared
+        # transient (install/write_set.json).
+        _init_log="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/tmp.voidloom_init.$$")"
+        if ( umask 077; WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$PY_SYS" "${BRAIN_DIR}/organs/claude_memory.py" init >"$_init_log" 2>&1 ); then
+            rm -f "$_init_log"
             say "  fresh brain initialized at ${DB_PATH}."
         else
+            _init_cause="$(grep -v '^[[:space:]]*$' "$_init_log" | tail -n 1 | cut -c1-300)"
+            rm -f "$_init_log"
             # C3 -- THE TIER-0 BRAIN, and the reason line 26 stops being a lie.
             #
             # `claude_memory.py init` hard-requires sqlite_vec, so on the very
@@ -3335,7 +3344,15 @@ else
             # schema.sql + every migration the package ships; on that same
             # interpreter it produced 57 objects with the two vec0 migrations
             # reported UNMEASURABLE rather than failed.
-            say "  full-engine init unavailable on ${PY_SYS}; building the brain at Tier 0 (stdlib)."
+            say "  full-engine init FAILED on ${PY_SYS} -- its last line: ${_init_cause:-(no output)}"
+            case "$_init_cause" in
+                *LOCK_NOT_SHIPPED*|*WEIGHTS_MISMATCH*|*LOCK_MALFORMED*)
+                    # This branch only runs when no brain was here, so the file is this run's. Left behind, a re-run
+                    # would read it as a finished brain and walk past the refusal.
+                    rm -f "$DB_PATH" "${DB_PATH}-wal" "${DB_PATH}-shm"
+                    die "init refused, typed: ${_init_cause}. That is not a missing module and Tier 0 would not repair it (a brain built by schema_migrator has no lock). Fix the cause and re-run." ;;
+            esac
+            say "  building the brain at Tier 0 (stdlib) instead; the venv init below writes the lock once the semantic stack exists."
             rm -f "$DB_PATH"
             if ( umask 077; "$PY_SYS" -c "import sqlite3,sys; sqlite3.connect(sys.argv[1]).close()" "$DB_PATH" ) \
                && WIZARD_LIBRARY_DB="$DB_PATH" "$PY_SYS" "${BRAIN_DIR}/organs/schema_migrator.py" apply --db "$DB_PATH"; then
@@ -3522,6 +3539,8 @@ except Exception:
     print("loaded (its summary line could not be read)")' 2>/dev/null)."
         say "  this shape embeds nothing: they are keyword-recallable now; to embed them (with the brain's other unvectored memories) when you choose:"
         say "      CUDA_VISIBLE_DEVICES=${GPU_DEVICE} ${PY_SYS} ${BRAIN_DIR}/organs/embed_backfill.py ${DB_PATH}"
+    elif [ "$_seed_rc" -eq 4 ]; then
+        die "the seed pack FAILED its denylist scrub (seed/seed_denylist.json); nothing was loaded and the brain is as it was. A pack that carries a developer path, a client or person name, a hostname or a secret-shaped string is a damaged package: get a fresh copy. The scrub's report: ${_seed_out##*$'\n'}"
     else
         warn "the seed pack load you chose returned rc ${_seed_rc} (${_seed_out##*$'\n'}); the brain is as it was before the load. Re-run with --load-seed to try again."
     fi
@@ -3565,11 +3584,17 @@ elif [ -f "$SEED_PACK" ] && [ -f "$LITE_ENGINE" ]; then
     # ${DB_PATH}, not a re-spelling of the default: under --attach-db the brain is
     # NOT at ${BRAIN_DIR}/claude_memory.db, and a literal here would have seeded
     # (and created) a second, empty file beside the machinery.
-    if WIZARD_LIBRARY_DB="${DB_PATH}" \
-       "${PY_SYS}" "$LITE_ENGINE" load-seed --file "$SEED_PACK"; then
+    #
+    # The denylist runs over the whole pack before the first write, and a hit refuses the load, rc 4, naming the class
+    # and offset and never the matched text. That is a damaged package and it stops the install. Any other failure
+    # stays a note: an empty brain is a working brain.
+    _seed_out="$(WIZARD_LIBRARY_DB="${DB_PATH}" "${PY_SYS}" "$LITE_ENGINE" load-seed --file "$SEED_PACK" 2>&1)"; _seed_rc=$?
+    if [ "$_seed_rc" -eq 0 ]; then
         say "  seed pack loaded"
+    elif [ "$_seed_rc" -eq 4 ]; then
+        die "the seed pack FAILED its denylist scrub (seed/seed_denylist.json); nothing was loaded. A pack that carries a developer path, a client or person name, a hostname or a secret-shaped string is a damaged package: get a fresh copy. The scrub's report: ${_seed_out##*$'\n'}"
     else
-        say "  seed pack present but load returned non-zero -- continuing; the brain is usable, just emptier"
+        say "  seed pack present but load-seed returned rc ${_seed_rc} -- continuing; the brain is usable, just emptier (re-run: WIZARD_LIBRARY_DB=${DB_PATH} ${PY_SYS} ${LITE_ENGINE} load-seed --file ${SEED_PACK})"
     fi
 else
     [ -f "$SEED_PACK" ] || say "  no seed_pack.json in the package -- skipping (not an error)"
@@ -3953,18 +3978,39 @@ except Exception as e:
 T1_DECLARE_PY
 }
 
+seed_self_test() {   # the doctrine query set through the shipped recall, on THIS install: its real number, or why there is none
+    [ -f "${BRAIN_DIR}/organs/seed_loader.py" ] && [ -f "${BRAIN_DIR}/seed/seed_doctrine_queries.json" ] || return 0
+    local _st_out _st_rc _st_line
+    # Offline: everything it needs was fetched and verified above, so a fetch here would be a defect, not a repair.
+    _st_out="$(WIZARD_LIBRARY_DB="$DB_PATH" HF_HUB_OFFLINE=1 "$VENV_PY" "$LITE_ENGINE" seed-self-test 2>/dev/null)"; _st_rc=$?
+    _st_line="$(printf '%s' "$_st_out" | "$VENV_PY" -c 'import json,sys
+try:
+    d = json.loads(sys.stdin.read().strip().splitlines()[-1])
+except Exception:
+    d = {}
+print(d.get("line") or d.get("error") or "")' 2>/dev/null)"
+    case "$_st_rc" in
+        0) say "  ${_st_line}" ;;
+        5) warn "${_st_line} -- the brain works, but recall on the seed fell below the bar on this install." ;;
+        *) warn "seed doctrine self-test did not run (rc ${_st_rc}${_st_line:+: ${_st_line}}); to run it yourself: WIZARD_LIBRARY_DB='${DB_PATH}' '${VENV_PY}' '${LITE_ENGINE}' seed-self-test" ;;
+    esac
+    return 0
+}
+
 hd_t1_verify() {   # bash 3.2 (macOS /bin/bash) cannot parse a heredoc inside $( ): the command and its heredoc live here, called as $(hd_t1_verify) (round 2, B2)
     WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" \
         WIZARD_LIBRARY_HOME="$BRAIN_DIR" BRAIN_DIR="$BRAIN_DIR" ORGANS_DIR="${PKG_ROOT}/organs" "$VENV_PY" - <<'T1_VERIFY_PY'
 import json, os, sqlite3, subprocess, sys, urllib.request   # escaped URI (iteration 4, LOW 2)
 sys.path.insert(0, os.environ["ORGANS_DIR"])
 import embed_resolver   # the tier to verify is read lock first (embed_resolver.declared_table)
+import memory_write     # what a locked brain's reader will search
 db = os.environ["WIZARD_LIBRARY_DB"]
 brain = os.environ["BRAIN_DIR"]          # the dir that CONTAINS the laid voidloom/ package
 
 # The active tier's table is a sqlite-vec VIRTUAL table, so counting it needs the
 # extension loaded exactly as the engine loads it; the venv has it (pip just put it there).
 vectors, tab, count_err, lock_refusal = None, None, None, None
+legacy, outside, cov_refusal = 0, 0, None
 try:
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db)), uri=True)
     try:
@@ -3976,7 +4022,19 @@ try:
         pass
     tab, _src, lock_refusal = embed_resolver.declared_table(c)
     tab = tab or None
-    if tab:
+    if tab and _src == "lock":
+        # A locked brain: rows carrying the lock's stamp, from the reader itself. The table's own row count includes
+        # vectors the reader will never search. Legacy rows stay searchable and are counted apart.
+        cov = memory_write.coverage_envelope(c)
+        if cov.get("coverage_basis") == "measured":
+            vectors = int(cov.get("verified") or 0)
+            legacy = max(int(cov.get("matched") or 0) - vectors, 0)
+            outside = max(int(cov.get("vectors") or 0) - vectors - legacy, 0)
+            cov_refusal = None if cov.get("ok") else cov.get("error")
+        else:
+            count_err = str(cov.get("error"))
+    elif tab:
+        # No lock: the whole table is the search set, so its row count is the true figure.
         try:
             vectors = c.execute(f"SELECT COUNT(*) FROM {tab}").fetchone()[0]
         except Exception as e:
@@ -3993,7 +4051,11 @@ if not tab:
     print("  Tier 1 NOT VERIFIED: the brain declares no active_embedding_table, so there is no "
           "semantic tier to verify (keyword results prove nothing about it).", file=sys.stderr)
     sys.exit(1)
-if vectors == 0:
+if cov_refusal:
+    print(f"  Tier 1 NOT VERIFIED: the reader refuses this brain ({cov_refusal}): {vectors} vectors carry the lock's "
+          f"stamp and {outside} in {tab} do not.", file=sys.stderr)
+    sys.exit(1)
+if vectors == 0 and legacy == 0:
     print(f"  Tier 1 NOT VERIFIED: active embedding table {tab} holds 0 vectors -- "
           f"semantic recall cannot return anything the keyword arm would not.",
           file=sys.stderr)
@@ -4029,8 +4091,9 @@ if tier != 1 or data.get("degraded"):
           f"{': ' + str(why) if why else ''}.", file=sys.stderr)
     sys.exit(1)
 # SAY WHAT WAS OBSERVED, and no more. The weaker sentence when the count was unreadable.
-if vectors:
-    print(f"VERIFIED tier=1 mode={data.get('mode')} vectors={vectors} results={n} table={tab}")
+if vectors is not None:
+    extras = (f" legacy={legacy}" if legacy else "") + (f" outside_the_lock={outside}" if outside else "")
+    print(f"VERIFIED tier=1 mode={data.get('mode')} vectors={vectors}{extras} results={n} table={tab}")
 else:
     print(f"PARTIAL tier=1 mode={data.get('mode')} results={n} table={tab} count_unavailable={count_err}")
 T1_VERIFY_PY
@@ -4160,15 +4223,6 @@ GATE
                 fi
             fi
 
-            # C.cache — pre-cache the embedder + THE RERANKER THIS INSTALL WILL LOAD.
-            #
-            # snapshot_download, not CrossEncoder(): the default backend is a
-            # Qwen3ForCausalLM and CrossEncoder cannot instantiate it -- a second,
-            # independent reason the old line could only ever warm the fallback.
-            # The snapshot is the same cache both loaders read, so warming it
-            # serves whichever backend runs.
-            # The reranker gate (Drew's ruling, 2026-10-14): a machine the gate turns OFF downloads no reranker at all
-            # ("not even installed"); the reason is said, with what to run if the machine changes.
             # C.init -- THE LOCK, under the venv, BEFORE the pre-cache.
             #
             # STEP B's `init` runs under $PY_SYS; on a host whose system python has no
@@ -4179,17 +4233,34 @@ GATE
             # install) gets no lock -- the pre-cache then keeps its by-name path.
             if [ ! -f "${BRAIN_DIR}/embedder.lock.json" ]; then
                 say "  no install lock beside the brain; running init under the venv to write it..."
-                if WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$VENV_PY" "${BRAIN_DIR}/organs/claude_memory.py" init >/dev/null 2>&1; then
+                _init_log="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/tmp.voidloom_init.$$")"
+                if WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$VENV_PY" "${BRAIN_DIR}/organs/claude_memory.py" init >"$_init_log" 2>&1; then
+                    rm -f "$_init_log"
                     if [ -f "${BRAIN_DIR}/embedder.lock.json" ]; then
                         say "  install lock written: ${BRAIN_DIR}/embedder.lock.json"
                     else
                         say "  no install lock for the ${EMBED_MODEL} tier (the shipped catalogue does not carry it); the pre-cache fetches it by name."
                     fi
                 else
-                    warn "init under the venv failed; the lock is absent (inspect: WIZARD_EMBED_MODEL='${EMBED_MODEL}' WIZARD_LIBRARY_DB='${DB_PATH}' '${VENV_PY}' '${BRAIN_DIR}/organs/claude_memory.py' init)"
+                    _init_cause="$(grep -v '^[[:space:]]*$' "$_init_log" | tail -n 1 | cut -c1-300)"
+                    rm -f "$_init_log"
+                    case "$_init_cause" in
+                        *LOCK_NOT_SHIPPED*|*WEIGHTS_MISMATCH*|*LOCK_MALFORMED*)
+                            die "init refused, typed: ${_init_cause}. Fix the cause and re-run." ;;
+                    esac
+                    warn "init under the venv failed (its last line: ${_init_cause:-(no output)}); the lock is absent (inspect: WIZARD_EMBED_MODEL='${EMBED_MODEL}' WIZARD_LIBRARY_DB='${DB_PATH}' '${VENV_PY}' '${BRAIN_DIR}/organs/claude_memory.py' init)"
                 fi
             fi
 
+            # C.cache — pre-cache the embedder + THE RERANKER THIS INSTALL WILL LOAD.
+            #
+            # snapshot_download, not CrossEncoder(): the default backend is a
+            # Qwen3ForCausalLM and CrossEncoder cannot instantiate it -- a second,
+            # independent reason the old line could only ever warm the fallback.
+            # The snapshot is the same cache both loaders read, so warming it
+            # serves whichever backend runs.
+            # The reranker gate (Drew's ruling, 2026-10-14): a machine the gate turns OFF downloads no reranker at all
+            # ("not even installed"); the reason is said, with what to run if the machine changes.
             if [ "$ACCEL_RERANK" = "1" ]; then
                 say "  pre-caching the ${EMBED_MODEL}-${EMBED_DIM} embedder + the ${RERANKER_BACKEND} reranker ${RERANKER_REPO} (one-time download)..."
                 _pc_rr="$RERANKER_REPO"; _pc_fb="$PRECACHE_FALLBACK"
@@ -4402,6 +4473,7 @@ EOF_DECL
             T1_EMBED_REFUSED=0
             if "$VENV_PY" "${BRAIN_DIR}/organs/embed_backfill.py" "$DB_PATH"; then
                 say "  seed pack embedded — semantic recall works from the first query."
+                seed_self_test
             else
                 _bf_rc=$?
                 if [ "$_bf_rc" -eq 3 ]; then

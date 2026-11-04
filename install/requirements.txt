@@ -20,10 +20,13 @@
 #  an air-gapped rebuild -- while the installer's own hint printed the right form.
 #  For the fully hash-locked route see MODE B below.)
 #
-# EMBEDDER IS BRAIN-DICTATED. install.sh reads the brain DB's
-# active_embedding_table and pre-downloads the embedder that matches:
-#   * GPU brain  -> jinaai/jina-embeddings-v5-text-small  (1024-dim, table memory_embeddings_v2)
-#   * CPU brain  -> nomic-ai/nomic-embed-text-v1.5        ( 768-dim, table memory_embeddings)
+# EMBEDDER IS LOCK-DICTATED. An existing install names its embedder in
+# <data-dir>/embedder.lock.json (one entry copied from the package catalogue,
+# organs/embedders.lock.json, pinned by weights_hash); install.sh reads the lock
+# and pre-downloads the embedder that matches. A brain with no lock is read from
+# its active_embedding_table instead. The shipped catalogue:
+#   * gpu  -> Qwen/Qwen3-Embedding-0.6B        (1024-dim, table memory_embeddings_v3, apache-2.0)
+#   * cpu  -> nomic-ai/nomic-embed-text-v1.5   ( 768-dim, table memory_embeddings,    apache-2.0)
 # ⚠ CPU-ONLY INSTALLS: NOT PINNING CUDA IS NOT THE SAME AS NOT GETTING IT.
 #
 # This file used to say: "A CPU-only install (laptop/teammate) MUST NOT pin a CUDA
@@ -63,10 +66,12 @@
 # MODELS the installer PRE-DOWNLOADS (to ~/.cache/huggingface, the default HF hub):
 #   These are model WEIGHTS, not pip packages — `sentence-transformers` (below)
 #   provides the loader classes (SentenceTransformer + CrossEncoder); install.sh
-#   instantiates each once so the weights cache up front and nothing lazy-downloads
-#   on the first recall. The recall path uses exactly two local models:
-#     1. the EMBEDDER (jina-1024 on GPU OR nomic-768 on CPU; brain-dictated)
-#        -> SentenceTransformer(..., trust_remote_code=True)
+#   pre-caches each once so the weights are on disk up front and nothing
+#   lazy-downloads on the first recall. The recall path uses exactly two local models:
+#     1. the EMBEDDER (qwen-1024 on GPU OR nomic-768 on CPU; lock-dictated)
+#        -> fetched at the install lock's pinned revision(s) and CHECKSUM-VERIFIED
+#           by embedder_lock.verify_snapshot_against_lock (nothing instantiated
+#           at install; the one loader instantiates it under the lock at first use)
 #     2. the RERANKER the runtime will load, fetched by snapshot_download(). NOT
 #        CrossEncoder(): the default backend is a Qwen3ForCausalLM and CrossEncoder
 #        cannot instantiate it.

@@ -57,7 +57,13 @@
   "(--install-thinker-cli, or y to \"Run it now? [y/N]\"), the vendor's own installer runs before the guide's Part:",
   "`when: an offered thinker install` (--install-thinker-cli with a CLI answer; an interactive yes cannot be known to",
   "--print-write-set). A write carrying `backend` is active only for that answer. An `untouched` entry carrying",
-  "`unless_installing` is dropped from the list on exactly that offered install (the program's own folder is new then)."
+  "`unless_installing` is dropped from the list on exactly that offered install (the program's own folder is new then).",
+  "",
+  "`when: run-time`: a call a ROSTER UNIT makes to the manager when it RUNS, never the installer.",
+  "organs/organ_run_log.py reads each armed timer's state, and the last result of its service, with",
+  "`systemctl --user show`. Declared so a recorder's run-time log can be graded against a list instead",
+  "of merely counted; NEVER active for an install run (--print-write-set resolves it active=false), so",
+  "grading the INSTALLER's log is unchanged."
  ],
  "variables": [
   "HOME",
@@ -675,6 +681,26 @@
    "call": "systemd-run --user --wait --pipe --collect --quiet --unit voidloom-thinker-probe-* -p EnvironmentFile=-* -p WorkingDirectory=${DB_DIR} -p Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring -p RuntimeMaxSec=* *",
    "effect": "write",
    "why": "the thinker's PROOF in the timers' environment (M9/M10): two tool-free calls (the exact answer to a small sum; a file that must not appear) run BY THE USER MANAGER as a transient unit (EnvironmentFile= the env file this run writes, WorkingDirectory= the brain) -- --collect removes the unit; nothing is enabled or left behind. On a host with no user manager (launchd, a container) the probe runs directly and this verb is not called"
+  },
+  {
+   "step": "run-time",
+   "when": "run-time",
+   "platform": "Linux",
+   "call": "systemctl --user show wizard-library-{unit}.timer -pUnitFileState -pActiveState -pLastTriggerUSec -pNextElapseUSecRealtime",
+   "expand": "armed_units",
+   "effect": "read-only",
+   "made_by": "organs/organ_run_log.py (the organ-run-log roster unit, at run-time; not install.sh)",
+   "why": "organ_run_log reads every armed timer's state from the manager each time it runs; read-only, declared so a recorder log of a roster run is graded against this list"
+  },
+  {
+   "step": "run-time",
+   "when": "run-time",
+   "platform": "Linux",
+   "call": "systemctl --user show wizard-library-{unit}.service -pResult -pExecMainStatus",
+   "expand": "armed_units",
+   "effect": "read-only",
+   "made_by": "organs/organ_run_log.py (the organ-run-log roster unit, at run-time; not install.sh)",
+   "why": "organ_run_log reads a service's last result for each new run it records; read-only, declared for the same reason as the timer read"
   }
  ],
  "untouched": [
