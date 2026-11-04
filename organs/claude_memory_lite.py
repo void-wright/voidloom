@@ -170,6 +170,19 @@ _SYNTH_CLAUSE = "\n      AND COALESCE(m.derived_from, '') NOT IN ('dream_synthes
 _UNRESOLVED_STAMP = "unresolved"
 
 
+def _lock_was_written(data_dir: str) -> bool:
+    """The rule is embedder_lock.lost_lock's. A bare copy of this file cannot ask it, and then any
+    history beside the database counts: reading a locked brain as lock-less is the worse mistake."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        import embedder_lock  # type: ignore
+    except Exception:
+        return os.path.exists(os.path.join(data_dir, "embedder.lock.history.jsonl"))
+    return embedder_lock.lost_lock(data_dir) is not None
+
+
 def _read_lock():
     """The install lock beside the database file (symlinks followed, the rule the reader applies), read
     with the standard library alone so a bare copy of this file can still read it. (lock, None), or
@@ -181,6 +194,8 @@ def _read_lock():
         return {"vec_table": str(lk["vec_table"]), "weights_hash": str(lk["weights_hash"]),
                 "dim": int(lk["dim"])}, None
     except FileNotFoundError:
+        if _lock_was_written(os.path.dirname(path)):
+            return None, "LOCK_MISSING: this brain was locked and the file is gone"
         return None, "LOCK_MISSING"
     except (OSError, ValueError, KeyError, TypeError) as e:
         return None, f"LOCK_MALFORMED ({type(e).__name__})"

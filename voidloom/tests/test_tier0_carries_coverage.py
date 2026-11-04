@@ -144,6 +144,7 @@ class RecallCarriesCoverage(_Brain):
     def test_saboteur_no_lock_and_no_declared_tier_is_zero_and_says_so(self):
         self.population()
         (self.d / "embedder.lock.json").unlink()
+        (self.d / "embedder.lock.history.jsonl").unlink()
         cov = self.lite("recall", "--query", "lantern")["coverage"]
         self.assertEqual((cov["matched"], cov["total"]), (0, 5))
         self.assertIn("lock unreadable", cov["basis"])

@@ -115,6 +115,7 @@ class BackfillCountsStamps(unittest.TestCase):
             lock = d / "embedder.lock.json"
             if lock.exists():
                 lock.unlink()
+                (d / "embedder.lock.history.jsonl").unlink()
             table = TABLES[tier][0]
             c = _connect(db)
             c.execute("UPDATE embedding_provenance SET weights_hash = 'unresolved' WHERE memory_id = 1")

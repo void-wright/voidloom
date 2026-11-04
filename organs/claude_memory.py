@@ -786,6 +786,18 @@ def _load_model():
 
 def _encode(text: str, prefix: str = "search_document", *,
             lock: Optional[Dict[str, Any]] = None) -> bytes:
+    # A query is a read, and a read does not reach the network: the load below runs with the hub closed, so a model
+    # that is not on this disk refuses SNAPSHOT_ABSENT and the recall degrades. A document embed is a write and keeps
+    # its way to the pinned bytes.
+    if prefix != "search_query":
+        return _encode_now(text, prefix, lock=lock)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embedder_lock
+    with embedder_lock.hub_closed():
+        return _encode_now(text, prefix, lock=lock)
+
+
+def _encode_now(text: str, prefix: str, *, lock: Optional[Dict[str, Any]] = None) -> bytes:
     # A caller holding a connection to another brain passes the lock it resolved from
     # THAT connection (memory_write.default_encoder), and that lock is the one the
     # loader verifies and encodes under: the encoder and the table it writes to are one
@@ -2680,20 +2692,6 @@ def _is_archive_protected(foundation_score, kind, importance) -> bool:
     return False
 
 
-def _rows_holding_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, int]:
-    """{"table.column": rows} for every foreign key that names this memory and has no
-    delete rule, the rows that stop a hard delete."""
-    held: Dict[str, int] = {}
-    for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' "
-                                 "AND name NOT LIKE 'sqlite_%'").fetchall():
-        for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
-            if fk[2] == "memories" and fk[6] in ("NO ACTION", "RESTRICT"):
-                n = conn.execute(f'SELECT COUNT(*) FROM "{table}" WHERE "{fk[3]}" = ?', (memory_id,)).fetchone()[0]
-                if n:
-                    held[f"{table}.{fk[3]}"] = int(n)
-    return held
-
-
 def cmd_delete(args):
     t0 = time.time()
     conn = _get_conn()
@@ -2708,40 +2706,21 @@ def cmd_delete(args):
     # that flag, `forget --hard` DEGRADES to a soft-archive (the row survives,
     # is_archived=1). Destructive loss is impossible by default; a true purge
     # requires an explicit out-of-band admin action.
-    hard_allowed = os.environ.get("VOIDLOOM_ALLOW_HARD_DELETE", "").strip().lower() in (
-        "1", "true", "yes", "on")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import memory_write
     did_hard_delete = False
-    if args.hard and hard_allowed:
-        # A hard delete removes the memory's vector from EVERY tier table that exists
-        # (the row is gone; a vector for it on any table is an orphan, and `tier set`
-        # keeps the old tier's table) and every stamp for it: a stamp describing a vector
-        # that is gone is the defect the reader counts as stamped_without_vector. One
-        # transaction: nothing commits until the row itself is gone.
-        _present = {r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
-        for _tab, _d, _r in EMBED_TIERS.values():
-            if _tab in _present:
-                conn.execute(f"DELETE FROM {_tab} WHERE memory_id = ?", (args.id,))
-        if "embedding_provenance" in _present:
-            conn.execute("DELETE FROM embedding_provenance WHERE memory_id = ?", (args.id,))
-        conn.execute("DELETE FROM memory_tags WHERE memory_id = ?", (args.id,))
-        conn.execute("DELETE FROM memory_links WHERE source_id = ? OR target_id = ?", (args.id, args.id))
-        conn.execute("DELETE FROM access_log WHERE memory_id = ?", (args.id,))
+    receipt = None
+    if args.hard and memory_write.hard_delete_allowed():
+        # One transaction: the row, every vector and stamp, whatever names it and every copy of its
+        # text go together, or nothing does.
         try:
-            conn.execute("DELETE FROM memories WHERE id = ?", (args.id,))
-        except sqlite3.IntegrityError as e:
-            if "FOREIGN KEY" not in str(e):
-                raise
-            # A log or lineage row names this memory with no delete rule, so the row cannot go
-            # yet. Nothing was removed: say which rows hold it, rather than a traceback.
+            receipt = memory_write.purge_memory(conn, args.id)
+            conn.commit()
+        except Exception:
             conn.rollback()
-            _held_by = _rows_holding_memory(conn, args.id)
             conn.close()
-            _output({"status": "error", "error": "HARD_DELETE_REFERENCED", "action": "delete",
-                     "memory_id": args.id, "held_by": _held_by,
-                     "message": f"memory {args.id} is named by rows that have no delete rule ({_held_by}); "
-                                "nothing was removed",
-                     "time_ms": int((time.time() - t0) * 1000)}, exit_code=1)
+            raise
+        receipt["wal_emptied"] = memory_write.finish_purge(conn)
         did_hard_delete = True
     else:
         # Default path AND the demoted `forget --hard`: soft-archive only.
@@ -2758,6 +2737,7 @@ def cmd_delete(args):
         "hard_delete_requested": bool(args.hard),
         "soft_archived": not did_hard_delete,
         "admin_gate": "VOIDLOOM_ALLOW_HARD_DELETE",
+        **({"receipt": receipt} if receipt is not None else {}),
         "time_ms": int((time.time() - t0) * 1000),
     })
 

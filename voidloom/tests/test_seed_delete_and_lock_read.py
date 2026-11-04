@@ -3,16 +3,19 @@
 THE CLAIM UNDER TEST
   * seed delete-one removes the row's vector from EVERY tier's table: after `tier set` the old
     tier keeps one otherwise, with its stamp gone so nothing counts it;
-  * a row something still names is refused, typed, with nothing removed, not left dangling;
+  * a row something still names is refused, typed, with nothing removed, not left dangling, unless
+    the hard-delete gate is set, when those rows go with it;
   * a lock path that exists and cannot be read refuses LOCK_MALFORMED: read as absent, a locked
     brain would drop to the lock-less rule and search its whole table.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from voidloom.tests.test_tier_set import _connect, _vec, _vec_available
 
@@ -66,6 +69,17 @@ class SeedDelete(unittest.TestCase):
             seed_loader.delete_one(str(self.db), ORIGIN)
         self.assertEqual(cm.exception.code, "HARD_DELETE_REFERENCED")
         self.assertEqual(self._counts(), (1, 1, 1), "nothing was removed")
+
+    def test_control_under_the_gate_a_row_something_names_goes_with_what_names_it(self):
+        import seed_loader
+        c = _connect(self.db)
+        c.execute("INSERT INTO resurfacing_log VALUES (1)")
+        c.commit(); c.close()
+        with mock.patch.dict(os.environ, {"VOIDLOOM_ALLOW_HARD_DELETE": "1"}):
+            out = seed_loader.delete_one(str(self.db), ORIGIN)
+        self.assertTrue(out["row_gone"], out)
+        self.assertEqual(out["receipt"]["references_cleared"]["resurfacing_log"], 1, out)
+        self.assertEqual(self._counts(), (0, 0, 0))
 
 
 class LockThatCannotBeRead(unittest.TestCase):

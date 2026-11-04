@@ -52,11 +52,10 @@ alongside hybrid_retrieval.py after the loop closes.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import sys
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 logger = logging.getLogger("voidloom.qwen_reranker")
 
@@ -111,38 +110,7 @@ def resolve_pin(*, allow_fetch: bool = False) -> Dict[str, Any]:
     return out
 
 
-_HUB_FLAGS = (("huggingface_hub.constants", "HF_HUB_OFFLINE"), ("transformers.utils.hub", "_is_offline_mode"))
-_HUB_ENV = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
-
-
-@contextlib.contextmanager
-def _hub_closed() -> Iterator[None]:
-    """No hub traffic while the reranker loads, whatever the environment says. The load runs
-    on a recall: a snapshot on disk loads from disk, and one that is not there fails here and
-    the recall degrades. Both libraries read their offline flag once, at import, so a process
-    that imported them already needs the flag set as well as the variables; one that has not
-    yet imported them takes it from the variables. Both are put back afterwards, so a later
-    fetch in this process (the install's) is not left offline."""
-    was_offline = _lock_module().hf_offline()
-    saved = {k: os.environ.get(k) for k in _HUB_ENV}
-    for k in _HUB_ENV:
-        os.environ[k] = "1"
-
-    def _flags(value: bool) -> None:
-        for module, attr in _HUB_FLAGS:
-            mod = sys.modules.get(module)
-            if mod is not None and hasattr(mod, attr):
-                setattr(mod, attr, value)
-    _flags(True)
-    try:
-        yield
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-        _flags(was_offline)
+_hub_closed = _lock_module().hub_closed
 
 # Per-(query, doc) max length fed to the model (the judge prompt prefix/suffix are
 # reserved out of this budget). 8192 is the model card's documented working

@@ -470,14 +470,13 @@ class HardDeleteRemovesTheRowForGood(_Engine):
             self.delete()
         self.assertEqual(self.left(), {NOMIC: 1, JINA: 1, QWEN: 1, "embedding_provenance": 3})
 
-    def test_saboteur_a_row_with_no_delete_rule_is_a_typed_refusal_and_removes_nothing(self):
+    def test_control_a_row_with_no_delete_rule_goes_with_the_memory(self):
         self.conn.execute("INSERT INTO resurfacing_log (memory_id, reason) VALUES (?, 'test')", (self.mid,))
         self.conn.commit()
         rc, out = self.delete()
-        self.assertEqual((rc, out["error"], out["held_by"]),
-                         (1, "HARD_DELETE_REFERENCED", {"resurfacing_log.memory_id": 1}), out)
-        self.assertEqual(self.left(), {NOMIC: 1, JINA: 1, QWEN: 1, "embedding_provenance": 3})
-        self.assertIsNotNone(self.conn.execute("SELECT 1 FROM memories WHERE id = ?", (self.mid,)).fetchone())
+        self.assertEqual((rc, out["hard_delete"], out["receipt"]["rows_removed"]["resurfacing_log"]), (0, True, 1), out)
+        self.assertEqual(self.left(), {NOMIC: 0, JINA: 0, QWEN: 0, "embedding_provenance": 0})
+        self.assertIsNone(self.conn.execute("SELECT 1 FROM memories WHERE id = ?", (self.mid,)).fetchone())
 
     def test_control_without_the_gate_it_is_a_soft_archive_and_nothing_is_removed(self):
         env = {k: v for k, v in os.environ.items() if k != "VOIDLOOM_ALLOW_HARD_DELETE"}

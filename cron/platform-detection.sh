@@ -30,7 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/_config_dir.sh"
 CONFIG_FILE="${WIZARD_CONFIG_PATH:-$(_config_path wizard-config.json)}"
 LOG_DIR="$(_config_path logs)"
-SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 LAUNCHD_AGENTS_DIR="${HOME}/Library/LaunchAgents"
 GENERATED_DIR="${SCRIPT_DIR}/generated"
 

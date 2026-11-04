@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 import sqlite_vec
 
-HOME = Path.home(); UNIT_DIR = HOME/".config/systemd/user"; ROOT = HOME/".claude/memory"
+HOME = Path.home(); UNIT_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or HOME/".config")/"systemd/user"; ROOT = HOME/".claude/memory"
 DB = ROOT/"claude_memory.db"
 def sc(*a): return subprocess.run(["systemctl","--user",*a],capture_output=True,text=True).stdout.strip()
 def show(u,*p):
@@ -68,7 +68,7 @@ date=datetime.now().strftime("%Y-%m-%d %H:%M %Z")
 out=[]
 out.append(f"# Cron audit — {date}\n")
 out.append("*Generated from live state by `gen_cron_audit.py`: `systemctl show` per unit, the `organ_run_log` ledger, each organ module's static `INSERT INTO` targets, and each table's observed last write. Nothing here is typed. Re-run after any re-lay.*\n")
-out.append(f"**Population:** {len(rows)} timer files under `~/.config/systemd/user/`. Ledger timestamps are UTC.\n")
+out.append(f"**Population:** {len(rows)} timer files under `{UNIT_DIR}/`. Ledger timestamps are UTC.\n")
 out.append("| unit | organ | OnCalendar | tables written (last write, UTC) | last run (UTC) | late | verdict |")
 out.append("|---|---|---|---|---|---|---|")
 for r in rows: out.append("| "+" | ".join(str(x) for x in r)+" |")

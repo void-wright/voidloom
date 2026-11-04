@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 # Per-file config resolution (package default, then legacy) -- ONE resolver
 # shared with platform-detection.sh, never a second literal here.
 . "${SCRIPT_DIR}/_config_dir.sh"

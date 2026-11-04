@@ -55,6 +55,17 @@ All notable changes to Voidloom are recorded here. The format follows
 - **`voidloom --version --json`** prints the version and `cli_surface_version`, a digest of
   every verb and option the CLI accepts; `COMPAT.json` carries the same value. Plain
   `voidloom --version` is unchanged.
+- **`voidloom status`, `voidloom inspect <id>`, `voidloom export --ids 1,2,3`.** Read-only, and none
+  of them loads a model. `status` shows the lock, how many memories a search can reach, the derived
+  layer and the seed numbers on one page. `export --all` is refused, exit 3 `EXPORT_ALL_REFUSED`,
+  naming what a full copy would still need.
+- **The derived layer says which model it came from.** Link strengths, community membership and
+  community summaries are stamped with the lock's checksum, and `doctor`, `status` and `stats` report
+  how many rows are stale, unstamped and current. A link a person asserts stays unstamped, and rows
+  written earlier stay unstamped. `doctor` and `status` also say how many episodic memories wait
+  outside consolidation until they are re-embedded.
+- **`load-seed --limit N`** loads part of a pack and can be resumed.
+- **The install runs the seed self-test** after the seed embeds, and prints its number.
 
 ### Fixed
 
@@ -152,6 +163,68 @@ All notable changes to Voidloom are recorded here. The format follows
   `-wal`/`-shm` files, whatever the umask. It was 644 under the default umask and under umask
   000. A brain that was already in place keeps the mode its owner gave it; a mode looser than
   600 is reported with the command that restricts it.
+- **A hard delete now finishes, and the memory's text goes with it.** Under
+  `VOIDLOOM_ALLOW_HARD_DELETE`, `claude_memory.py delete --hard` removes the memory, every tier's vector and every
+  stamp, then settles everything that names it in the same transaction: log and lineage rows go, and
+  the three rows others hang from (a monthly report, an enacted proposal, a whisper digest) stay with
+  the reference cleared. Copies of the text are replaced by `[removed]` wherever a run of 47 characters
+  or more, or the whole text from 12 characters up, is found, in any table and in the memories written
+  from this one. The keyword index is merged and freed pages are zeroed, so the words leave the file.
+  The receipt prints counts per table and no content. **What it does not reach:** a separate memory
+  that says the same thing is counted in `other_memories_sharing_text` and left alone; words a model
+  reworded are not a copy it can see; a consolidated memory's vector still averages the deleted one
+  until its next rebuild; and backups are yours to handle. Without the variable nothing changes: a
+  soft archive. `seed delete-one` follows the same rule under the variable, and without it still
+  refuses `HARD_DELETE_REFERENCED`.
+- **A deleted lock no longer reads healthy.** Every lock write leaves a receipt beside it, so a
+  missing lock with such a receipt means the brain was locked: `doctor`, `status` and the reader report
+  `LOCK_MISSING`, name the tier and the command that writes the lock again, and nothing searches the
+  whole table in its place. No receipt and no lock stays a legal older brain, as does a brain a
+  `tier rollback` took back to having none. A lock that exists and cannot be read refuses
+  `LOCK_MALFORMED` instead of reading as absent.
+- **A read never reaches the network.** A recall on a machine without the model's files used to
+  download them at the pin. Query encoding now runs with the hub closed, so it refuses `SNAPSHOT_ABSENT`
+  with the command that fetches them, and the front door answers by keyword and says why. Recall no
+  longer fetches a reranker either, and a recall with none says so in `coverage.reranker`. `install`,
+  `tier set`, `re-embed` and a store still fetch.
+- **`voidloom doctor` judges the brain by what the search reads.** Coverage is matched/total by stamp,
+  not a row count, and `reason` names what failed. `host_healthy` answers for the hook settings
+  separately, so a bad settings file no longer reads as a sick brain. A refused lock or stamps under
+  another model read unhealthy. A brain with no lock stays healthy.
+- **`models_present` answers for this brain's model,** not any cached tier, and `onboarded` follows it.
+- **The hardware detector names Qwen3-Embedding-0.6B on GPU hosts.** Its block's keys are now
+  `install_time_embedding_choice` and `install_time_tier_map`.
+- **`init` adds `skill_tier`,** so the weekly skill-graduation job runs on a clean install, and both
+  installers add it to a brain built at Tier 0, which never reaches `init`.
+- **Both installers stop on a typed `init` refusal or a seed pack that fails its scrub,** and show the
+  cause. The Tier-1 check counts the vectors a search will actually use.
+- **Nightly dedup compares only vectors in the search set.** A refusal skips dedup and is reported in
+  `dedup_refused`; the rest of `maintain` still runs.
+- **Keyword recall at Tier 0 carries coverage,** and `recall --bm25-only` needs no embedding model.
+- **`update` reports `re_embedded` from the stamp it wrote.**
+- **`stats` reports matched of total, verified and legacy, and the derived layer.** On a brain with no
+  lock it now counts active rows only, so its figure can drop by your archived rows.
+- **On a brain with no lock, coverage counts what a search can reach,** not stamped rows, so the figure
+  on every answer rises.
+- **A write through a connection to another brain embeds under that brain's model,** not the one the
+  process started on.
+- **A consolidated memory keeps its centroid** through `re-embed`, `tier set` and the backfill, and the
+  pending count no longer treats it as embedding work: a text vector put it in the top 10 for 62 of 240
+  member queries, the centroid for 235.
+- **A community summary left stale by a model change regenerates on the next run.**
+- **`embedding_upgrade.py re-embed` on an older nomic or qwen brain uses that brain's own tier,** not
+  jina. `embedding_upgrade.py` exits non-zero on failure, reports coverage in `stats`, and its `test`
+  no longer needs jina; `full` refuses on a brain that is not jina.
+- **`tier set` and `re-embed` get through an out-of-memory batch.** A memory too long for the device is
+  embedded from its head, and the receipt counts it.
+- **`embed_backfill` counts stamps on a locked brain,** so it agrees with `re-embed`.
+- **The default reranker's bytes are verified at load.**
+- **`website_memory` stamps its vectors and reads through a search set.**
+- **Two locked-brain refusals read `STAMP_INCONSISTENT`** where they read as something else.
+- **`sleep_loop.py --unit-tests` forces offline mode** and counts what it could not run as `refused`.
+- **Everything that writes or reads systemd units follows `XDG_CONFIG_HOME`:** the run ledger, the yield
+  sentinel, `cron/setup-*.sh`, `cron/platform-detection.sh` and `tools/gen_cron_audit.py`. The sentinel
+  stops watching an organ that does not ship.
 
 ### Changed
 
@@ -205,6 +278,10 @@ All notable changes to Voidloom are recorded here. The format follows
 - `organs/website_memory.py` and the whisper network's fallback encoder load nomic at the
   catalogue's pinned model and code revisions, checksum-verified, instead of by name.
 - `embedding_upgrade.py re-embed` on a locked brain re-embeds under that brain's own lock.
+- **The test suite is no longer copied into a user's brain directory.** A brain laid before this
+  change keeps its old `voidloom/tests/` folder after an upgrade, and `uninstall.sh` works from the new
+  manifest so it will not remove it. It is safe to delete: `rm -rf <brain>/voidloom/tests`.
+- The README documents `NO_ROWS_FOR_LOCK`, the `WIZARD_EMBED_MODEL` rule and the `re-embed` route.
 
 ## [1.0.0] — 2026-10-27
 

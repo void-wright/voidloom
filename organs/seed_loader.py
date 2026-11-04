@@ -226,37 +226,46 @@ def delete_one(db: str, origin: str) -> Dict[str, Any]:
             raise SeedLoadError("SEED_ORIGIN_AMBIGUOUS", f"{len(rows)} seed rows carry origin {origin}; "
                                 "refusing to guess which", origin=origin, memory_ids=[r[0] for r in rows])
         mid = rows[0][0]
-        conn.execute("PRAGMA foreign_keys=ON")   # a row something still names is refused below, not left dangling
-        # Every tier's table: after `tier set` the old tier still holds this row's vector.
-        present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        for table in VECTOR_TABLES:
-            if table in present:
+        import memory_write
+        receipt = None
+        if memory_write.hard_delete_allowed():
+            receipt = memory_write.purge_memory(conn, mid)
+        else:
+            conn.execute("PRAGMA foreign_keys=ON")   # a row something still names is refused below, not left dangling
+            # Every tier's table: after `tier set` the old tier still holds this row's vector.
+            present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            for table in VECTOR_TABLES:
+                if table in present:
+                    try:
+                        conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (mid,))
+                    except sqlite3.OperationalError:
+                        pass                         # no vec0 on this connection: a Tier-0 brain
+            for sql in ("DELETE FROM embedding_provenance WHERE memory_id = ?",
+                        "DELETE FROM memory_tags WHERE memory_id = ?",
+                        "DELETE FROM memory_links WHERE source_id = ?1 OR target_id = ?1"):
                 try:
-                    conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (mid,))
-                except sqlite3.OperationalError:
-                    pass                         # no vec0 on this connection: a Tier-0 brain
-        for sql in ("DELETE FROM embedding_provenance WHERE memory_id = ?",
-                    "DELETE FROM memory_tags WHERE memory_id = ?",
-                    "DELETE FROM memory_links WHERE source_id = ?1 OR target_id = ?1"):
+                    conn.execute(sql, (mid,))
+                except sqlite3.Error:
+                    pass
             try:
-                conn.execute(sql, (mid,))
-            except sqlite3.Error:
-                pass
-        try:
-            conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
-        except sqlite3.IntegrityError as e:
-            if "FOREIGN KEY" not in str(e):
-                raise
-            conn.rollback()
-            raise SeedLoadError("HARD_DELETE_REFERENCED", f"seed row {mid} is named by rows that have no delete "
-                                "rule; nothing was removed", origin=origin, memory_id=mid)
+                conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
+            except sqlite3.IntegrityError as e:
+                if "FOREIGN KEY" not in str(e):
+                    raise
+                conn.rollback()
+                raise SeedLoadError("HARD_DELETE_REFERENCED", f"seed row {mid} is named by rows that have no delete "
+                                    f"rule; nothing was removed. Set {memory_write.HARD_DELETE_ENV}=1 to remove those rows with it",
+                                    origin=origin, memory_id=mid)
         conn.commit()
+        if receipt is not None:
+            receipt["wal_emptied"] = memory_write.finish_purge(conn)
         after = conn.execute("SELECT COUNT(*) FROM memories WHERE seed = 1").fetchone()[0]
         gone = conn.execute("SELECT COUNT(*) FROM memories WHERE id = ?", (mid,)).fetchone()[0] == 0
     finally:
         conn.close()
     return {"status": "ok", "action": "seed-delete-one", "origin": origin, "memory_id": mid,
-            "seed_rows_before": before, "seed_rows_after": after, "dropped_by": before - after, "row_gone": gone}
+            "seed_rows_before": before, "seed_rows_after": after, "dropped_by": before - after, "row_gone": gone,
+            **({"receipt": receipt} if receipt is not None else {})}
 
 
 def expected_row(conn: sqlite3.Connection, q: Dict[str, Any]) -> Optional[int]:
@@ -291,6 +300,7 @@ def self_test(db: str, *, doctrine: Path = DOCTRINE_DEFAULT, mode: Optional[str]
     _organs_on_path()
     import memory_write
     import hybrid_retrieval
+    import embedder_lock
     import embedding_upgrade
     import claude_memory
     primary = ds.get("primary_mode") or "hybrid"
@@ -313,7 +323,8 @@ def self_test(db: str, *, doctrine: Path = DOCTRINE_DEFAULT, mode: Optional[str]
                                     "expect_anchor": q.get("expect_anchor")})
                     continue
                 if q["n"] not in qvecs:
-                    qvecs[q["n"]] = embedding_upgrade.encode_locked(q["query"], is_query=True, lock=lock)
+                    with embedder_lock.hub_closed():     # a battery reads, and a read does not reach the network
+                        qvecs[q["n"]] = embedding_upgrade.encode_locked(q["query"], is_query=True, lock=lock)
                 rows = hybrid_retrieval.recall_hybrid(conn, q["query"], qvecs[q["n"]], top_k=top_k, mode=md)
                 ids = [r.get("id") for r in rows]
                 rank = (ids.index(want) + 1) if want in ids else None

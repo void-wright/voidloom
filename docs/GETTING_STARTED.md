@@ -431,7 +431,9 @@ it; install it (`sudo apt install bubblewrap`) and choose `d` again.
 
 **You moved a brain between a GPU machine and a CPU-only one.** Each brain
 records which embedding model made its vectors. `voidloom doctor` reports
-whether the vectors and the query model agree (`embedding_coherence`); see
+whether the vectors and the query model agree (`embedding_coherence`), and
+`voidloom status` says how many vectors a search can reach and how many links,
+communities and summaries were computed under another model; see
 [`ONBOARDING_GUIDE.md`](./ONBOARDING_GUIDE.md) and
 [`RESTORE_MANIFEST.md`](./RESTORE_MANIFEST.md) before moving one.
 

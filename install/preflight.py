@@ -206,9 +206,9 @@ def main(argv=None):
                     # model code lives in nomic-ai/nomic-bert-2048). A bare snapshot_download of the model repo
                     # cached neither, and the loader then went local-only because the repo looked cached: P6
                     # failed offline on every fresh CPU machine (friend-package smoke, 2026-10-16). On the CPU:
-                    # this step only downloads.
+                    # this step only downloads. It embeds a document: a query is a read, and a read never fetches.
                     code = ("import sys; sys.path.insert(0, %r); import claude_memory as cm; "
-                            "cm._encode('warm up', prefix='search_query')%s" % (
+                            "cm._encode('warm up', prefix='search_document')%s" % (
                                 ORGANS, "; from huggingface_hub import snapshot_download as s; "
                                         "s('Qwen/Qwen3-Reranker-0.6B')"
                                 if (pl.get("reranker") or {}).get("enabled") else ""))

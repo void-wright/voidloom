@@ -128,7 +128,7 @@ def test_empty_cache_then_offline_load_succeeds(tmp_path):
                 CUDA_VISIBLE_DEVICES="", PYTORCH_NVML_BASED_CUDA_CHECK="1")
     base.pop("HF_HUB_OFFLINE", None)
     base.pop("TRANSFORMERS_OFFLINE", None)
-    warm = "import sys; sys.path.insert(0, %r); import claude_memory as cm; cm._encode('warm up', prefix='search_query')" % organs
+    warm = "import sys; sys.path.insert(0, %r); import claude_memory as cm; cm._encode('warm up', prefix='search_document')" % organs
     p = subprocess.run([sys.executable, "-B", "-c", warm], capture_output=True, text=True, env=base, timeout=2400)
     assert p.returncode == 0, p.stderr[-1500:]
     off = dict(base, HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")

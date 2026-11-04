@@ -72,7 +72,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 logger = logging.getLogger("voidloom.memory_write")
 
@@ -1251,7 +1251,9 @@ def provenance_filter(conn: sqlite3.Connection) -> ProvenanceFilter:
     try:
         lock = el.resolve(conn)
     except el.EmbedderLockError as e:
-        if e.code != "LOCK_MISSING":
+        # A lock that was written and is gone is not the lock-less rule: nothing vouches for the
+        # table now, and searching all of it would admit whatever the lock kept out.
+        if e.code != "LOCK_MISSING" or e.detail.get("was_locked"):
             raise
         lock = None
     if lock is not None:
@@ -1891,7 +1893,7 @@ def derived_layer_report(conn: sqlite3.Connection) -> Dict[str, Any]:
         out["basis"] = "a stamp other than the lock's is stale; no stamp is unstamped; the lock's is current"
     except el.EmbedderLockError as e:
         out["basis"] = ("no lock on this brain: no checksum is current, every stamped row counts as stale"
-                        if e.code == "LOCK_MISSING" else
+                        if e.code == "LOCK_MISSING" and not e.detail.get("was_locked") else
                         f"lock unreadable ({e.code}): no checksum is current, every stamped row counts as stale")
     except Exception as e:
         out["basis"] = f"lock unreadable ({type(e).__name__}): no checksum is current, every stamped row counts as stale"
@@ -2096,6 +2098,263 @@ def pending_embeddings(conn: sqlite3.Connection, *, flt: Optional[ProvenanceFilt
     if limit:
         sql += f" LIMIT {int(limit)}"
     return [(int(r[0]), r[1] or "") for r in conn.execute(sql, flt.search_set_params).fetchall()]
+
+
+# --------------------------------------------------------------------------
+# THE HARD DELETE: a memory leaves the brain, and its text leaves with it.
+#
+# Log and lineage rows name memories with no delete rule, and some carry the text: a
+# dream is written from its two memories, and a consolidated memory quotes the summary
+# of each source. So the delete walks every foreign key the schema declares, then every
+# text column. All of it happens in the caller's transaction, and the receipt counts
+# rows per table and carries no content.
+# --------------------------------------------------------------------------
+HARD_DELETE_ENV = "VOIDLOOM_ALLOW_HARD_DELETE"
+REDACTED = "[removed]"
+
+# A foreign key that is nullable keeps its row and loses the reference, unless the row
+# is the copy: this dream_log column names the memory its dream_content was stored as,
+# and is_meaningful=1 with no id reads as a broken dream.
+_PURGE_ROW_ANYWAY = {("dream_log", "dream_memory_id")}
+# Columns naming a memory with no foreign key. (table, column, the row goes too)
+_SOFT_REFERENCES = (("belief_scan_queue", "memory_id", True), ("edge_proposals", "source_id", True),
+                    ("edge_proposals", "target_id", True), ("belief_quarantine", "source_id", False),
+                    ("belief_quarantine", "target_id", False), ("calibration_log", "source_memory_id", False),
+                    ("council_sessions", "decision_memory_id", False), ("arcane_manifests", "manifest_memory_id", False),
+                    ("gap_inventory", "research_memory_id", False), ("gap_research_log", "result_memory_id", False),
+                    ("governance_proposals", "target_memory_id", False), ("raptor_clusters", "synthesis_memory_id", False))
+# A shared run this long or longer is found wherever it sits in a cell: a cell is read at
+# every _RUN_GRAM-th character, so any run of 2 * _RUN_GRAM - 1 holds a gram read on the stride.
+# A shorter run is not a copy: measured on a real brain, a memory that mentions a 24-character
+# tag shares that run with every row carrying the tag.
+_RUN_GRAM = 24
+_COPY_RUN = 2 * _RUN_GRAM - 1
+# A tag names something other memories share; it holds no one memory's text.
+_NOT_TEXT_TABLES = {"memory_tags"}
+_SHORT_TEXT_FLOOR = 12
+_LINEAGE_TEXT_FLOOR = 8
+
+
+def hard_delete_allowed() -> bool:
+    return os.environ.get(HARD_DELETE_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _bump(counts: Dict[str, int], key: str, n: int) -> None:
+    if n and n > 0:
+        counts[key] = counts.get(key, 0) + int(n)
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> Set[str]:
+    return {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+
+
+def _ids_in(value: Any) -> List[int]:
+    """The integers a JSON id list holds, for a column that may hold anything."""
+    try:
+        data = json.loads(value)
+    except (TypeError, ValueError):
+        return []
+    return [x for x in data if isinstance(x, int)] if isinstance(data, list) else []
+
+
+def _lineage_of(conn: sqlite3.Connection, memory_id: int, present: Set[str]) -> Set[int]:
+    """The memories written FROM this one. They quote it, so they are edited; a memory
+    that merely says the same thing is someone else's and is only counted."""
+    found: Set[int] = set()
+    for table, want, column in (("consolidation_sources", "consolidated_memory_id", "source_memory_id"),
+                                ("memory_provenance", "derived_memory_id", "source_memory_id"),
+                                ("dream_log", "dream_memory_id", "memory_a_id"),
+                                ("dream_log", "dream_memory_id", "memory_b_id")):
+        if table in present:
+            found.update(r[0] for r in conn.execute(
+                f"SELECT {want} FROM {table} WHERE {column} = ? AND {want} IS NOT NULL", (memory_id,)))
+    like = f"%{memory_id}%"
+    if "derived_from" in _columns(conn, "memories"):
+        found.update(r[0] for r in conn.execute("SELECT id, derived_from FROM memories WHERE derived_from LIKE ?", (like,))
+                     if memory_id in _ids_in(r[1]))
+    if "raptor_clusters" in present:
+        found.update(r[0] for r in conn.execute(
+            "SELECT synthesis_memory_id, member_ids_json FROM raptor_clusters WHERE member_ids_json LIKE ? "
+            "AND synthesis_memory_id IS NOT NULL", (like,)) if memory_id in _ids_in(r[1]))
+    found.discard(memory_id)
+    return found
+
+
+def _clear_references(conn: sqlite3.Connection, memory_id: int, tables: Sequence[str], removed: Dict[str, int],
+                      cleared: Dict[str, int]) -> None:
+    for table in tables:
+        info = {r[1]: bool(r[3] or r[5]) for r in conn.execute(f'PRAGMA table_info("{table}")')}
+        for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
+            column = fk[3]
+            if fk[2] != "memories":
+                continue
+            if info.get(column) or (table, column) in _PURGE_ROW_ANYWAY or fk[6] == "CASCADE":
+                _bump(removed, table, conn.execute(f'DELETE FROM "{table}" WHERE "{column}" = ?', (memory_id,)).rowcount)
+            else:
+                _bump(cleared, table, conn.execute(f'UPDATE "{table}" SET "{column}" = NULL WHERE "{column}" = ?',
+                                                   (memory_id,)).rowcount)
+    for table, column, row_goes in _SOFT_REFERENCES:
+        if table not in tables:
+            continue
+        if row_goes:
+            _bump(removed, table, conn.execute(f'DELETE FROM "{table}" WHERE "{column}" = ?', (memory_id,)).rowcount)
+        else:
+            _bump(cleared, table, conn.execute(f'UPDATE "{table}" SET "{column}" = NULL WHERE "{column}" = ?',
+                                               (memory_id,)).rowcount)
+
+
+class _TextMatcher:
+    """Finds the deleted text inside another cell. JSON columns hold it escaped, so the
+    escaped forms are searched as well."""
+
+    def __init__(self, texts: Sequence[str]):
+        forms: List[str] = []
+        for text in texts:
+            forms += [text, json.dumps(text)[1:-1], json.dumps(text, ensure_ascii=False)[1:-1]]
+        self.sources = list(dict.fromkeys(f for f in forms if f))
+        self.whole = sorted((t for t in self.sources if len(t) >= _SHORT_TEXT_FLOOR), key=len, reverse=True)
+        self.lineage_whole = sorted((t for t in self.sources if len(t) >= _LINEAGE_TEXT_FLOOR), key=len, reverse=True)
+        self.grams: Dict[str, List[Tuple[int, int]]] = {}
+        for i, src in enumerate(self.sources):
+            for p in range(0, max(len(src) - _RUN_GRAM + 1, 0)):
+                self.grams.setdefault(src[p:p + _RUN_GRAM], []).append((i, p))
+
+    def _runs(self, cell: str) -> List[Tuple[int, int]]:
+        spans: List[Tuple[int, int]] = []
+        pos, end = 0, len(cell)
+        while pos + _RUN_GRAM <= end:
+            hits = self.grams.get(cell[pos:pos + _RUN_GRAM])
+            if not hits:
+                pos += _RUN_GRAM
+                continue
+            best = (pos, pos + _RUN_GRAM)
+            for i, p in hits[:8]:
+                src, a, b, c, d = self.sources[i], pos, p, pos + _RUN_GRAM, p + _RUN_GRAM
+                while a > 0 and b > 0 and cell[a - 1] == src[b - 1]:
+                    a, b = a - 1, b - 1
+                while c < end and d < len(src) and cell[c] == src[d]:
+                    c, d = c + 1, d + 1
+                if c - a > best[1] - best[0]:
+                    best = (a, c)
+            if best[1] - best[0] >= _COPY_RUN:
+                spans.append(best)
+            pos = best[1]
+        return spans
+
+    def scrub(self, cell: str, *, lineage: bool = False) -> str:
+        """`cell` with every copy replaced, or `cell` itself when it holds none."""
+        out = cell
+        for text in (self.lineage_whole if lineage else self.whole):
+            if text in out:
+                out = out.replace(text, REDACTED)
+        spans = self._runs(out)
+        for a, b in sorted(spans, reverse=True):
+            out = out[:a] + REDACTED + out[b:]
+        return out
+
+
+def _ordinary_tables(conn: sqlite3.Connection) -> List[str]:
+    """Every table but a virtual one and its storage: the full-text index is merged after
+    the sweep, a vector table holds no text, and neither has a foreign key."""
+    rows = conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").fetchall()
+    virtual = [r[0] for r in rows if (r[1] or "").upper().startswith("CREATE VIRTUAL")]
+    return [r[0] for r in rows if r[0] not in virtual and not any(r[0].startswith(v + "_") for v in virtual)]
+
+
+def _text_tables(conn: sqlite3.Connection) -> List[Tuple[str, List[str]]]:
+    out = []
+    for name in _ordinary_tables(conn):
+        if name in _NOT_TEXT_TABLES:
+            continue
+        cols = [r[1] for r in conn.execute(f'PRAGMA table_info("{name}")')
+                if not r[2] or any(k in r[2].upper() for k in ("TEXT", "CHAR", "CLOB", "JSON"))]
+        if cols:
+            out.append((name, cols))
+    return out
+
+
+def _scrub_copies(conn: sqlite3.Connection, matcher: _TextMatcher, lineage: Set[int], redacted: Dict[str, int],
+                  removed: Dict[str, int]) -> Dict[str, Any]:
+    shared: Set[int] = set()
+    unswept: List[str] = []
+    for table, cols in _text_tables(conn):
+        select = ", ".join(f'"{c}"' for c in cols)
+        try:
+            rows = conn.execute(f'SELECT rowid, {select} FROM "{table}"')
+        except sqlite3.OperationalError:
+            unswept.append(table)
+            continue
+        changes: List[Tuple[int, Dict[str, str]]] = []
+        for row in rows:
+            rid = row[0]
+            own = table == "memories" and rid in lineage
+            edits: Dict[str, str] = {}
+            for col, cell in zip(cols, row[1:]):
+                if isinstance(cell, str) and len(cell) >= 4:
+                    clean = matcher.scrub(cell, lineage=own)
+                    if clean != cell:
+                        edits[col] = clean
+            if not edits:
+                continue
+            if table == "memories" and not own:
+                shared.add(rid)
+            else:
+                changes.append((rid, edits))
+        for rid, edits in changes:
+            sets = ", ".join(f'"{c}" = ?' for c in edits)
+            try:
+                conn.execute(f'UPDATE "{table}" SET {sets} WHERE rowid = ?', [*edits.values(), rid])
+                _bump(redacted, table, 1)
+            except sqlite3.IntegrityError:           # the edited value breaks a constraint: the row goes instead
+                _bump(removed, table, conn.execute(f'DELETE FROM "{table}" WHERE rowid = ?', (rid,)).rowcount)
+    return {"other_memories_sharing_text": len(shared), "tables_not_swept": unswept}
+
+
+def purge_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, Any]:
+    """Remove one memory, whatever names it, inside the caller's open transaction. The caller
+    commits, or rolls everything back, and then calls `finish_purge`.
+
+    A row that names the memory goes, or keeps its place with the reference nulled where other
+    rows hang from it. A copy of its text goes wherever a shared run of 47 characters or more,
+    or the whole text from 12 characters up, is found: in any table, and in the memories written
+    from this one. A different memory that happens to say the same thing is not edited: it is
+    counted in `other_memories_sharing_text`. Words reworded by a model are not a copy this can see."""
+    wanted = ", ".join(c for c in ("content", "summary") if c in _columns(conn, "memories"))
+    row = conn.execute(f"SELECT {wanted} FROM memories WHERE id = ?", (memory_id,)).fetchone()
+    if row is None:
+        raise KeyError(memory_id)
+    conn.execute("PRAGMA secure_delete = ON")         # freed pages are zeroed, not left holding the text
+    tables = _ordinary_tables(conn)
+    present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    removed: Dict[str, int] = {}
+    cleared: Dict[str, int] = {}
+    redacted: Dict[str, int] = {}
+    lineage = _lineage_of(conn, memory_id, present)
+    for table in ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3"):
+        if table in present:
+            try:
+                _bump(removed, table, conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (memory_id,)).rowcount)
+            except sqlite3.OperationalError:          # no vec0 on this connection: a keyword brain
+                pass
+    if PROVENANCE_TABLE in present:
+        _bump(removed, PROVENANCE_TABLE,
+              conn.execute(f"DELETE FROM {PROVENANCE_TABLE} WHERE memory_id = ?", (memory_id,)).rowcount)
+    _clear_references(conn, memory_id, tables, removed, cleared)
+    conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+    swept = _scrub_copies(conn, _TextMatcher([t for t in row if t]), lineage, redacted, removed)
+    if "memories_fts" in present:                     # a deleted row's terms stay in old segments until they are merged
+        conn.execute("INSERT INTO memories_fts(memories_fts) VALUES ('optimize')")
+    return {"rows_removed": removed, "references_cleared": cleared, "rows_redacted": redacted, **swept}
+
+
+def finish_purge(conn: sqlite3.Connection) -> bool:
+    """After the commit: the write-ahead log still holds the pages as they were. True when it
+    was emptied; False when a reader held it open, and its next checkpoint will do it."""
+    try:
+        busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    except sqlite3.Error:
+        return False
+    return bool(busy) and not busy[0]
 
 
 # --------------------------------------------------------------------------

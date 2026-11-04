@@ -86,20 +86,23 @@ that may fetch, and only when the snapshot is absent.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
 import sqlite3
+import sys
 import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
 CATALOGUE_PATH = Path(__file__).resolve().parent / "embedders.lock.json"
 LOCK_NAME = "embedder.lock.json"
 LOCK_HISTORY_NAME = "embedder.lock.history.jsonl"
+_LOCK_WRITING_RECEIPTS = ("init", "replace", "tier-set")
 CATALOGUE_SCHEMA = "voidloom.embedder-catalogue/1"
 LOCK_SCHEMA = "voidloom.embedder-lock/1"
 DEFAULT_TIER = "cpu"
@@ -481,6 +484,43 @@ def lock_path_for(target: Union[None, str, Path, sqlite3.Connection]) -> Path:
     return p / LOCK_NAME
 
 
+def lost_lock(data_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
+    """Should a lock be beside this database? The history file answers: every write of a lock
+    leaves a receipt there. {"tier": ...} when the last word on the lock says it exists, None
+    when no receipt ever wrote one, or a rollback took the brain back to having none. Only the
+    receipts that move the lock count: `re-embed` writes one on a brain that never had a lock.
+    A history with nothing readable in it still proves a lock was written."""
+    try:
+        raw = (Path(data_dir) / LOCK_HISTORY_NAME).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    readable = 0
+    locked: Optional[Dict[str, Any]] = None
+    for line in reversed(lines):
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        readable += 1
+        action = rec.get("action")
+        if locked is None:
+            if action == "tier-rollback" and not rec.get("restored_lock"):
+                return None
+            if action == "tier-rollback" or action in _LOCK_WRITING_RECEIPTS:
+                locked = {"tier": None}
+        if locked is not None and action in _LOCK_WRITING_RECEIPTS:
+            to = rec.get("to")
+            locked["tier"] = rec.get("tier") or (to.get("tier") if isinstance(to, dict) else None)
+            if locked["tier"]:
+                return locked
+    if locked is not None:
+        return locked
+    return {"tier": None} if lines and not readable else None
+
+
 def read_lock(path: Union[str, Path]) -> Dict[str, Any]:
     """Open and shape-check the install lock. LOCK_MISSING / LOCK_MALFORMED only:
     catalogue membership is the reader's and the loader's question, decided
@@ -489,6 +529,17 @@ def read_lock(path: Union[str, Path]) -> Dict[str, Any]:
     try:
         raw = p.read_bytes()
     except FileNotFoundError:
+        lost = lost_lock(p.parent)
+        if lost is not None:
+            tier = lost.get("tier") or "<tier>"
+            fix = f"python3 organs/claude_memory.py init --tier {tier}"
+            raise EmbedderLockError(
+                "LOCK_MISSING",
+                f"no embedder lock at {p}, and {LOCK_HISTORY_NAME} beside it records one (tier {tier}): "
+                f"this brain was locked and the file is gone, so nothing says which model its vectors "
+                f"came from. Restore the file from a backup, or run `{fix}` from the installed brain "
+                f"directory to write it again from the catalogue.",
+                lock=str(p), was_locked=True, tier=lost.get("tier"), retry=[fix])
         raise EmbedderLockError(
             "LOCK_MISSING",
             f"no embedder lock at {p}. A clean install writes it beside the database "
@@ -730,6 +781,43 @@ def require_loaded_hash(*, vec_table: Optional[str] = None, dim: Optional[int] =
 # The load-time check: bytes on disk vs the lock, then the catalogue.
 # --------------------------------------------------------------------------
 
+_HUB_FLAGS = (("huggingface_hub.constants", "HF_HUB_OFFLINE"), ("transformers.utils.hub", "_is_offline_mode"))
+_HUB_ENV = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
+_hub_closures = 0
+
+
+@contextlib.contextmanager
+def hub_closed() -> Iterator[None]:
+    """No hub traffic inside this block, whatever the environment says. A read loads from disk or
+    fails here, and the read degrades. Both libraries read their offline flag once, at import, so
+    a process that imported them already needs the flag set as well as the variables; one that has
+    not yet imported them takes it from the variables. Both are put back afterwards, so a later
+    fetch in this process (the install's) is not left offline."""
+    global _hub_closures
+    was_offline = hf_offline()
+    saved = {k: os.environ.get(k) for k in _HUB_ENV}
+    for k in _HUB_ENV:
+        os.environ[k] = "1"
+
+    def _flags(value: bool) -> None:
+        for module, attr in _HUB_FLAGS:
+            mod = sys.modules.get(module)
+            if mod is not None and hasattr(mod, attr):
+                setattr(mod, attr, value)
+    _flags(True)
+    _hub_closures += 1
+    try:
+        yield
+    finally:
+        _hub_closures -= 1
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        _flags(was_offline)
+
+
 def hf_offline() -> bool:
     """HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE, as huggingface_hub reads them: a
     reader under either never fetches, and this module says so TYPED
@@ -763,7 +851,8 @@ def _fetch_pinned(model_id: str, revision: str, *, allow_fetch: bool, weights_ha
         raise EmbedderLockError(
             "SNAPSHOT_ABSENT",
             f"no local snapshot for {what} {model_id}@{revision[:12]} under {hf_hub_cache()} and "
-            + ("this process is HF-offline (HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE)" if hf_offline()
+            + ("a read does not fetch" if _hub_closures
+               else "this process is HF-offline (HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE)" if hf_offline()
                else "fetching is disabled for this caller")
             + ". Fetch it, with the network: `python3 organs/model_fetch.py --db <brain>/claude_memory.db` "
               "(from the installed brain directory) -- or populate the cache yourself at exactly this revision.",

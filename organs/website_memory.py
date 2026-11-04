@@ -178,7 +178,13 @@ def _load_model():
 
 
 def _encode(text: str, prefix: str = "search_document") -> bytes:
-    model = _load_model()
+    if prefix == "search_query":                    # a read does not reach the network
+        _organs()
+        import embedder_lock
+        with embedder_lock.hub_closed():
+            model = _load_model()
+    else:
+        model = _load_model()
     import numpy as np
     query = f"{prefix}: {text}"
     vec = model.encode(query, normalize_embeddings=True)

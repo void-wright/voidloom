@@ -88,6 +88,7 @@ class ExitStatus(unittest.TestCase):
             for locked in (True, False):
                 if not locked:
                     (d / "embedder.lock.json").unlink()
+                    (d / "embedder.lock.history.jsonl").unlink()
                 with mock.patch.object(self.eu, "cmd_download", side_effect=AssertionError("it fetched")):
                     with self.assertRaises(self.eu.VerbRefused) as cm:
                         self.eu.cmd_full(type("A", (), {"db_path": str(db), "batch_size": 2})())

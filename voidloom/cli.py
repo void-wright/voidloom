@@ -633,8 +633,9 @@ def _tier_coherence(db_path: Optional[str]) -> Dict[str, Any]:
         for key in ("lock", "lock_path", "shipped", "snapshot_present", "catalogue_hash"):
             out[key] = desc.get(key)
         refusal = desc.get("refusal")
-        # The reader says LOCK_MISSING for a lock it cannot open, too. Only a file that is not there is lock-less.
-        out["lockless"] = bool(refusal and refusal.get("error") == "LOCK_MISSING"
+        # The reader says LOCK_MISSING for a lock it cannot open, too. Only a file that is not there, on a brain whose
+        # history never wrote one or rolled it back, is lock-less.
+        out["lockless"] = bool(refusal and refusal.get("error") == "LOCK_MISSING" and not refusal.get("was_locked")
                                and not os.path.lexists(out["lock_path"] or ""))
         if refusal and not out["lockless"]:
             out["refusal"] = refusal
@@ -2033,8 +2034,9 @@ def _status_lock(memory_write: Any, conn: sqlite3.Connection) -> Dict[str, Any]:
         return {"present": True, **memory_write.lock_identity(conn)}
     except Exception as e:
         code = getattr(e, "code", type(e).__name__)
-        path = getattr(e, "detail", {}).get("lock")
-        if code == "LOCK_MISSING" and not (path and os.path.lexists(path)):
+        detail = getattr(e, "detail", {})
+        path = detail.get("lock")
+        if code == "LOCK_MISSING" and not detail.get("was_locked") and not (path and os.path.lexists(path)):
             return {"present": False, "note": "no lock on this brain: it predates the lock, or its tier is not one "
                                               "the package ships. It is searched as a whole table"}
         return {"present": None, "refusal": code, "message": str(e)}

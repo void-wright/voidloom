@@ -13,7 +13,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
 echo "=== Wizard Library Anti-Recency Timer Setup ==="
 
