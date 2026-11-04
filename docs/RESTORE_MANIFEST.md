@@ -24,16 +24,16 @@ set, and the runtime-only set is **empty**. The real trap runs the other way:
 `claude_memory.py` has **zero** brain-local imports as direct children of the
 module body — all 20 sit inside module-level `try:` blocks. A naive scan that
 reads only top-level `import` statements finds **one** module and ships an
-engine with 33 missing organs, each of which degrades quietly.
+engine with 32 missing organs, each of which degrades quietly.
 
-## 1. The 34 modules one recall loads
+## 1. The 33 modules one recall loads
 
 All at the brain directory root. `*` marks the four loaded only while the
 recall *executes* — importing the engine alone does not pull them in.
 
 ```
 anti_recency          belief_cli            belief_engine         claude_memory
-communities           cross_tier_bridges    decision_units        embed_resolver
+communities           decision_units        embed_resolver
 embedding_upgrade*    gap_mapping           governance            hybrid_retrieval
 kind_taxonomy         least_privilege       memory_write          monthly_self_eval
 persona_lenses        ppr_recall            pre_cognitive_recall  procedural_memory
