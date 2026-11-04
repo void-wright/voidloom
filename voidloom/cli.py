@@ -519,11 +519,13 @@ def _keyword_only(metadata_value: Any) -> bool:
 def _unstamped_since_lock(conn: sqlite3.Connection, table: str, sidecar: str, locked_at: Any) -> int:
     """Vectors with no stamp on memories written after the lock. An unstamped vector from before the lock is legacy,
     which `init` pins and the search set admits; every writer stamps once a lock exists, so one written after it is a
-    write nobody vouched for. A lock with no readable time cannot tell the two apart, so every unstamped row counts."""
+    write nobody vouched for. Without a readable time on the lock or the row the two cannot be told apart, so every
+    unstamped row counts."""
     sql = (f"SELECT COUNT(*) FROM memories m WHERE m.id IN (SELECT memory_id FROM {table}) "
            f"AND m.id NOT IN (SELECT memory_id FROM {sidecar} WHERE vec_table = ?)")
     args: Tuple[Any, ...] = (table,)
-    if conn.execute("SELECT datetime(?)", (locked_at,)).fetchone()[0] is not None:
+    dated = any(r[1] == "created_at" for r in conn.execute("PRAGMA table_info(memories)").fetchall())
+    if dated and conn.execute("SELECT datetime(?)", (locked_at,)).fetchone()[0] is not None:
         sql += " AND datetime(m.created_at) >= datetime(?)"
         args += (locked_at,)
     return int(conn.execute(sql, args).fetchone()[0])

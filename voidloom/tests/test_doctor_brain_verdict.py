@@ -190,6 +190,14 @@ class LockedBrain(_Brain):
         self.assertIn("legacy_unverified: 2 of 3", coh["coverage_note"])
         self.assertNotIn("provenance_defects", coh)
 
+    def test_saboteur_a_lock_with_no_readable_time_counts_every_unstamped_row(self):
+        self.memory(whash=self.h)
+        self.memory(at=LONG_AGO)
+        lock = json.loads((self.d / "embedder.lock.json").read_text(encoding="utf-8"))
+        lock["locked_at"] = "whenever"
+        (self.d / "embedder.lock.json").write_text(json.dumps(lock), encoding="utf-8")
+        self.assertIs(self.doctor()["brain_healthy"], False)
+
     def test_control_a_brain_of_nothing_but_legacy_rows_is_healthy(self):
         for _ in range(3):
             self.memory(at=LONG_AGO)
