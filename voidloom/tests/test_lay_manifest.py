@@ -97,6 +97,8 @@ def expected_rule(src: str):
         plat = "posix"
     else:
         plat = "all"
+    if src.startswith("voidloom/tests/"):          # a checkout surface: ships, is not laid
+        return None, None, plat, "core"
     if "/" not in src:
         return None, None, plat, "core"
     if src.startswith("persona/skills/persona-forge/"):

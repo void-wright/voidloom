@@ -116,7 +116,8 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-UNIT_DIR = os.path.expanduser("~/.config/systemd/user")
+# The rule install/install_crons.sh writes under; an empty variable counts as unset, as `:-` reads it.
+UNIT_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "systemd", "user")
 
 # ---------------------------------------------------------------------------
 # THE WATCH LIST. The population is DECLARED (deny-listed by omission) so adding
@@ -182,16 +183,6 @@ WATCH: List[Dict[str, Any]] = [
          # is what tells an operator to go build a unit that already exists.
          invoker_modules=("belief_cli",),
          out_table="edge_proposals", out_clock="created_at",
-         stale_days=30, min_gap_seconds=3600),
-    dict(organ="cross_tier_bridges.discover_bridges",
-         module="cross_tier_bridges",
-         # The vec0 shadow table's key column is `id`, not `memory_id`; the first
-         # draft named memory_id, the read raised, and the input came back n/a.
-         # A predicate that cannot run reports UNMEASURABLE -- which is the right
-         # answer and the wrong predicate.
-         input_sql="SELECT COUNT(*) FROM memory_embeddings_v2_rowids",
-         input_desc="memories carrying a live-tier embedding (bridge candidates)",
-         out_table="cross_tier_bridges", out_clock="created_at",
          stale_days=30, min_gap_seconds=3600),
 ]
 

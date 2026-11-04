@@ -24,16 +24,16 @@ set, and the runtime-only set is **empty**. The real trap runs the other way:
 `claude_memory.py` has **zero** brain-local imports as direct children of the
 module body — all 20 sit inside module-level `try:` blocks. A naive scan that
 reads only top-level `import` statements finds **one** module and ships an
-engine with 33 missing organs, each of which degrades quietly.
+engine with 32 missing organs, each of which degrades quietly.
 
-## 1. The 34 modules one recall loads
+## 1. The 33 modules one recall loads
 
 All at the brain directory root. `*` marks the four loaded only while the
 recall *executes* — importing the engine alone does not pull them in.
 
 ```
 anti_recency          belief_cli            belief_engine         claude_memory
-communities           cross_tier_bridges    decision_units        embed_resolver
+communities           decision_units        embed_resolver
 embedding_upgrade*    gap_mapping           governance            hybrid_retrieval
 kind_taxonomy         least_privilege       memory_write          monthly_self_eval
 persona_lenses        ppr_recall            pre_cognitive_recall  procedural_memory
@@ -68,13 +68,13 @@ puts it), plus a second location people miss:
 `~/.cache/huggingface/modules/transformers_modules/`, where `trust_remote_code`
 compiles the embedder's custom code.
 
-### ⚠ A recall makes a network call
+### Loading the default reranker stays off the network
 
-`qwen_reranker.load_model` calls `from_pretrained` **without
-`local_files_only`**, unlike the Jina and bge paths which both honour the
-offline flag. A restored brain on an air-gapped host reaches out to the model
-CDN on **every recall** and fails there. Restore the cache, or set the reranker
-to the fallback, or accept the outbound call.
+`qwen_reranker` hashes the default reranker's snapshot against its catalogue pin
+before it loads, and runs the load with the hub closed, so that load reaches no model
+CDN. Bytes that do not match refuse, typed. A restored brain with no snapshot says
+`SNAPSHOT_ABSENT` and the recall carries on without that reranker: restore the cache
+to get it back.
 
 ## 3. SQL — zero opened, 27 shipped, one missing
 
@@ -131,14 +131,12 @@ name, not the CUDA runtime/driver pairing that `torch 2.6.0+cu124` implies.
 
 ## 6. Residual — what this manifest still misses
 
-**It was derived from ONE recall, and the dependency it hides is exactly the
-kind you cannot afford to hide.** `cross_tier_bridges` loads on every recall,
-but the second brain it can open is opened *only when a bridge row matches the
-result set*. The probe query matched none, so the audit hook recorded zero
-opens — and a purely mechanical derivation would omit that entire second
-database. A different query opens it. **One execution is not a closure over the
-input space.** Deriving this properly means running a corpus of queries, or
-reading `cross_tier_bridges` for its conditional edges.
+**It was derived from ONE recall, and that can hide a dependency.** A path that
+opens a file only when a row matches the result set records nothing on a query
+that matches none, so a purely mechanical derivation would omit that file. A
+different query opens it. **One execution is not a closure over the input space.**
+Deriving this properly means running a corpus of queries, or reading the code for
+its conditional edges.
 
 Three smaller ones:
 

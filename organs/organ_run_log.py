@@ -59,7 +59,17 @@ __all__ = ["DeclaredUnit", "LedgerRow", "ProbeError",
 
 # R5/C6 (class sweep, widened definition). Same shape as decision_units.py:69.
 DEFAULT_DB_PATH = str(Path(__file__).resolve().parent.parent / "claude_memory.db")
-DEFAULT_UNIT_DIR = os.path.join(str(Path.home()), ".config", "systemd", "user")
+
+
+def _default_unit_dir() -> str:
+    """${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user: the rule install/install_crons.sh writes under, so the reader
+    and the writer resolve one directory under any HOME and any XDG_CONFIG_HOME. An empty variable counts as unset,
+    as `:-` reads it."""
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(str(Path.home()), ".config")
+    return os.path.join(base, "systemd", "user")
+
+
+DEFAULT_UNIT_DIR = _default_unit_dir()
 DEFAULT_GLOB = "wizard-library-*.timer"
 
 #: Per-cadence-class lateness bounds, in seconds. DESSA: "1.5x is a daily/weekly

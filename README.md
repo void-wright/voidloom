@@ -247,9 +247,10 @@ fixes it. The installer runs this same check before it finishes.
 voidloom doctor
 ```
 
-Look for `"brain_healthy": true`. The report also shows whether the session
-hook is installed and has fired, whether the reranker is on (and why), and
-which compute the brain uses.
+Look for `"brain_healthy": true`; `reason` names what failed, and `host_healthy`
+answers for the hook settings separately, so a bad settings file does not read as a
+sick brain. The report also shows whether the session hook is installed and has
+fired, whether the reranker is on (and why), and which compute the brain uses.
 
 **3. Recall by meaning** (semantic tier). Store something, then ask for it in
 different words — the [60-second taste](#a-60-second-taste) above is exactly
@@ -284,6 +285,13 @@ voidloom approvals --mode     # show (or set: --mode auto|manual) who decides
 # Health, and who thinks overnight.
 voidloom doctor
 voidloom thinker status
+
+# What the index covers, and one memory in full (both read-only, no model).
+voidloom status
+voidloom inspect 42
+
+# A chosen few memories as plain JSON. A full copy is refused: `--all` says why.
+voidloom export --ids 42,43
 ```
 
 Add `--json` to any verb for a structured `{status, code, data}` envelope.
@@ -446,6 +454,20 @@ Keep that file wherever you keep backups. To restore, stop any scheduled jobs, p
 file back at `~/.claude/memory/claude_memory.db`, and run the self-check. Keep
 `embedder.lock.json` from the same folder with it: it says which model made the
 brain's vectors, and it travels with the brain.
+
+**If recall refuses with `NO_ROWS_FOR_LOCK` after a restore,** the lock beside the
+brain is not the one its vectors were made under: no active memory has a vector
+carrying that lock's checksum. Nothing is lost, and the refusal prints how many
+memories matched. Put back the `embedder.lock.json` that belongs to the backup, or
+embed the brain under the lock it has now:
+
+```bash
+cd ~/.claude/memory && venv/bin/python3 organs/embedding_upgrade.py --db-path claude_memory.db re-embed
+```
+
+Use the same command for a brain restored from before it had a lock. Its vectors
+stay searchable, but `re-embed` is what checks them against the lock.
+
 [`docs/RESTORE_MANIFEST.md`](./docs/RESTORE_MANIFEST.md) lists what else a brain
 needs to stand up on another machine.
 
@@ -535,6 +557,9 @@ tier runs through an interpreter outside the brain (no venv); see
   done. Add `--plan` to count the work first. The old vectors are kept:
   `voidloom tier rollback` goes back, and `voidloom tier cleanup --confirm <old table>`
   deletes them once you are sure.
+  `WIZARD_EMBED_MODEL` chooses the model at install only. After that it may only agree
+  with `embedder.lock.json`: set to another model, it stops the brain with
+  `WEIGHTS_MISMATCH`, so unset it and use `tier set`.
 
 ### Writing your own lines in the env file
 
