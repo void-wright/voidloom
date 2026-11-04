@@ -173,7 +173,8 @@ All notable changes to Voidloom are recorded here. The format follows
   The receipt prints counts per table and no content. **What it does not reach:** a separate memory
   that says the same thing is counted in `other_memories_sharing_text` and left alone; words a model
   reworded are not a copy it can see; a consolidated memory's vector still averages the deleted one
-  until its next rebuild; and backups are yours to handle. Without the variable nothing changes: a
+  until its next rebuild; the deleted memory's own vector stops being searchable, but sqlite-vec 0.1.6
+  leaves its bytes in the table's storage; and backups are yours to handle. Without the variable nothing changes: a
   soft archive. `seed delete-one` follows the same rule under the variable, and without it still
   refuses `HARD_DELETE_REFERENCED`.
 - **A deleted lock no longer reads healthy.** Every lock write leaves a receipt beside it, so a

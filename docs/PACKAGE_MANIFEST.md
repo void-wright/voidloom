@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-04T20:26:18Z from the working tree whose HEAD was `dc2677f`
+> Generated 2026-11-04T21:19:12Z from the working tree whose HEAD was `0f2f716`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 491 |
 | files hashed | 491 |
-| total bytes | 11029661 |
+| total bytes | 11029781 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -386,7 +386,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 135386 | `2a09b94c0b7e344d` |
+| `install/lay_manifest.json` | 135386 | `df42f0bd2bf46689` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15509 | `fb55c1f6b74f2ed1` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -545,12 +545,12 @@
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 451177 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 451297 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 30686 | `f2f17ddb019cf756` |
+| `CHANGELOG.md` | 30806 | `7e2832877f890509` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3050 | `fd1c349c71739b63` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |
