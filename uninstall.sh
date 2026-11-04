@@ -109,6 +109,19 @@ fi
 # 3. the command, the skills and the installed code ----------------------------------------------
 say ""
 say "3. The voidloom command, the installed skills and the installed code"
+# The sidecar directory's ownership marker goes with the install it names, so a later install elsewhere is not refused by
+# a brain that is gone. Before the code goes: the release runs from it. Only a marker naming THIS brain is removed.
+MARK_DIR="$(dirname "${WIZARD_ENV_FILE:-${ENV_DIR}/wizard-library-env}")"
+ENV_ORGAN="${BRAIN_DIR}/organs/voidloom_env.py"
+[ -f "$ENV_ORGAN" ] || ENV_ORGAN="${HERE}/organs/voidloom_env.py"
+if [ -f "${MARK_DIR}/.voidloom-owner" ] && [ -f "$ENV_ORGAN" ]; then
+    if [ "$YES" = 1 ]; then
+        [ "$("$PY" -B "$ENV_ORGAN" --release "$MARK_DIR" "$BRAIN_DIR" 2>/dev/null)" = "released" ] \
+            && say "  released  ${MARK_DIR}  (its ownership marker; the directory stays)"
+    else
+        say "  would release  ${MARK_DIR}  (its ownership marker, if it names this install; the directory stays)"
+    fi
+fi
 if [ -L "${LOCAL_BIN}/voidloom" ]; then
     act "${LOCAL_BIN}/voidloom" rm -f "${LOCAL_BIN}/voidloom"
 fi

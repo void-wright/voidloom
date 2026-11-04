@@ -773,8 +773,8 @@ def _model_ref_for(tier: str, model_id: str) -> Tuple[str, str]:
             return str(pin).strip(), "pinned"
     except Exception as e:                         # an import failure is not a pin
         logger.debug("memory_write: no code pin for tier %r (%s)", tier, e)
-    hub = (Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
-           / "hub" / ("models--" + model_id.replace("/", "--")))
+    import embedder_lock
+    hub = embedder_lock.hf_hub_cache() / ("models--" + model_id.replace("/", "--"))
     try:
         ref = (hub / "refs" / "main").read_text(encoding="utf-8").strip()
         if ref:

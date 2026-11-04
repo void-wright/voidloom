@@ -164,23 +164,17 @@ def detect_brain(db_path: Optional[str] = None) -> Dict[str, Any]:
 
 
 def _hf_cache_roots() -> List[Path]:
-    roots: List[Path] = []
-    hf_home = os.environ.get("HF_HOME")
-    if hf_home:
-        roots.append(Path(hf_home) / "hub")
-    hub = os.environ.get("HUGGINGFACE_HUB_CACHE")
-    if hub:
-        roots.append(Path(hub))
-    roots.append(Path.home() / ".cache" / "huggingface" / "hub")
-    # De-dup preserving order.
-    seen = set()
-    out = []
-    for r in roots:
-        rs = str(r)
-        if rs not in seen:
-            seen.add(rs)
-            out.append(r)
-    return out
+    """The one cache the models load from, by the package's one reader (organs/embedder_lock.py, stdlib-only, loaded
+    from its file so this module still imports nothing heavy and leaves sys.path alone). Listing other roots here
+    would report models present that the loader cannot see. With no organs laid, the library's default."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_vl_embedder_lock", _paths.organ_dir() / "embedder_lock.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return [mod.hf_hub_cache()]
+    except Exception:
+        return [Path.home() / ".cache" / "huggingface" / "hub"]
 
 
 def _engine_model_dirs() -> tuple:

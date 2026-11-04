@@ -61,6 +61,31 @@ All notable changes to Voidloom are recorded here. The format follows
   refused (`ENV_DIR_FOREIGN`); an unmarked one is used as before. **If your sidecars live in an
   older, differently named directory,** set `VOIDLOOM_ENV_DIR` or `WIZARD_ENV_FILE` to it, or
   opt in and mark it.
+- **Upgrading: an install whose env directory was found only by the old hidden-`$HOME` scan
+  must now say where it is.** Set `WIZARD_ENV_FILE` or `VOIDLOOM_ENV_DIR`, or mark the directory
+  with `python3 organs/voidloom_env.py --mark <dir>` and set `VOIDLOOM_LEGACY_DISCOVERY=1`.
+  Until then its sidecars are not found. Nothing changes for an env directory at
+  `~/.voidloom`.
+- **The installer marks the sidecar directory it creates, and only that one**, so a stranger
+  never marks anything by hand. The marker names the brain directory. A directory that was
+  already there is never marked, so every install made before this stays unmarked and
+  unprotected until its directory is created anew. An install meeting a directory marked for
+  another install refuses before it writes anything (`ENV_DIR_FOREIGN`, exit 2), and says how to
+  use a directory of its own. `uninstall.sh` removes the marker if it names this install and
+  keeps the directory, so a later install elsewhere is not refused; a directory released this
+  way stays unmarked. A marker is a label between installs, not a lock: another process of the
+  same user can copy it. Code run from a checkout is not the installed brain, so it refuses a
+  marked directory too: point `VOIDLOOM_ENV_DIR` at a directory of its own, or for one command
+  set `VOIDLOOM_INSTALL_ROOT=<brain directory>`. The test suite does the first by itself.
+- **One reader of the Hugging Face cache location.** It now follows the library's own order
+  (`HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, `HF_HOME`, `XDG_CACHE_HOME`, `~/.cache`), which it did
+  not for `XDG_CACHE_HOME`. The provenance stamp's model reference, the reranker's offline check
+  and `voidloom bootstrap`'s model census each read their own subset and could look in a
+  different cache from the one the models load from. The census now reports that one cache.
+- **`install.ps1` writes its env file where the organs look.** Its default was
+  `.wizard-library`, which the organs found only by the `$HOME` scan. A new Windows install now
+  uses `.voidloom`; one that already has the older file keeps it, and the installer says to set
+  `WIZARD_ENV_FILE`.
 - **The installer reads the brain's embedding table from the install lock first**, at every
   site that used to read the metadata row directly: the tier gate and post-condition of an
   ambient upgrade, the install record, the brain sanity check, Step C's declaration and the

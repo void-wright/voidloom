@@ -90,6 +90,24 @@ WHY DISCOVERY IS OPT-IN AND MARKED
     inside the other install's directory. To keep a legacy directory working,
     set ``WIZARD_ENV_FILE`` or ``VOIDLOOM_ENV_DIR`` to it, or opt in and mark it:
     ``python3 organs/voidloom_env.py --mark <dir>``.
+
+WHO MARKS, AND WHO THE CHECK SPEAKS FOR
+    The installer marks the directory it creates, and only that one: ownership
+    comes from the act of creation, so :func:`claim_env_dir` is an atomic
+    ``mkdir`` that writes the marker when, and only when, that ``mkdir`` made the
+    directory. It has no path that marks a directory which already existed.
+    :func:`release_owner_marker` removes a marker only if it names the given
+    root, and is what uninstall calls. Neither runs during resolution.
+
+    :func:`install_root` says where this code IS; :func:`acting_root` says which
+    install it speaks for, and every ownership check compares against that. They
+    differ in one case: the installer runs this module from the downloaded package
+    while serving the brain directory it is laying, so it sets
+    ``VOIDLOOM_INSTALL_ROOT`` for its own process tree. That is a claim which is
+    still checked: it passes only a directory whose marker names that same root.
+    It is never written to the env file, so scheduled jobs and the CLI answer
+    for themselves. A marker is a label between installs, not a lock: a process
+    of the same user can read it and copy it.
 """
 from __future__ import annotations
 
@@ -111,9 +129,14 @@ __all__ = [
     "ENV_FILE_NAME",
     "LEGACY_DISCOVERY_KEY",
     "OWNER_MARKER",
+    "INSTALL_ROOT_KEY",
     "install_root",
+    "acting_root",
     "owner_marker_ok",
+    "owner_state",
     "write_owner_marker",
+    "claim_env_dir",
+    "release_owner_marker",
     "EnvOwnershipRefused",
 ]
 
@@ -130,6 +153,9 @@ ENV_FILE_NAME = "wizard-library-env"
 
 #: Discovery of a legacy directory runs only when this is exactly "1".
 LEGACY_DISCOVERY_KEY = "VOIDLOOM_LEGACY_DISCOVERY"
+
+#: Which install this process speaks for, when that is not where its code sits (the installer sets it).
+INSTALL_ROOT_KEY = "VOIDLOOM_INSTALL_ROOT"
 
 #: The ownership marker a discovered directory must carry, and its schema.
 OWNER_MARKER = ".voidloom-owner"
@@ -197,24 +223,58 @@ def install_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def acting_root() -> Path:
+    """The install this process speaks for: ``VOIDLOOM_INSTALL_ROOT`` when set, else :func:`install_root`.
+
+    A relative value is refused rather than read against the process CWD."""
+    claimed = _clean_env(INSTALL_ROOT_KEY)
+    if not claimed:
+        return install_root()
+    p = Path(claimed).expanduser()
+    if not p.is_absolute():
+        raise ValueError("%s must be an absolute path, got %r" % (INSTALL_ROOT_KEY, claimed))
+    return p.resolve()
+
+
 def owner_marker_ok(d: Path) -> bool:
     """True only when ``d/.voidloom-owner`` is a regular file (not a symlink) whose JSON names THIS install's
     root. Reads that one small file and nothing else in ``d``. Any defect (absent, unreadable, too large, not
     JSON, wrong schema, another root) is False: an unproven owner is not this install."""
+    root = _marker_root(d)
+    return root is not None and root == acting_root()
+
+
+def _marker_root(d: Path) -> Optional[Path]:
+    """The root ``d``'s marker names, resolved; None for any marker that proves nothing."""
     import json
     m = d / OWNER_MARKER
     try:
         if m.is_symlink() or not m.is_file() or m.stat().st_size > 4096:
-            return False
+            return None
         doc = json.loads(m.read_text(encoding="utf-8"))
         if not isinstance(doc, dict) or doc.get("schema") != OWNER_SCHEMA:
-            return False
+            return None
         root = doc.get("install_root")
         if not isinstance(root, str) or not os.path.isabs(root):
-            return False
-        return Path(root).resolve() == install_root()
+            return None
+        return Path(root).resolve()
     except (OSError, ValueError):
-        return False
+        return None
+
+
+def owner_state(d: Path) -> str:
+    """``absent`` (no directory), ``unmarked``, ``own``, or ``foreign``. Reads the marker and nothing else."""
+    d = Path(d)
+    if not d.is_dir():
+        return "absent"
+    m = d / OWNER_MARKER
+    try:
+        present = m.is_symlink() or m.exists()
+    except OSError:
+        present = True
+    if not present:
+        return "unmarked"
+    return "own" if owner_marker_ok(d) else "foreign"
 
 
 def _refuse_if_foreign(d: Path, limb: str) -> None:
@@ -228,22 +288,46 @@ def _refuse_if_foreign(d: Path, limb: str) -> None:
         raise EnvOwnershipRefused(
             "%s: the %s sidecar directory %s carries %s naming another install (or one that cannot be read); this "
             "install (root %s) will not read or create its files there. Point VOIDLOOM_ENV_DIR at this install's own "
-            "directory." % (EnvOwnershipRefused.code, limb, d, OWNER_MARKER, install_root()))
+            "directory, or for one command act as the install that owns it: %s=<its root> <command>."
+            % (EnvOwnershipRefused.code, limb, d, OWNER_MARKER, acting_root(), INSTALL_ROOT_KEY))
 
 
-def write_owner_marker(d: Path) -> Path:
-    """Mark ``d`` as this install's sidecar directory, for the opt-in discovery limb. The ONE function that
-    writes here; resolution never calls it. The directory must already exist."""
+def write_owner_marker(d: Path, root: Optional[Path] = None) -> Path:
+    """Mark ``d`` as an install's sidecar directory (``root``, else :func:`acting_root`). The ONE function that
+    writes the marker; resolution never calls it. The directory must already exist. By hand this is the opt-in
+    route for a legacy directory; the installer reaches it only through :func:`claim_env_dir`."""
     import json
     d = Path(d)
     if not d.is_dir():
         raise FileNotFoundError("not a directory: %s" % d)
     m = d / OWNER_MARKER
     tmp = d / (OWNER_MARKER + ".tmp")
-    tmp.write_text(json.dumps({"schema": OWNER_SCHEMA, "install_root": str(install_root())}) + "\n",
-                   encoding="utf-8")
+    named = Path(root).resolve() if root is not None else acting_root()
+    tmp.write_text(json.dumps({"schema": OWNER_SCHEMA, "install_root": str(named)}) + "\n", encoding="utf-8")
     os.replace(str(tmp), str(m))
     return m
+
+
+def claim_env_dir(d: Path, root: Path) -> bool:
+    """Create ``d`` and mark it for ``root``. True when this call created it; False, with nothing written, when
+    it already existed. The ``mkdir`` is the test of creation, so no probe can go stale before the mark."""
+    d = Path(d)
+    d.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.mkdir(str(d))
+    except FileExistsError:
+        return False
+    write_owner_marker(d, root)
+    return True
+
+
+def release_owner_marker(d: Path, root: Path) -> bool:
+    """Remove ``d``'s marker only if it names ``root``. True when removed. The root need not exist any more."""
+    named = _marker_root(Path(d))
+    if named is None or named != Path(root).resolve():
+        return False
+    os.unlink(str(Path(d) / OWNER_MARKER))
+    return True
 
 
 def candidate_dirs() -> List[Path]:
@@ -375,6 +459,15 @@ if __name__ == "__main__":  # pragma: no cover - operator convenience
 
     if sys.argv[1:2] == ["--mark"] and len(sys.argv) == 3:
         print("marked: %s" % write_owner_marker(Path(sys.argv[2]).expanduser()))
+        raise SystemExit(0)
+    if sys.argv[1:2] == ["--owner-state"] and len(sys.argv) == 3:
+        print(owner_state(Path(sys.argv[2]).expanduser()))
+        raise SystemExit(0)
+    if sys.argv[1:2] == ["--claim"] and len(sys.argv) == 4:
+        print("created" if claim_env_dir(Path(sys.argv[2]), Path(sys.argv[3])) else "existed")
+        raise SystemExit(0)
+    if sys.argv[1:2] == ["--release"] and len(sys.argv) == 4:
+        print("released" if release_owner_marker(Path(sys.argv[2]), Path(sys.argv[3])) else "kept")
         raise SystemExit(0)
     names = sys.argv[1:] or ["wizard-library-env", "wizard-config.json",
                              "claude-oauth-token"]

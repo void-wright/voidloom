@@ -77,7 +77,11 @@ $DbPath     = Join-Path $BrainDir "claude_memory.db"
 $PriorInstall = Test-Path $DbPath
 $Settings   = Join-Path $ClaudeHome "settings.json"
 $ClaudeMd   = Join-Path $ClaudeHome "CLAUDE.md"
-$EnvFile    = if ($env:WIZARD_ENV_FILE) { $env:WIZARD_ENV_FILE } else { Join-Path $env:USERPROFILE ".wizard-library\wizard-library-env" }
+# The default is the directory the organs look in. An install made before this used .wizard-library, which the organs
+# found only by scanning $HOME; that file is kept and used here, and the end of this run says what the organs need to find it.
+$LegacyEnvFile = Join-Path $env:USERPROFILE ".wizard-library\wizard-library-env"
+$EnvFile    = if ($env:WIZARD_ENV_FILE) { $env:WIZARD_ENV_FILE } elseif (Test-Path -LiteralPath $LegacyEnvFile) { $LegacyEnvFile } else { Join-Path $env:USERPROFILE ".voidloom\wizard-library-env" }
+$env:VOIDLOOM_INSTALL_ROOT = $BrainDir   # which install this run serves (organs/voidloom_env.py acting_root); this process tree only
 $LogsDir    = Join-Path $BrainDir "logs"
 
 # CRUCIBLE-3 D9-F2 -- THE RERANKER THIS HOST WILL ACTUALLY LOAD.
@@ -717,7 +721,14 @@ if ($DryRun) {
 
     # F.3 — env file (no token shipped; teammate mints their own). Created ONLY when absent, by Write-VoidloomEnvFile
     # (above, between the env-writer markers): spelled, encoded and read back as the package's one reader reads it.
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $EnvFile) | Out-Null
+    # The installer marks the sidecar directory it creates, and no other: --claim is an atomic mkdir that marks only when
+    # it made the directory. A foreign marker refuses before the write.
+    $envDir = Split-Path -Parent $EnvFile
+    $envOrgan = Join-Path $PkgRoot "organs\voidloom_env.py"
+    if ((& $PySys -B $envOrgan --owner-state $envDir) -eq "foreign") { throw "ENV_DIR_FOREIGN: $envDir carries .voidloom-owner naming another install, and this run lays $BrainDir. Set WIZARD_ENV_FILE to your own directory, or run that install's uninstall first." }
+    & $PySys -B $envOrgan --claim $envDir $BrainDir | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "could not create the sidecar directory $envDir" }
+    if ($EnvFile -eq $LegacyEnvFile) { Warn "your env file is in the older directory $envDir, which the organs no longer scan for: set WIZARD_ENV_FILE to $EnvFile in your user environment." }
     $embed = if ($Tier1Ok) { $EmbedTier } else { "none" }
     $envHow = Write-VoidloomEnvFile -Path $EnvFile -Py $PySys -Reader (Join-Path $PkgRoot "install\env_file.py") -Comments @(
             "Voidloom env (teammate). NO secret is shipped in the package.",

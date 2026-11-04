@@ -133,6 +133,21 @@ if getattr(_subprocess.Popen.__init__, "__name__", "") != "_popen_init_detached"
 
 
 # ---------------------------------------------------------------------------
+# A CONTRIBUTOR'S OWN INSTALL: this checkout is not that install, and its marked sidecar directory refuses this code at
+# import. Nothing here should read those sidecars anyway, so the suite uses an empty directory of its own.
+# ---------------------------------------------------------------------------
+def _isolate_from_a_marked_home() -> None:
+    import tempfile
+    sys.path.insert(0, str(_ROOT / "organs"))
+    import voidloom_env
+    if not os.environ.get("VOIDLOOM_ENV_DIR") and voidloom_env.owner_state(Path.home() / ".voidloom") == "foreign":
+        os.environ["VOIDLOOM_ENV_DIR"] = tempfile.mkdtemp(prefix="vl_suite_sidecars_")
+
+
+_isolate_from_a_marked_home()
+
+
+# ---------------------------------------------------------------------------
 # THE HEADER — so a published count is explicable
 # ---------------------------------------------------------------------------
 def pytest_report_header(config):

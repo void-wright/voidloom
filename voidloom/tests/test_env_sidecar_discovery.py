@@ -29,7 +29,7 @@ import voidloom_env as ve  # noqa: E402
 # literals, not the module's constants: a module that lacks them must fail the tests, not their collection
 ENV_DIR, ENV_FILE, OPT_IN = "VOIDLOOM_ENV_DIR", "WIZARD_ENV_FILE", "VOIDLOOM_LEGACY_DISCOVERY"
 MARKER, SCHEMA = ".voidloom-owner", "voidloom.env-owner/1"
-KEYS = (ENV_DIR, ENV_FILE, OPT_IN)
+KEYS = (ENV_DIR, ENV_FILE, OPT_IN, "VOIDLOOM_INSTALL_ROOT")
 
 
 class SidecarResolution(unittest.TestCase):

@@ -182,6 +182,10 @@ CLAUDE_HOME="${WIZARD_CLAUDE_HOME:-${HOME}/.claude}"
 # iteration-3 reflection, item 2: measured, `--dry-run` said "Install into: rel_claude").
 case "$CLAUDE_HOME" in /*) ;; *) echo "[install] WIZARD_CLAUDE_HOME must be an ABSOLUTE path (it is written into the env file and into every unit): '${CLAUDE_HOME}'" >&2; exit 2 ;; esac; case "$CLAUDE_HOME" in *%*|*\?*|*#*) echo "[install] WIZARD_CLAUDE_HOME must not contain '%', '?' or '#': systemd expands '%' as a unit specifier in every unit line, and '?'/'#' end the path of the SQLite URIs the organs open the brain with (a read would open, and may CREATE, the path's prefix): '${CLAUDE_HOME}'" >&2; exit 2 ;; esac
 BRAIN_DIR="${CLAUDE_HOME}/memory"
+# Which install this run serves. Every helper below runs from the package, not from the brain directory, and a sidecar
+# directory marked for this brain must read as ours to them (organs/voidloom_env.py acting_root). This run's tree only:
+# it is never written to the env file, so the scheduled jobs and the CLI answer for themselves.
+export VOIDLOOM_INSTALL_ROOT="$BRAIN_DIR"
 SKILLS_DIR="${CLAUDE_HOME}/skills"
 DB_PATH="${BRAIN_DIR}/claude_memory.db"
 # THE SIDECAR ENV FILE -- ONE PATH, AND THE UNITS AGREE WITH IT.
@@ -823,6 +827,12 @@ is_system_python() { case "$1" in /usr/bin/python3) return 0 ;; *) return 1 ;; e
 # `auto` plan with no torch wheel (an Intel Mac on Python 3.13) does not stop the install -- Tier 1 is skipped, said.
 # ----------------------------------------------------------------------------
 ACCEL_PLAN_PY="${PKG_ROOT}/install/accelerator_plan.py"
+# THE SIDECAR DIRECTORY'S OWNER, checked before anything reads or writes it. A directory another install created carries
+# that install's marker; every read of it would refuse, and the one just below would refuse silently. Zero writes here.
+if [ "$("$PY_SYS" -B "${PKG_ROOT}/organs/voidloom_env.py" --owner-state "$ENV_DIR" 2>/dev/null)" = "foreign" ]; then
+    echo "[install] REFUSED (ENV_DIR_FOREIGN): ${ENV_DIR} carries ${ENV_DIR}/.voidloom-owner, which names another install, and this run lays ${BRAIN_DIR}. Nothing was written. To run alongside it, give this install its own directory: set WIZARD_ENV_FILE=<your dir>/wizard-library-env for this run, and set VOIDLOOM_ENV_DIR=<your dir> wherever this install runs. To replace it, run its uninstall.sh first: that releases the directory and keeps your sign-in." >&2
+    exit 2
+fi
 # where the gate is recorded (contract C3): the organs' own path for wizard-config.json -- WIZARD_CONFIG_PATH, else
 # organs/voidloom_env.py env_path (the file wizard_config.py reads), resolved once, here, so --print-write-set names it
 WIZARD_CONFIG_JSON="${WIZARD_CONFIG_PATH:-$("$PY_SYS" -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import voidloom_env; print(voidloom_env.env_path("wizard-config.json"))' "${PKG_ROOT}/organs" 2>/dev/null)}"
@@ -1052,11 +1062,24 @@ EOF
 }
 env_file_check
 
+# THE CLAIM: the installer marks the sidecar directory it creates, and no other. organs/voidloom_env.py claim_env_dir is an
+# atomic mkdir that marks only when that mkdir made the directory, so a directory that was already here stays as it was.
+# Called before the first write that could create it; the marker names the brain directory, whichever package runs this.
+ENV_DIR_CLAIMED=""
+claim_env_dir() {
+    [ "$DRY_RUN" -eq 1 ] && return 0
+    [ -z "$ENV_DIR_CLAIMED" ] || return 0
+    ENV_DIR_CLAIMED="$("$PY_SYS" -B "${PKG_ROOT}/organs/voidloom_env.py" --claim "$ENV_DIR" "$BRAIN_DIR")" \
+        || die "could not create the sidecar directory ${ENV_DIR}."
+    [ "$ENV_DIR_CLAIMED" = "created" ] && say "  sidecar directory created and marked for this install: ${ENV_DIR}"
+    return 0
+}
 # THE ONE COPY over the env file, shared by its two writes (iteration 5): the managed block (Step D, write_env_file) and the
 # owner's GPU answers (G1, g1_record). Only a verified, non-empty image is copied; the copy is compared byte for byte; a
 # failed or short copy puts the owner's file back from its pre-image (or leaves none where there was none) and says which.
 env_install_image() {   # env_install_image IMAGE WORKDIR WHAT
     local _img="$1" _wd="$2"
+    claim_env_dir
     run_argv mkdir -p "$(dirname "${ENV_FILE}")"
     [ -s "$_img" ] || { rm -rf "$_wd"; die "the verified image of ${ENV_FILE} is EMPTY; this write did not change the file."; }
     if [ -f "$ENV_FILE" ]; then
@@ -2558,6 +2581,7 @@ write_env_file() {
         say "  DRY: would write the managed block (PATH, WIZARD_LIBRARY_DB/HOME, WIZARD_EMBED_MODEL$([ -n "${GPU_DEVICE:-}" ] && echo ', CUDA pin')) into ${ENV_FILE} between the managed markers, preserving any user-added lines outside them."
         return 0
     fi
+    claim_env_dir
     run_argv mkdir -p "$(dirname "${ENV_FILE}")"
     # THE WRITE, CHECKED AGAINST SYSTEMD'S READING OF THE FILE AS WRITTEN (env-file writer pass, W1). This used to be
     # three writers with three reading rules of their own: a block REPLACER (`open(encoding="utf-8").read().
@@ -3131,6 +3155,7 @@ fi
 # or in the literal-binding test's runtime allowlist.
 # ----------------------------------------------------------------------------
 step "STEP A — Laying files into ${CLAUDE_HOME}"
+claim_env_dir
 LAY_PY="${PKG_ROOT}/install/lay.py"
 LAY_MANIFEST="${PKG_ROOT}/install/lay_manifest.json"
 [ -f "$LAY_PY" ] || die "package incomplete — install/lay.py not found in ${PKG_ROOT}."
@@ -3430,8 +3455,8 @@ if _missing:
 for _u in _unmeasurable:
     sys.stderr.write(f"UNMEASURABLE: {_u}\n")
 n = c.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived,0)=0").fetchone()[0]
-_t, _src, _ref = embed_resolver.declared_table(c)
-active = _t or (f"(unreadable: {_ref})" if _ref else "(none)")
+_t, _src, _lock_refusal = embed_resolver.declared_table(c)
+active = _t or (f"(unreadable: {_lock_refusal})" if _lock_refusal else "(none)")
 if want_tab not in tabs and active != "(none)":
     sys.stderr.write(f"WARN: chosen embed table {want_tab} not in DB (active={active}); semantic recall may differ.\n")
 c.close()
@@ -4458,6 +4483,12 @@ write_env_file
 accel_record
 gate_record
 note_step "env"
+# The state the scheduled jobs and the CLI will see: the laid code, with this run's claim of identity taken away. A
+# directory this run marked must read as theirs, or every one of them would refuse at its first read.
+if [ "$DRY_RUN" -ne 1 ] && [ "$ENV_DIR_CLAIMED" = "created" ]; then
+    _own="$(env -u VOIDLOOM_INSTALL_ROOT "$PY_SYS" -B "${BRAIN_DIR}/organs/voidloom_env.py" --owner-state "$ENV_DIR" 2>&1)"
+    [ "$_own" = "own" ] || die "the laid code does not read ${ENV_DIR} as this install's (it reads: ${_own}); its scheduled jobs and CLI would refuse there."
+fi
 if [ "$DRY_RUN" -eq 1 ]; then
     say "  DRY: ${ENV_FILE} would be written (mode 0600); nothing was written."
 else

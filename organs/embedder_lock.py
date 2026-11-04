@@ -247,17 +247,23 @@ def output_determining_files(snapshot_dir: Union[str, Path]) -> List[str]:
 
 
 def hf_hub_cache() -> Path:
-    """The cache huggingface_hub itself reads, in ITS precedence: HF_HUB_CACHE,
-    then HUGGINGFACE_HUB_CACHE, then HF_HOME/hub, then ~/.cache/huggingface/hub.
-    (F8: the round-1 reader read HF_HOME only, so on a host with HF_HUB_CACHE set
-    the loader and the stamp read different caches.)"""
-    for var in ("HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE"):
+    """The cache huggingface_hub itself reads, in ITS precedence (huggingface_hub/constants.py at the pinned
+    version): HF_HUB_CACHE, then HUGGINGFACE_HUB_CACHE, then HF_HOME/hub, then $XDG_CACHE_HOME/huggingface/hub, then
+    ~/.cache/huggingface/hub. The ONE reader of these variables in this package: two readers read two caches.
+
+    One deliberate difference: a variable set to the empty string counts as unset here, where the library would
+    take it as a relative path."""
+    def _set(var: str) -> Optional[Path]:
         v = (os.environ.get(var) or "").strip()
-        if v:
-            return Path(v).expanduser()
-    home = (os.environ.get("HF_HOME") or "").strip()
-    root = Path(home).expanduser() if home else Path.home() / ".cache" / "huggingface"
-    return root / "hub"
+        return Path(os.path.expandvars(os.path.expanduser(v))) if v else None
+
+    hub = _set("HF_HUB_CACHE") or _set("HUGGINGFACE_HUB_CACHE")
+    if hub:
+        return hub
+    home = _set("HF_HOME")
+    if home:
+        return home / "hub"
+    return (_set("XDG_CACHE_HOME") or Path.home() / ".cache") / "huggingface" / "hub"
 
 
 def snapshot_dir_for(model_id: str, revision: str, *, hub: Optional[Path] = None) -> Optional[Path]:

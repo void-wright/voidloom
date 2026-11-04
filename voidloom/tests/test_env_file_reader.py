@@ -1572,6 +1572,8 @@ class TestTheWindowsWriterIsTheReadersToo(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(str(tmp), ignore_errors=True))
         (tmp / "pkg" / "install").mkdir(parents=True)
         shutil.copy2(str(READER), str(tmp / "pkg" / "install" / "env_file.py"))
+        (tmp / "pkg" / "organs").mkdir()
+        shutil.copy2(str(READER.parent.parent / "organs" / "voidloom_env.py"), str(tmp / "pkg" / "organs" / "voidloom_env.py"))
         w = subprocess.run(["wslpath", "-w", str(tmp)], capture_output=True, text=True).stdout.strip()
         if not w:
             self.skipTest("wslpath gave no Windows path for the scratch dir: UNMEASURABLE")
@@ -1596,6 +1598,9 @@ class TestTheWindowsWriterIsTheReadersToo(unittest.TestCase):
         p = subprocess.run([ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", w + "\\run.ps1"],
                            capture_output=True, timeout=300, stdin=subprocess.DEVNULL)
         said = (p.stdout + p.stderr).decode("utf-8", "replace")
+        # the sidecar directory F.3 created carries its marker; the one that was already there does not
+        self.assertTrue((tmp / "A dir" / ".voidloom-owner").is_file(), said[-800:])
+        self.assertFalse((tmp / "D[1]" / ".voidloom-owner").exists(), "install.ps1 marked a directory it did not create")
         ef = _reader()
         for c, brain in cases.items():
             f = tmp / ("D[1]" if c == "D" else c + " dir") / "wizard-library-env"

@@ -121,14 +121,9 @@ def _reranker_offline_ok(repo_id: str) -> bool:
         if v is not None and v.strip().lower() in ("1", "true", "yes", "on"):
             return True
     try:
-        cache_root = Path(
-            os.environ.get("HF_HOME")
-            or os.environ.get("HUGGINGFACE_HUB_CACHE")
-            or (Path.home() / ".cache" / "huggingface")
-        )
-        hub = cache_root / "hub" if (cache_root / "hub").exists() else cache_root
+        import embedder_lock
         marker = "models--" + repo_id.replace("/", "--")
-        cached = hub / marker / "snapshots"
+        cached = embedder_lock.hf_hub_cache() / marker / "snapshots"
         if cached.exists() and any(cached.iterdir()):
             return True
     except Exception:

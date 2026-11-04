@@ -209,6 +209,11 @@
      "why": "the env file's directory (${HOME}/.voidloom by default; WIZARD_ENV_FILE overrides), created if absent"
     },
     {
+     "path": "${ENV_DIR}/.voidloom-owner",
+     "kind": "file",
+     "why": "the ownership marker naming this install's brain directory, written ONLY when this run created ${ENV_DIR} (organs/voidloom_env.py claim_env_dir); a directory that already existed is never marked; uninstall.sh removes it when it names this install"
+    },
+    {
      "path": "${ENV_FILE}",
      "kind": "file",
      "why": "PATH + WIZARD_LIBRARY_HOME/DB + WIZARD_EMBED_MODEL (+ CUDA pin) between managed markers; mode 0600; user lines outside the markers survive"
