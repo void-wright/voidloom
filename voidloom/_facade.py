@@ -81,6 +81,10 @@ def _embedding_capability_error(payload: str) -> bool:
     if not payload:
         return False
     low = payload.lower()
+    # The pin is not on this disk and this process may not fetch it: the capability is absent. The integrity refusals
+    # (WEIGHTS_MISMATCH, LOCK_MALFORMED, ...) are not, and a brain the lock does not vouch for gets no keyword fallback.
+    if '"error": "snapshot_absent"' in low or "snapshot_absent:" in low:
+        return True
     if "embedding model" not in low and "sentence_transformers" not in low:
         return False
     return any(k in low for k in ("failed to load", "couldn't connect", "could not connect",
@@ -419,6 +423,39 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
                         lite_fn(ns)
                 except SystemExit as se:
                     raised_exit = se.code
+        except Exception as te:
+            # The engine's TYPED refusals (`.code`) reach this in-process call as exceptions, never as the SystemExit
+            # `main()` makes of them. SNAPSHOT_ABSENT means the capability is absent, so the front door degrades exactly
+            # as it does for an ImportError, stamped. Every other typed code is an integrity refusal: returned as the
+            # engine's own envelope, never masked by a keyword answer, and never `unhandled`.
+            _code = getattr(te, "code", None)
+            if not _code:
+                raise                                       # not ours to rephrase
+            if _code != "SNAPSHOT_ABSENT" or not _tier1_unavailable(OSError(str(te))):
+                payload = {"status": "error", "error": _code, "action": cmd_name, "message": str(te)}
+                cov = getattr(te, "coverage", None)
+                if cov is not None and hasattr(cov, "as_dict"):
+                    payload["coverage"] = cov.as_dict()
+                for k, v in (getattr(te, "detail", None) or {}).items():
+                    payload.setdefault(k, v)
+                buf = io.StringIO(json.dumps(payload) + "\n")
+                raised_exit = 1
+            else:
+                lite = _import_tier0()
+                lite_fn = getattr(lite, f"cmd_{cmd_name.replace('-', '_')}", None) if lite else None
+                if lite_fn is None:
+                    raise
+                setattr(lite, "_VOIDLOOM_TIER0", True)
+                setattr(lite, "_VOIDLOOM_TIER1_ERROR", f"{type(te).__name__}: {te}")
+                engine = lite
+                buf = io.StringIO()
+                raised_exit = None
+                with _engine_db(lite, db_path):
+                    try:
+                        with contextlib.redirect_stdout(buf):
+                            lite_fn(ns)
+                    except SystemExit as se3:
+                        raised_exit = se3.code
 
     out = buf.getvalue().strip()
     parsed = _parse_last_json(out)

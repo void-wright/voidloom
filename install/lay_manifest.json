@@ -7,25 +7,25 @@
   ],
   "counts": {
    "by_component": {
-    "core": 437,
+    "core": 438,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 392,
+    "all": 393,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 424,
+    "brain": 425,
     "home": 2,
     "null": 11,
     "skills": 18
    }
   },
-  "derived_at_head": "5d28e16",
+  "derived_at_head": "7d16060",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 455,
+  "entries": 456,
   "platforms": [
    "all",
    "posix",
@@ -145,13 +145,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 22693,
+   "bytes": 23007,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "90de5c65b33496b9322f3fde7ae6ce03aecc8e3aa0a03a213b568008641703b7",
+   "sha256": "d10621a47b60f6c3e273e45a905d288e266c192fa66cce074d5354a0d57af211",
    "src": "CHANGELOG.md"
   },
   {
@@ -771,7 +771,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "9322255bb1dfd2806f730a6e28b133fbb1759435949aabf73d4f2ee8cec2583f",
+   "sha256": "20a4aead221c8a0c5b8c4f975cd8cf95b01f245c9e8d6bde1e77af2ee29c19b1",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -2835,13 +2835,13 @@
    "src": "voidloom/_bootstrap.py"
   },
   {
-   "bytes": 38539,
+   "bytes": 40811,
    "component": "core",
    "dst": "voidloom/_facade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "c51738a45510e0f427024f09b735c10cf75105ab7e4f6a6e72607f49a0e77123",
+   "sha256": "56e1f7823a5c5827a87e1f9cfed81918be282be57826393943ff748a4f1e25f6",
    "src": "voidloom/_facade.py"
   },
   {
@@ -3533,6 +3533,16 @@
    "root": "brain",
    "sha256": "2b9b097840fdfcaf9b3265a10104c9cc6efd8b859f4ebc432f307865814b9818",
    "src": "voidloom/tests/test_first_night_is_derived.py"
+  },
+  {
+   "bytes": 4754,
+   "component": "core",
+   "dst": "voidloom/tests/test_front_door_refusals.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "441075ca77b283859fe457158513f71b79b5b8b4187b41549e16502be2d2b9f9",
+   "src": "voidloom/tests/test_front_door_refusals.py"
   },
   {
    "bytes": 9287,

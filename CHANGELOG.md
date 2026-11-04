@@ -77,6 +77,10 @@ All notable changes to Voidloom are recorded here. The format follows
   same user can copy it. Code run from a checkout is not the installed brain, so it refuses a
   marked directory too: point `VOIDLOOM_ENV_DIR` at a directory of its own, or for one command
   set `VOIDLOOM_INSTALL_ROOT=<brain directory>`. The test suite does the first by itself.
+- **`voidloom recall` and `store` keep the engine's refusals.** With the model's files missing
+  they printed `unhandled` and lost the fix. They now answer from keyword recall, stamped
+  `degraded` with the reason; an integrity refusal such as `WEIGHTS_MISMATCH` returns its own
+  code and gets no keyword answer.
 - **One reader of the Hugging Face cache location.** It now follows the library's own order
   (`HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, `HF_HOME`, `XDG_CACHE_HOME`, `~/.cache`), which it did
   not for `XDG_CACHE_HOME`. The provenance stamp's model reference, the reranker's offline check

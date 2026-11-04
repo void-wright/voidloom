@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-04T02:34:08Z from the checkout at `5d28e16`.
+> Generated 2026-11-04T03:04:44Z from the checkout at `7d16060`.
 > **The git index is the declaration.** There is no second exclusion list to
 > drift from it: a file that must not ship is untracked, so it cannot appear
 > here, in the installer's copy set, or in a package. The previous generator
@@ -10,9 +10,9 @@
 
 | | |
 |---|---|
-| files tracked | 455 |
-| files hashed | 455 |
-| total bytes | 10552011 |
+| files tracked | 456 |
+| files hashed | 456 |
+| total bytes | 10559654 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -99,7 +99,7 @@
 | `organs/wizard_config.py` | 42944 | `56205200da3f5ebc` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  183 files, 2861226 bytes
+### `voidloom` — The CLI facade  ·  184 files, 2868252 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -110,7 +110,7 @@
 | `voidloom/_approvals_faces.py` | 42385 | `ece04bc6d7c96606` |
 | `voidloom/_batch.py` | 14186 | `e01b2df0460834f0` |
 | `voidloom/_bootstrap.py` | 14796 | `ebe03d3c22d42a1c` |
-| `voidloom/_facade.py` | 38539 | `c51738a45510e0f4` |
+| `voidloom/_facade.py` | 40811 | `56e1f7823a5c5827` |
 | `voidloom/_guard.py` | 11713 | `11461a1e7bd1ef77` |
 | `voidloom/_paths.py` | 6524 | `6822733e57600c1a` |
 | `voidloom/cli.py` | 145945 | `d18f0c089fd8e9ed` |
@@ -180,6 +180,7 @@
 | `voidloom/tests/test_env_file_reader.py` | 111558 | `4c43b8773e08e15f` |
 | `voidloom/tests/test_env_sidecar_discovery.py` | 8371 | `86acb3159b1d2b62` |
 | `voidloom/tests/test_first_night_is_derived.py` | 10458 | `2b9b097840fdfcaf` |
+| `voidloom/tests/test_front_door_refusals.py` | 4754 | `441075ca77b28385` |
 | `voidloom/tests/test_fts_any_word.py` | 9287 | `7c6676405f55cef5` |
 | `voidloom/tests/test_fts_lone_punctuation_r2.py` | 962 | `f07d0702b995c511` |
 | `voidloom/tests/test_gap_research_non_answer_r1.py` | 7580 | `d13acb6dcd505e6c` |
@@ -331,7 +332,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 952597 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 952900 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -348,7 +349,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 132741 | `2899781ff9244ac6` |
+| `install/lay_manifest.json` | 133044 | `befb5f6c2d457b62` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15439 | `87142e524d44dceb` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -498,21 +499,21 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19332 | `6af8d4be38a85697` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `9322255bb1dfd280` |
+| `docs/LAYOUT.md` | 8372 | `20a4aead221c8a0c` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 34485 | `871d4de49b2980b1` |
+| `docs/PACKAGE_MANIFEST.md` | 34485 | `5dda7e1c6641ec94` |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9747 | `64c120fbc605bb65` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 435146 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 435460 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 22693 | `90de5c65b33496b9` |
+| `CHANGELOG.md` | 23007 | `d10621a47b60f6c3` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3050 | `7f02f5fbef807e29` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |
