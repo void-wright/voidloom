@@ -270,8 +270,24 @@ def _fts_query(query: str, vocabulary: Iterable[str]) -> str:
     return " OR ".join(f'"{t}"' for t in toks[:24])
 
 
-def _cosines(conn: sqlite3.Connection, table: str, query_vec: bytes, ids: Sequence[int]) -> Dict[int, float]:
+def _searchable(conn: sqlite3.Connection, ids: Sequence[int]) -> List[int]:
+    """The ids a search may read a vector for. A channel is a search: a row in the table under another
+    model's checksum has the width and none of the meaning. The reader's refusal is the caller's to report."""
+    import memory_write
     ids = [int(i) for i in ids]
+    if not ids:
+        return []
+    flt = memory_write.provenance_filter(conn)
+    q = ",".join("?" * len(ids))
+    return [int(r[0]) for r in conn.execute(f"SELECT m.id FROM memories m WHERE m.id IN ({q}) AND {flt.member_sql('m')}",
+                                            (*ids, *flt.search_set_params)).fetchall()]
+
+
+def _cosines(conn: sqlite3.Connection, table: str, query_vec: bytes, ids: Sequence[int]) -> Dict[int, float]:
+    try:
+        ids = _searchable(conn, ids)
+    except Exception:
+        return {}
     if not ids:
         return {}
     q = ",".join("?" * len(ids))
@@ -416,13 +432,14 @@ def build(conn: sqlite3.Connection, *, query: str, query_vec: Optional[bytes], r
             eids = sorted(elig)
             cand: Dict[int, Set[str]] = {}
             if "vector_subset" in spec.get("recipe", ()) and table and query_vec is not None:
-                q = ",".join("?" * len(eids))
                 try:
-                    for (mid, _dist) in conn.execute(
+                    vids = _searchable(conn, eids)
+                    q = ",".join("?" * len(vids))
+                    for (mid, _dist) in (conn.execute(
                             f"SELECT memory_id, distance FROM {table} WHERE embedding MATCH ? AND k = 10 "
-                            f"AND memory_id IN ({q})", (query_vec, *eids)).fetchall():
+                            f"AND memory_id IN ({q})", (query_vec, *vids)).fetchall() if vids else ()):
                         cand.setdefault(int(mid), set()).add("vector")
-                except sqlite3.Error as e:
+                except Exception as e:
                     d["vector_error"] = str(e)[:200]
             if "fts_body" in spec.get("recipe", ()):
                 fq = _fts_query(query, spec.get("fts_header_vocabulary", ()))

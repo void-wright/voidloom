@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 471,
+    "core": 472,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 426,
+    "all": 427,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 254,
     "home": 2,
-    "null": 215,
+    "null": 216,
     "skills": 18
    }
   },
-  "derived_at_head": "4dadff2",
+  "derived_at_head": "2d23c1a",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 489,
+  "entries": 490,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 204,
+     "count": 205,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 215
+   "total": 216
   },
   "platforms": [
    "all",
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 30514,
+   "bytes": 30686,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "58184d7df9d2d11f53b185882e9cac6e4fc20ee74ad3e3c1d3f6cf4f8f028a24",
+   "sha256": "f2f17ddb019cf7563eacce535361056b920335eb2808e7025a8139eef0ea25fd",
    "src": "CHANGELOG.md"
   },
   {
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "87fe3a0463ff25971a682511895725a7444e8875e54d4be945db26394d01259f",
+   "sha256": "630dc53ed293aa2a1d7e3d659772c2f7f83cf127bff894e4fbfec1562fae5b28",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1987,13 +1987,13 @@
    "src": "organs/qwen_reranker.py"
   },
   {
-   "bytes": 29263,
+   "bytes": 30058,
    "component": "core",
    "dst": "organs/recall_channels.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a42ae7fdeb84e5acec359ed0e4f01bf126813b1e831a929a9b57cf5037fad436",
+   "sha256": "c906950d18a0974b0bc2cc142452816875008624cdcf602ecb19583738db8426",
    "src": "organs/recall_channels.py"
   },
   {
@@ -3277,6 +3277,16 @@
    "src": "voidloom/tests/test_centroid_survives_a_change_of_vectors.py"
   },
   {
+   "bytes": 3423,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "40121be92eb2cc6e5a5f3bc42e6705d4d540b52346b02937910e8bf56ce85ab9",
+   "src": "voidloom/tests/test_channels_read_the_search_set.py"
+  },
+  {
    "bytes": 10567,
    "component": "core",
    "dst": null,
@@ -4017,13 +4027,13 @@
    "src": "voidloom/tests/test_lockless_coverage_counts_reach.py"
   },
   {
-   "bytes": 6713,
+   "bytes": 7250,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "07443a3ad2caf2d56b805c7ec982063ed9897ea1d2558844eba37cd57a250405",
+   "sha256": "1e18703bdc47e06f78231bdef681d12f19690daeba6c28a7a4eb20c6d0403d86",
    "src": "voidloom/tests/test_lost_lock.py"
   },
   {

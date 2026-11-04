@@ -67,6 +67,17 @@ class LockWrittenThenGone(_Lost):
         env = mw.coverage_envelope(self.conn)
         self.assertEqual((env["ok"], env["error"], env["matched"]), (False, "LOCK_MISSING", 0), env)
 
+    def test_saboteur_a_vector_recall_returns_no_row_from_the_unvouched_table(self):
+        import hybrid_retrieval as hr
+        q = bytes(4 * self.DIM)
+        try:
+            rows, cov = hr.recall_hybrid_with_coverage(self.conn, "thing", q, top_k=5, mode="vector-only")
+        except el.EmbedderLockError as e:
+            self.assertEqual(e.code, "LOCK_MISSING")
+            return
+        self.assertEqual(rows, [], "the whole table was searched in the lock's place")
+        self.assertEqual(cov["error"], "LOCK_MISSING", cov)
+
     def test_saboteur_the_refusal_names_the_tier_and_a_command(self):
         with self.assertRaises(el.EmbedderLockError) as cm:
             el.resolve(self.db)

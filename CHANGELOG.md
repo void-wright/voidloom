@@ -187,6 +187,8 @@ All notable changes to Voidloom are recorded here. The format follows
   with the command that fetches them, and the front door answers by keyword and says why. Recall no
   longer fetches a reranker either, and a recall with none says so in `coverage.reranker`. `install`,
   `tier set`, `re-embed` and a store still fetch.
+- **A recall's side channels read only the search set.** A dream or playbook row whose vector carries
+  another model's checksum no longer reaches a channel by similarity.
 - **`voidloom doctor` judges the brain by what the search reads.** Coverage is matched/total by stamp,
   not a row count, and `reason` names what failed. `host_healthy` answers for the hook settings
   separately, so a bad settings file no longer reads as a sick brain. A refused lock or stamps under
