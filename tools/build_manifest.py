@@ -363,7 +363,9 @@ def write_package_manifest(root: Path) -> int:
     L = [
         "# PACKAGE_MANIFEST — the inventory of what ships",
         "",
-        f"> Generated {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} from the checkout at `{head}`.",
+        f"> Generated {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} from the working tree whose HEAD was `{head}`",
+        "> (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;",
+        "> `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).",
         "> **The git index is the declaration.** There is no second exclusion list to",
         "> drift from it: a file that must not ship is untracked, so it cannot appear",
         "> here, in the installer's copy set, or in a package. The previous generator",
