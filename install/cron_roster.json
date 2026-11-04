@@ -141,7 +141,7 @@
    "arm": "armed-by-default",
    "thinks": false,
    "claude_credential": "none",
-   "why": "the SENSOR for this roster (#17678, the pairing rule): hourly, local, no LLM; it records every armed unit's runs so silence is a row, not a guess",
+   "why": "the SENSOR for this roster (#17678, the pairing rule): hourly, local, no LLM; it records every armed unit's runs so silence is a row, not a guess. Its DECLARED set is the ARMED set: the unit files install_crons.sh wrote, read from the same ${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user",
    "exec": "organs/organ_run_log.py observe --db {DB}",
    "systemd": "*-*-* *:05:00",
    "launchd": "hourly:05",

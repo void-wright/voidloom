@@ -135,18 +135,40 @@ def platform_of(src: str) -> str:
     return "all"
 
 
+# ---------------------------------------------------------------------------
+# NOT LAID, BY DECLARATION: each prefix with its reason. Named here, carried in the manifest's `_meta.not_laid` with
+# its count, and printed by lay.py as `ships_not_laid`. Nothing under a prefix reaches a user's brain directory; every
+# one of these files still ships in the repository.
+# ---------------------------------------------------------------------------
+NOT_LAID = {
+    "voidloom/tests/": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` "
+                       "and skips or refuses outside a checkout, so it is run from the package, never from a laid "
+                       "brain; and its gate files necessarily carry the needles and planted faults they gate. "
+                       "Runtime self-tests live in organs/.",
+}
+
+
+def not_laid_reason(src: str):
+    """The declared reason a path is not laid, or None when it is laid."""
+    for prefix, why in NOT_LAID.items():
+        if src.startswith(prefix):
+            return why
+    return None
+
+
 def lay_rule(src: str):
     """(root, dst, platform, component) for one `git ls-files` path.
 
     root None means the file ships but is not laid -- the front door files that
     live at the repository root (README, LICENSE, NOTICE, install.sh, .gitignore),
-    and the developer history NAMED in HISTORY_SHIPS_NOT_LAID (round 2, M4).
+    the developer history NAMED in HISTORY_SHIPS_NOT_LAID (round 2, M4), and every
+    path under a NOT_LAID prefix above.
     Laying install.sh INTO the brain directory would invite running it from
     there, which copies the brain onto itself; a .gitignore in a user's
     directory is a side effect nobody asked for. So: shipped, not laid.
     """
     plat = platform_of(src)
-    if "/" not in src:
+    if "/" not in src or not_laid_reason(src) is not None:
         return None, None, plat, "core"
     if src in HISTORY_SHIPS_NOT_LAID:          # by name (round 2, M4): shipped, not laid
         return None, None, plat, "core"
@@ -287,6 +309,13 @@ def lay_manifest_doc(entries, head):
             "self_entries_reason": "a manifest cannot carry its own hash, and the two derived "
                                    "inventories cannot hash each other without a cycle; "
                                    "lay.py lays both and reports them unhashed by name",
+            "not_laid": {
+                "front_door": sorted(e["src"] for e in entries if e["root"] is None and "/" not in e["src"]),
+                "declared": {prefix: {"reason": why,
+                                      "count": sum(1 for e in entries if e["root"] is None and e["src"].startswith(prefix))}
+                             for prefix, why in NOT_LAID.items()},
+                "total": sum(1 for e in entries if e["root"] is None),
+            },
         },
         "entries": entries,
     }
@@ -320,7 +349,10 @@ def write_package_manifest(root: Path) -> int:
             continue
         b = p.read_bytes()
         total += len(b)
-        rows.append((rel, len(b), hashlib.sha256(b).hexdigest()))
+        # This file's own row cannot carry its own hash (this emission rewrites it): it says so, rather than print a
+        # digest of the previous emission that a reader would try to verify.
+        rows.append((rel, len(b), "(self -- not pinnable)" if rel == PACKAGE_MANIFEST_REL
+                     else hashlib.sha256(b).hexdigest()))
 
     groups = defaultdict(list)
     for rel, n, h in rows:
@@ -356,7 +388,8 @@ def write_package_manifest(root: Path) -> int:
         L += [f"### `{key}` — {SUBSYSTEM.get(key, '')}  ·  {len(g)} files, "
               f"{sum(n for _, n, _ in g)} bytes", "",
               "| file | bytes | sha256 |", "|---|---:|---|"]
-        L += [f"| `{rel}` | {n} | `{h[:16]}` |" for rel, n, h in g]
+        L += [f"| `{rel}` | {n} | `{h[:16]}` |" if not h.startswith("(") else f"| `{rel}` | {n} | {h} |"
+              for rel, n, h in g]
         L += [""]
     (root / PACKAGE_MANIFEST_REL).write_text("\n".join(L))
     print(f"{PACKAGE_MANIFEST_REL}: {len(rows)} files, {total} bytes, "
