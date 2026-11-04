@@ -2056,7 +2056,9 @@ def _locked_filter(conn: sqlite3.Connection, flt: Optional[ProvenanceFilter]) ->
 def needs_embedding_sql(flt: ProvenanceFilter, mem_alias: str = "m", scope: str = "active") -> str:
     """The predicate over `memories {mem_alias}` for a LOCKED filter; bind
     `search_set_params` for its three `?`. `scope` 'active' is the active
-    memories; 'vectored' adds any memory holding a vector in the lock's table."""
+    memories; 'vectored' adds any memory holding a vector in the lock's table.
+    A centroid under the lock is finished: its vector is the average of its members,
+    which is how a query about them finds it, and a text vector would bury it."""
     if not flt.locked:
         raise ValueError("needs_embedding_sql needs a locked filter")
     if scope not in ("active", "vectored"):
@@ -2064,12 +2066,13 @@ def needs_embedding_sql(flt: ProvenanceFilter, mem_alias: str = "m", scope: str 
     if scope == "active":
         population = f"COALESCE({mem_alias}.is_archived, 0) = 0"
     else:
-        population = (f"(COALESCE({mem_alias}.is_archived, 0) = 0 OR EXISTS "
-                      f"(SELECT 1 FROM {flt.vec_table} v0 WHERE v0.memory_id = {mem_alias}.id))")
+        population = (f"(COALESCE({mem_alias}.is_archived, 0) = 0 OR "
+                      f"{mem_alias}.id IN (SELECT memory_id FROM {flt.vec_table}))")
     return (f"{population} AND NOT EXISTS ("
             f"SELECT 1 FROM {PROVENANCE_TABLE} p WHERE p.memory_id = {mem_alias}.id "
             f"AND p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? "
-            f"AND p.input_kind = 'text' AND p.content_hash = vl_sha256({mem_alias}.content) "
+            f"AND (p.input_kind = 'centroid' OR (p.input_kind = 'text' "
+            f"AND p.content_hash = vl_sha256({mem_alias}.content))) "
             f"AND p.memory_id IN (SELECT memory_id FROM {flt.vec_table}))")
 
 
