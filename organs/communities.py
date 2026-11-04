@@ -907,6 +907,11 @@ def compute_summaries(
         (epoch,),
     ).fetchall()
     result["total"] = len(comm_rows)
+    _dh = _derived_hash(conn, "community_summaries")
+    # With a checksum to compare, the stamp is part of the cache check: the key is the
+    # members' edges, so a matching key after a model change would keep a stale row
+    # stale for good. An unstamped row is left alone: nothing says it is wrong.
+    cached_cols = "member_edge_hash, weights_hash" if _dh else "member_edge_hash, NULL"
 
     for (cid,) in comm_rows:
         cid = int(cid)
@@ -920,15 +925,14 @@ def compute_summaries(
 
         # SINGLE-FLIGHT cache check: skip if the cached summary matches the hash.
         cached = conn.execute(
-            "SELECT member_edge_hash FROM community_summaries WHERE community_id = ?",
+            f"SELECT {cached_cols} FROM community_summaries WHERE community_id = ?",
             (cid,),
         ).fetchone()
-        if (not force) and cached is not None and cached[0] == new_hash:
+        if (not force) and cached is not None and cached[0] == new_hash and cached[1] in (None, "", _dh):
             result["skipped"] += 1
             continue
 
         summary_text = _extractive_summary(conn, members, conf)
-        _dh = _derived_hash(conn, "community_summaries")
         if _dh:
             conn.execute(
                 """INSERT OR REPLACE INTO community_summaries

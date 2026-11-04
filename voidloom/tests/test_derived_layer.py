@@ -235,6 +235,33 @@ class Writers(_Brain):
         self.assertEqual(res["regenerated"], 1, res)
         self.assertEqual(self.conn.execute("SELECT weights_hash FROM community_summaries").fetchall(), [(self.h,)])
 
+    def _summarised(self, stamp):
+        """A partition whose summary is cached, its stamp set to `stamp`."""
+        communities = self._partition()
+        communities.compute_summaries(self.conn, epoch=1, force=True)
+        self.conn.execute("UPDATE community_summaries SET weights_hash = ?", (stamp,))
+        self.conn.commit()
+        return communities
+
+    def test_saboteur_a_summary_from_another_model_does_not_stay_stale_for_good(self):
+        """The cache key is the members' edges, so after a model change a matching key would keep the old stamp."""
+        communities = self._summarised(FOREIGN)
+        res = communities.compute_summaries(self.conn, epoch=1)
+        self.assertEqual(res["regenerated"], 1, res)
+        self.assertEqual(self.conn.execute("SELECT weights_hash FROM community_summaries").fetchall(), [(self.h,)])
+        self.assertEqual(mw.derived_layer_report(self.conn)["stale_derived"], 0)
+
+    def test_control_a_summary_under_the_lock_stays_cached(self):
+        communities = self._summarised(self.h)
+        res = communities.compute_summaries(self.conn, epoch=1)
+        self.assertEqual((res["regenerated"], res["skipped"]), (0, 1), res)
+
+    def test_control_an_unstamped_summary_is_not_rewritten_in_bulk(self):
+        """Old rows carry no stamp and nothing says they are wrong: a brain's first night under a lock leaves them."""
+        communities = self._summarised(None)
+        res = communities.compute_summaries(self.conn, epoch=1)
+        self.assertEqual((res["regenerated"], res["skipped"]), (0, 1), res)
+
     def test_saboteur_a_brain_without_the_column_still_writes_its_partition(self):
         self.conn.execute("ALTER TABLE memory_communities DROP COLUMN weights_hash")
         self.conn.commit()
