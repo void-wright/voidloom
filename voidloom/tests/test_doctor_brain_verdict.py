@@ -146,7 +146,7 @@ class TheHostDoesNotDecideTheBrain(_Brain):
         (home / ".claude").mkdir(parents=True)
         (home / ".claude" / "settings.local.json").write_text("not json", encoding="utf-8")
         env = {k: v for k, v in os.environ.items() if k not in ("WIZARD_LIBRARY_DB", "CLAUDE_MEMORY_DB")}
-        env.update({"HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1", "CUDA_VISIBLE_DEVICES": "none"})
+        env.update({"HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1"})
         code = ("import sys, json\n"
                 f"sys.path.insert(0, {str(ROOT)!r}); sys.path.insert(0, {str(ROOT / 'organs')!r})\n"
                 "import memory_write as mw\n"
