@@ -82,7 +82,7 @@ class TheInventorysOwnRow(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.td = tempfile.mkdtemp(dir=str(Path.home() / ".cache"))
+        cls.td = tempfile.mkdtemp()
         cls.addClassCleanup(shutil.rmtree, cls.td, True)
         dst = Path(cls.td) / "t"
         r = subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(dst)], capture_output=True, text=True)

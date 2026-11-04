@@ -132,7 +132,7 @@ class TheVenvInitBlockKeepsTheCause(unittest.TestCase):
     """C.init, the shipped text under bash with a stub interpreter in the venv's place."""
 
     def _run(self, stub_body):
-        with tempfile.TemporaryDirectory(dir=str(Path.home() / ".cache")) as td:
+        with tempfile.TemporaryDirectory() as td:
             td = Path(td)
             stub = td / "py"
             stub.write_text("#!/bin/sh\n" + stub_body, encoding="utf-8")
@@ -166,7 +166,7 @@ class ASeedThatFailsItsScrubStopsTheInstall(unittest.TestCase):
     }
 
     def setUp(self):
-        self.td = Path(tempfile.mkdtemp(dir=str(Path.home() / ".cache")))
+        self.td = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.td, True)
         self.db = self.td / "claude_memory.db"
         sqlite3.connect(str(self.db)).close()
@@ -245,7 +245,7 @@ class TheInstallRunsTheSelfTest(unittest.TestCase):
     exits. The line printed is the engine's own; nothing here decides a number."""
 
     def _run(self, stdout_line, rc):
-        with tempfile.TemporaryDirectory(dir=str(Path.home() / ".cache")) as td:
+        with tempfile.TemporaryDirectory() as td:
             td = Path(td)
             log = td / "argv"
             stub = td / "py"
@@ -304,7 +304,7 @@ class TheVerifyGateCountsTheSearchSet(unittest.TestCase):
     GOOD = {"status": "ok", "tier": 1, "mode": "hybrid", "result_count": 1, "results": [{"id": 1}]}
 
     def setUp(self):
-        self.td = Path(tempfile.mkdtemp(dir=str(Path.home() / ".cache")))
+        self.td = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.td, True)
         self.db = self.td / "claude_memory.db"
         sqlite3.connect(str(self.db)).close()
@@ -466,7 +466,7 @@ class TheRunTimeManagerReadIsDeclared(unittest.TestCase):
             self.assertEqual(re.findall(r"-p(\w+)", row[0]), re.findall(r'"(\w+)"', props))
 
     def test_print_write_set_resolves_it_inactive_for_every_armed_unit(self):
-        with tempfile.TemporaryDirectory(dir=str(Path.home() / ".cache")) as home:
+        with tempfile.TemporaryDirectory() as home:
             r = subprocess.run(["bash", str(SH), "--print-write-set", "--with-crons", "--tier0-only"],
                                capture_output=True, text=True, timeout=120, env={**os.environ, "HOME": home})
         self.assertEqual(r.returncode, 0, r.stderr[-500:])

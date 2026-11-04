@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "2d23c1a",
+  "derived_at_head": "1426ab3",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 490,
   "not_laid": {
@@ -3857,13 +3857,13 @@
    "src": "voidloom/tests/test_init_prelock_snapshot.py"
   },
   {
-   "bytes": 23382,
+   "bytes": 23227,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "51487f5420333b566f6fa74b92c1e2fdb8150ebeebad27743570bd99c35d8f5d",
+   "sha256": "474ccf96583a5fbf8480700c0b05d19d2ab5f91614b6888d05d7a9aedc1a6b15",
    "src": "voidloom/tests/test_install_stops_and_says_why.py"
   },
   {
@@ -4037,13 +4037,13 @@
    "src": "voidloom/tests/test_lost_lock.py"
   },
   {
-   "bytes": 5061,
+   "bytes": 5030,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "3a4ae399ce7244ac9cb280663fe9dc24eb48f062fe6c8464f78ce970639a0f72",
+   "sha256": "9ab8c613bb1645a3f5503daca691939126016016437291cff7452da7c797271e",
    "src": "voidloom/tests/test_manifest_lays_no_tests.py"
   },
   {
@@ -4207,13 +4207,13 @@
    "src": "voidloom/tests/test_ps1_reembed_stamped.py"
   },
   {
-   "bytes": 7324,
+   "bytes": 7293,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "e2ce10a2d7d8b7154e30437b3077ec4bdbae84538033d094ef6caf1ca87e0ab7",
+   "sha256": "08f5320cfc98132231cde166459cb59eb4421b37009e657289be0ccd199dc390",
    "src": "voidloom/tests/test_ps1_stops_and_says_why.py"
   },
   {
@@ -4317,13 +4317,13 @@
    "src": "voidloom/tests/test_reranker_pin_at_load.py"
   },
   {
-   "bytes": 4577,
+   "bytes": 4515,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "a370fc4c4d5d0e068a9aba687aeb2cb16ab649e6c193e17a17a034f4e515076b",
+   "sha256": "68ae69676126998dfd1afcd0485f49ef64ff86cd7df3b7822eaa02b58e435364",
    "src": "voidloom/tests/test_run_log_follows_the_writer.py"
   },
   {

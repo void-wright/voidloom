@@ -27,7 +27,7 @@ TIMER = "[Timer]\nOnCalendar=*-*-* 03:00:00\nPersistent=true\n"
 class TheReaderFollowsTheWriter(unittest.TestCase):
 
     def setUp(self):
-        self.td = tempfile.TemporaryDirectory(dir=str(Path.home() / ".cache"))
+        self.td = tempfile.TemporaryDirectory()
         self.addCleanup(self.td.cleanup)
         self.home = Path(self.td.name) / "home"
         self.xdg = Path(self.td.name) / "elsewhere"
@@ -91,7 +91,7 @@ class TheSentinelWatchesWhatShips(unittest.TestCase):
         self.assertGreater(len(self.s.WATCH), 3)
 
     def test_its_unit_directory_follows_the_writer_too(self):
-        with tempfile.TemporaryDirectory(dir=str(Path.home() / ".cache")) as td:
+        with tempfile.TemporaryDirectory() as td:
             e = {"PATH": os.environ["PATH"], "HOME": td, "XDG_CONFIG_HOME": td + "/x", "PYTHONDONTWRITEBYTECODE": "1"}
             code = "import sys; sys.path.insert(0, %r); import organ_yield_sentinel as s; print(s.UNIT_DIR)" % str(ORGANS)
             p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=e, timeout=60)

@@ -50,7 +50,7 @@ class TheCallSites(unittest.TestCase):
 class UnderPowerShell(unittest.TestCase):
 
     def setUp(self):
-        self.td = tempfile.TemporaryDirectory(dir=str(Path.home() / ".cache"))
+        self.td = tempfile.TemporaryDirectory()
         self.addCleanup(self.td.cleanup)
         self.tmp = Path(self.td.name)
         (self.tmp / "organs").mkdir()

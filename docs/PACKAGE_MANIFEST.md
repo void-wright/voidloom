@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-04T19:28:32Z from the working tree whose HEAD was `2d23c1a`
+> Generated 2026-11-04T20:23:30Z from the working tree whose HEAD was `1426ab3`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 490 |
 | files hashed | 490 |
-| total bytes | 11026913 |
+| total bytes | 11026634 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -101,7 +101,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  218 files, 3214769 bytes
+### `voidloom` — The CLI facade  ·  218 files, 3214490 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -212,7 +212,7 @@
 | `voidloom/tests/test_hidden_cuda_probe_r1.py` | 3921 | `c2a70343a42ff847` |
 | `voidloom/tests/test_init_applies_skill_graduation.py` | 3693 | `67fe70dd8f43b0f3` |
 | `voidloom/tests/test_init_prelock_snapshot.py` | 5345 | `cbe5c00b70334b24` |
-| `voidloom/tests/test_install_stops_and_says_why.py` | 23382 | `51487f5420333b56` |
+| `voidloom/tests/test_install_stops_and_says_why.py` | 23227 | `474ccf96583a5fbf` |
 | `voidloom/tests/test_installer_accelerator.py` | 40526 | `9a64dfb7b1d3d16b` |
 | `voidloom/tests/test_installer_literals.py` | 14090 | `f194e6828c26fb57` |
 | `voidloom/tests/test_installer_marks_what_it_creates.py` | 8490 | `d7f73eb5782cc532` |
@@ -230,7 +230,7 @@
 | `voidloom/tests/test_lock_table_checked_once.py` | 7210 | `49e62fa66d81eb92` |
 | `voidloom/tests/test_lockless_coverage_counts_reach.py` | 3522 | `f09973179c0334df` |
 | `voidloom/tests/test_lost_lock.py` | 7250 | `1e18703bdc47e06f` |
-| `voidloom/tests/test_manifest_lays_no_tests.py` | 5061 | `3a4ae399ce7244ac` |
+| `voidloom/tests/test_manifest_lays_no_tests.py` | 5030 | `9ab8c613bb1645a3` |
 | `voidloom/tests/test_migration_041_plain_sql_release_r2.py` | 4209 | `fc4edf7319aaea4a` |
 | `voidloom/tests/test_migrations_042_045.py` | 12164 | `d533e837d338f13d` |
 | `voidloom/tests/test_models_present_is_this_brains.py` | 8822 | `4bf1835ad540057d` |
@@ -247,7 +247,7 @@
 | `voidloom/tests/test_preflight_verb.py` | 2694 | `fab053d8ac241306` |
 | `voidloom/tests/test_ps1_precache_by_pin.py` | 3956 | `adbd619480b0fd68` |
 | `voidloom/tests/test_ps1_reembed_stamped.py` | 4460 | `571264a55d17f455` |
-| `voidloom/tests/test_ps1_stops_and_says_why.py` | 7324 | `e2ce10a2d7d8b715` |
+| `voidloom/tests/test_ps1_stops_and_says_why.py` | 7293 | `08f5320cfc981322` |
 | `voidloom/tests/test_qwen_revision_pinned.py` | 3887 | `ad2c57e0c5c3551a` |
 | `voidloom/tests/test_re_embed_prelock.py` | 15805 | `1a06253ff45b4738` |
 | `voidloom/tests/test_read_never_fetches.py` | 6832 | `fe57de3de1cc6e21` |
@@ -258,7 +258,7 @@
 | `voidloom/tests/test_release_gates_execute.py` | 3803 | `e8ae84f6b38ab25e` |
 | `voidloom/tests/test_reranker_gate.py` | 27921 | `77c41f4d1b428239` |
 | `voidloom/tests/test_reranker_pin_at_load.py` | 13381 | `7d8c60c48e3ebaa6` |
-| `voidloom/tests/test_run_log_follows_the_writer.py` | 4577 | `a370fc4c4d5d0e06` |
+| `voidloom/tests/test_run_log_follows_the_writer.py` | 4515 | `68ae69676126998d` |
 | `voidloom/tests/test_schema_migrator.py` | 8188 | `6aa0410c65f897ea` |
 | `voidloom/tests/test_seed_anchor_delta.py` | 19453 | `6b97c55bff94c3ad` |
 | `voidloom/tests/test_seed_delete_and_lock_read.py` | 4790 | `ff332b527c29a64e` |
@@ -385,7 +385,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 135114 | `4a84f4b851cb3e6e` |
+| `install/lay_manifest.json` | 135114 | `21087e3dad85aae0` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15509 | `fb55c1f6b74f2ed1` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
