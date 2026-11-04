@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-04T20:23:30Z from the working tree whose HEAD was `1426ab3`
+> Generated 2026-11-04T20:24:48Z from the working tree whose HEAD was `cbebaeb`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
