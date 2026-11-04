@@ -10,14 +10,13 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-import os
 import sqlite3
 import struct
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "organs"))
@@ -95,12 +94,14 @@ class MidMigration(unittest.TestCase):
         self.assertEqual(before, self.db.read_bytes())
 
     def test_control_the_engines_stats_carry_the_layer(self):
-        env = dict(os.environ, CLAUDE_MEMORY_DB=str(self.db), WIZARD_LIBRARY_DB=str(self.db))
-        r = subprocess.run([sys.executable, str(ROOT / "organs" / "claude_memory.py"), "stats"],
-                           capture_output=True, text=True, env=env, timeout=120)
-        self.assertEqual(r.returncode, 0, r.stderr[-800:])
-        out = json.loads(r.stdout[r.stdout.index("{"):])
+        import argparse
+        import claude_memory as cm
+        buf = io.StringIO()
+        with mock.patch.object(cm, "DB_PATH", self.db), contextlib.redirect_stdout(buf):
+            cm.cmd_stats(argparse.Namespace())
+        out = json.loads(buf.getvalue().strip().splitlines()[-1])
         self.assertEqual(out["derived_layer"]["stale_derived"], 2)
+        self.assertEqual(out["derived_layer"]["consolidation"]["legacy_held"], 5)
 
 
 if __name__ == "__main__":

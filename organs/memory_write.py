@@ -1274,8 +1274,12 @@ def provenance_filter(conn: sqlite3.Connection) -> ProvenanceFilter:
 class ProvenanceCoverage:
     """What the sidecar says about this brain, under the ACTIVE tier's filter.
 
+    reachable         active memories with a vector in vec_table: what a search of
+                      this brain can return, its rule being the whole table. This
+                      is `matched`, the figure on every answer.
     covered           rows with a vector in vec_table AND a stamp naming
-                      (vec_table, model_id). This is the set a reader may search.
+                      (vec_table, model_id): the part whose producer is on record,
+                      which is what a re-embed moves.
     stamped_foreign   stamps on vec_table under a DIFFERENT model_id: the mixed
                       population, wearing a label. Same width, different space.
     stamped_without_vector
@@ -1304,13 +1308,14 @@ class ProvenanceCoverage:
     stamped_without_vector: int
     vectors_without_stamp: int
     stale_content_hash: int
+    reachable: int = 0
 
     basis = "lockless"
     search_rule = SEARCH_RULE_LOCKLESS
 
     @property
     def matched(self) -> int:
-        return self.covered
+        return self.reachable
 
     @property
     def total(self) -> int:
@@ -1318,7 +1323,7 @@ class ProvenanceCoverage:
 
     @property
     def coverage(self) -> Dict[str, Any]:
-        return _three_numbers(self.covered, self.active_memories)
+        return _three_numbers(self.reachable, self.active_memories)
 
     @property
     def coverage_of_active(self) -> Fraction:
@@ -1412,9 +1417,14 @@ def provenance_coverage(conn: sqlite3.Connection):
         denominator = "memories WHERE is_archived = 0"
         active = conn.execute(
             "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
+        reach_pred = "AND COALESCE(m.is_archived, 0) = 0"
     else:
         denominator = "memories (schema has no is_archived column)"
         active = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        reach_pred = ""
+    reachable = conn.execute(
+        f"SELECT COUNT(*) FROM memories m WHERE m.id IN (SELECT memory_id FROM {table}) {reach_pred}"
+    ).fetchone()[0]
 
     covered = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p "
@@ -1449,7 +1459,7 @@ def provenance_coverage(conn: sqlite3.Connection):
         dim=dim, denominator=denominator, active_memories=int(active),
         vectors=int(vectors), covered=int(covered), stamped_foreign=int(foreign),
         stamped_without_vector=int(stamp_no_vec), vectors_without_stamp=int(vec_no_stamp),
-        stale_content_hash=int(stale),
+        stale_content_hash=int(stale), reachable=int(reachable),
     )
     if cov.covered == 0:
         raise ProvenanceUnmatched(
