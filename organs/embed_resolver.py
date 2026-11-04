@@ -190,7 +190,7 @@ if __name__ == "__main__":
     from pathlib import Path
     db = sys.argv[1] if len(sys.argv) > 1 else str(
         Path(__file__).resolve().parent.parent / "claude_memory.db")
-    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    c = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True)
     print("  resolve() on the live brain:", resolve(c))
 
     # The refusal is exercised, not asserted: a database with no metadata row.

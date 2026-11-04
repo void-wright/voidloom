@@ -177,6 +177,63 @@ class PreLockBrains(_Seamed):
 
 
 @unittest.skipUnless(_vec_available(), "sqlite_vec absent on this host: NOT MEASURED")
+class JinaBrainKeepsItsPath(_Seamed):
+    """A brain that really is jina: the jina encoder, its own table, no lock, and every
+    vector carries a stamp naming the declared absence."""
+
+    def _brain(self):
+        db = make_brain(self.dir, "jina")
+        c = _connect(db)
+        c.execute("DELETE FROM memory_embeddings_v2 WHERE memory_id IN (1, 3, 4)")
+        c.execute("DELETE FROM embedding_provenance WHERE memory_id IN (1, 3, 4)")
+        c.execute("CREATE TABLE embedding_upgrade_log (id INTEGER PRIMARY KEY, started_at TEXT, completed_at TEXT, "
+                  "model_name TEXT, embedding_dim INTEGER, memories_processed INTEGER, memories_total INTEGER, "
+                  "status TEXT, notes TEXT)")
+        c.execute("ALTER TABLE memories ADD COLUMN summary TEXT")
+        c.commit(); c.close()
+        return db
+
+    def _jina(self, enc):
+        self.eu._get_jina_model = lambda: None
+        keep = self.eu.encode_jina
+        self.addCleanup(setattr, self.eu, "encode_jina", keep)
+        self.eu.encode_jina = enc
+
+    def test_control_the_jina_path_runs_and_stamps_the_declared_absence(self):
+        db = self._brain()
+        model = TABLES["jina"][2]
+        self._jina(lambda texts, task=None, prompt_name=None: [_vec(model, t, 1024) for t in texts])
+        env = self.eu.cmd_re_embed(_args(db, batch=2))
+        self.assertEqual((env["status"], env["processed"], env["errors"]), ("completed", 3, 0), env)
+        self.assertIsNone(lock_bytes(self.dir))
+        c = _connect(db)
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM memory_embeddings_v2").fetchone()[0], 7)
+        rows = c.execute("SELECT weights_hash, organ FROM embedding_provenance WHERE memory_id IN (1, 3, 4)").fetchall()
+        c.close()
+        self.assertEqual(rows, [("unresolved", "embedding_upgrade.re_embed")] * 3)
+
+    def test_saboteur_a_batch_that_fails_leaves_no_vector_without_a_stamp(self):
+        db = self._brain()
+        model = TABLES["jina"][2]
+
+        def enc(texts, task=None, prompt_name=None):
+            if len(texts) > 1:
+                raise RuntimeError("CUDA out of memory")
+            if "memory 3 " in texts[0]:
+                raise RuntimeError("CUDA out of memory")
+            return [_vec(model, t, 1024) for t in texts]
+        self._jina(enc)
+        env = self.eu.cmd_re_embed(_args(db, batch=3))
+        self.assertEqual((env["status"], env["processed"], env["errors"]), ("completed_with_errors", 2, 1), env)
+        c = _connect(db)
+        vec = {r[0] for r in c.execute("SELECT memory_id FROM memory_embeddings_v2")}
+        st = {r[0] for r in c.execute("SELECT memory_id FROM embedding_provenance")}
+        c.close()
+        self.assertEqual(vec, st, "a vector and its stamp land together")
+        self.assertNotIn(3, vec)
+
+
+@unittest.skipUnless(_vec_available(), "sqlite_vec absent on this host: NOT MEASURED")
 class OutOfMemoryRetry(_Seamed):
     def _oom_when_batched(self, poison=None):
         """Encodes alone; a batch holding more than one text runs out of memory, and a
@@ -221,6 +278,15 @@ class OutOfMemoryRetry(_Seamed):
         self.assertEqual(cm.exception.detail["unembedded"], [4])
         self.assertEqual(self.el.resolve(db)["tier"], "cpu", "nothing switched")
         self.assertEqual(len(snapshot(db, "memory_embeddings_v3")[0]), 6, "the other rows are kept for the rerun")
+
+    def test_control_a_brain_with_no_metadata_table_can_still_converge(self):
+        db = make_brain(self.dir, "nomic")
+        c = _connect(db)
+        c.execute("DROP TABLE metadata")
+        c.execute("UPDATE embedding_provenance SET weights_hash = 'unresolved'")
+        c.commit(); c.close()
+        env = self.eu.cmd_re_embed(_args(db))
+        self.assertEqual((env["status"], env["receipt"]["embedded"]), ("ok", 7), env)
 
     def test_saboteur_an_error_that_is_not_out_of_memory_still_raises(self):
         db = make_brain(self.dir, "nomic")

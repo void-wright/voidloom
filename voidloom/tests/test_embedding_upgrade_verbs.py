@@ -81,8 +81,21 @@ class ExitStatus(unittest.TestCase):
                 rc, _o = _run(self.eu, "--db-path", str(self.dir / "x.db"), "stats")
             self.assertEqual(rc, 0, result)
 
+    def test_saboteur_full_refuses_before_any_fetch_on_a_brain_that_is_not_jina(self):
+        for tier in ("nomic", "qwen"):
+            d = Path(tempfile.mkdtemp(dir=self.dir))
+            db = make_brain(d, tier)
+            for locked in (True, False):
+                if not locked:
+                    (d / "embedder.lock.json").unlink()
+                with mock.patch.object(self.eu, "cmd_download", side_effect=AssertionError("it fetched")):
+                    with self.assertRaises(self.eu.VerbRefused) as cm:
+                        self.eu.cmd_full(type("A", (), {"db_path": str(db), "batch_size": 2})())
+                self.assertEqual(cm.exception.code, "JINA_PIPELINE_ONLY")
+
     def test_saboteur_full_stops_when_the_comparison_errors(self):
-        A = type("A", (), {"db_path": "x", "batch_size": 2})
+        db = make_brain(self.dir, "jina")
+        A = type("A", (), {"db_path": str(db), "batch_size": 2})
         with mock.patch.object(self.eu, "cmd_download", return_value={}), \
                 mock.patch.object(self.eu, "cmd_migrate", return_value={}), \
                 mock.patch.object(self.eu, "cmd_re_embed", return_value={"status": "ok"}), \

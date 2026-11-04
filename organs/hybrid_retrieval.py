@@ -176,7 +176,7 @@ def _quiet_reranker_load_noise() -> None:
 
 # The reranker's device is the C1 resolver's answer (_torch_device). On CUDA the pin (CUDA_VISIBLE_DEVICES, set
 # before torch by claude_memory.py) leaves PyTorch one card, addressed as cuda:0.
-# The active embedding model (jina-embeddings-v5-text-small, 1024-dim, ~1.3GB)
+# The active embedding model (whatever the install lock names; see embedder_lock)
 # already lives there; the reranker (Qwen3-Reranker-0.6B by default, ~1.2GB, or
 # the bge-reranker-v2-m3 fallback ~1.1GB FP16) adds ~1GB+ — well within 11GB.
 _RERANKER_DEVICE = "cuda:0"   # documentation of the CUDA case only: the device is _torch_device()'s answer

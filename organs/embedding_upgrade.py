@@ -794,6 +794,17 @@ def cmd_re_embed(args) -> Dict[str, Any]:
     processed = 0
     errors = 0
     t0 = time.time()
+    import memory_write
+
+    def _write_one(mid: int, text: str, emb: bytes) -> None:
+        """The vector and its stamp. A pre-lock brain keeps writing: the catalogue ships no
+        checksum for this tier, so the stamp carries the declared absence."""
+        conn.execute(
+            "INSERT OR REPLACE INTO memory_embeddings_v2 (memory_id, embedding) VALUES (?, ?)",
+            (mid, emb),
+        )
+        memory_write._stamp_provenance(conn, mid, "memory_embeddings_v2", JINA_DIM, text,
+                                       "embedding_upgrade.re_embed")
 
     for batch_start in range(0, len(to_embed), batch_size):
         batch = to_embed[batch_start:batch_start + batch_size]
@@ -813,16 +824,14 @@ def cmd_re_embed(args) -> Dict[str, Any]:
                 prompt_name=JINA_PROMPT_DOCUMENT,
             )
 
-            for mid, emb in zip(ids, embeddings):
-                conn.execute(
-                    "INSERT OR REPLACE INTO memory_embeddings_v2 (memory_id, embedding) VALUES (?, ?)",
-                    (mid, emb),
-                )
+            for mid, text, emb in zip(ids, texts, embeddings):
+                _write_one(mid, text, emb)
 
             conn.commit()
             processed += len(batch)
 
         except RuntimeError as e:
+            conn.rollback()
             if _device_api().is_out_of_memory(e):
                 # OOM (any backend: CUDA, HIP, MPS, XPU): clear the backend's cache and retry item by item
                 logger.warning("OOM at offset %d, retrying item-by-item...", batch_start)
@@ -834,24 +843,22 @@ def cmd_re_embed(args) -> Dict[str, Any]:
                             task=JINA_TASK_RETRIEVAL,
                             prompt_name=JINA_PROMPT_DOCUMENT,
                         )
-                        conn.execute(
-                            "INSERT OR REPLACE INTO memory_embeddings_v2 (memory_id, embedding) VALUES (?, ?)",
-                            (mid, single_emb[0]),
-                        )
+                        _write_one(mid, text, single_emb[0])
+                        conn.commit()
                         processed += 1
                     except Exception as inner_e:
+                        conn.rollback()
                         logger.error("Single-item embed failed for id=%d: %s", mid, inner_e)
                         errors += 1
                         _device_api().empty_cache()
-                conn.commit()
             else:
                 logger.error("Batch error at offset %d: %s", batch_start, e)
                 errors += len(batch)
 
         except Exception as e:
+            conn.rollback()
             logger.error("Batch error at offset %d: %s", batch_start, e)
             errors += len(batch)
-            # Continue with next batch (checkpoint-safe: already-inserted rows persist)
             continue
 
         # Clear the backend's allocator cache every 4 batches to prevent fragmentation OOM
@@ -1259,7 +1266,18 @@ def _ndcg_at_k(retrieved_ids: List[int], ground_truth: set, k: int = 10) -> floa
 # ============================================================
 
 def cmd_full(args) -> Dict[str, Any]:
-    """Run the full upgrade pipeline: download -> migrate -> re-embed -> ab-compare -> (conditional swap)."""
+    """Run the full upgrade pipeline: download -> migrate -> re-embed -> ab-compare -> (conditional swap).
+
+    The jina tooling, for a brain that embeds under jina. Its first step fetches a
+    cc-by-nc model, so on any other brain it refuses before touching the network."""
+    import tier_set
+    db = Path(args.db_path).resolve()
+    if tier_set._installed_lock(db) is not None or tier_set._prelock_engine_tier(db) is not None:
+        raise VerbRefused(
+            "JINA_PIPELINE_ONLY",
+            "`full` fetches and compares the jina tier, and this brain does not embed under it. "
+            "To change a brain's model: `voidloom tier set <nomic|qwen>`. To re-embed it under the "
+            "model it has: `re-embed`.", db_path=str(db))
     results = {}
 
     logger.info("=" * 60)
@@ -1475,7 +1493,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     subparsers.add_parser("ab-compare", help="Run A/B comparison")
     subparsers.add_parser("swap", help="REFUSED: re-pointing without re-embedding (exit 1); use `voidloom tier set`")
     subparsers.add_parser("stats", help="Show embedding stats")
-    subparsers.add_parser("full", help="Full pipeline (all steps)")
+    subparsers.add_parser("full", help="Full jina pipeline (all steps); refused on any other brain")
     subparsers.add_parser("test", help="Run unit tests")
 
     args = parser.parse_args(argv)

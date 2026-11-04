@@ -435,6 +435,8 @@ def _log_failed(conn: sqlite3.Connection, started: Optional[str], notes: str, me
 
 
 def _set_metadata(conn: sqlite3.Connection, values: Dict[str, Optional[str]]) -> None:
+    if not _table_exists(conn, "metadata"):      # nothing to move: readers of these rows read the lock here
+        return
     for k in METADATA_KEYS:
         if values.get(k) is None:
             conn.execute("DELETE FROM metadata WHERE key = ?", (k,))

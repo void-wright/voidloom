@@ -87,6 +87,9 @@ def enable_vec(conn: sqlite3.Connection) -> None:
                             "load without --embed and run embed_backfill.py under the Tier-1 python")
 
 
+VECTOR_TABLES = ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3")
+
+
 def _connect(db: str) -> sqlite3.Connection:
     """A connection with vec0 loaded when this python has it (a Tier-0 host still
     gets one: shape and delete-one need no vector table)."""
@@ -187,9 +190,9 @@ def seed_shape(conn: sqlite3.Connection) -> Dict[str, Any]:
                                          "AND COALESCE(is_archived,0)=0 GROUP BY origin HAVING COUNT(*) > 1)"),
            "seed_rows_without_origin": q("SELECT COUNT(*) FROM memories WHERE seed = 1 "
                                          "AND (origin IS NULL OR origin = '')"),
-           "unflagged_pack_tagged_rows": q("SELECT COUNT(*) FROM memories m WHERE COALESCE(m.seed,0) = 0 AND EXISTS "
-                                           "(SELECT 1 FROM memory_tags t WHERE t.memory_id = m.id "
-                                           "AND t.tag = 'seed-pack-agnostic')")}
+           "unflagged_pack_tagged_rows": q("SELECT COUNT(*) FROM memories m WHERE COALESCE(m.seed,0) = 0 "
+                                           "AND m.id IN (SELECT memory_id FROM memory_tags "
+                                           "WHERE tag = 'seed-pack-agnostic')")}
     try:
         _organs_on_path()
         import memory_write
@@ -223,12 +226,15 @@ def delete_one(db: str, origin: str) -> Dict[str, Any]:
             raise SeedLoadError("SEED_ORIGIN_AMBIGUOUS", f"{len(rows)} seed rows carry origin {origin}; "
                                 "refusing to guess which", origin=origin, memory_ids=[r[0] for r in rows])
         mid = rows[0][0]
-        try:
-            import memory_write
-            table = memory_write.provenance_filter(conn).vec_table
-            conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (mid,))
-        except Exception:
-            pass                                 # no tier / no vec0 on a Tier-0 brain: no vector to drop
+        conn.execute("PRAGMA foreign_keys=ON")   # a row something still names is refused below, not left dangling
+        # Every tier's table: after `tier set` the old tier still holds this row's vector.
+        present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        for table in VECTOR_TABLES:
+            if table in present:
+                try:
+                    conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (mid,))
+                except sqlite3.OperationalError:
+                    pass                         # no vec0 on this connection: a Tier-0 brain
         for sql in ("DELETE FROM embedding_provenance WHERE memory_id = ?",
                     "DELETE FROM memory_tags WHERE memory_id = ?",
                     "DELETE FROM memory_links WHERE source_id = ?1 OR target_id = ?1"):
@@ -236,7 +242,14 @@ def delete_one(db: str, origin: str) -> Dict[str, Any]:
                 conn.execute(sql, (mid,))
             except sqlite3.Error:
                 pass
-        conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
+        try:
+            conn.execute("DELETE FROM memories WHERE id = ?", (mid,))
+        except sqlite3.IntegrityError as e:
+            if "FOREIGN KEY" not in str(e):
+                raise
+            conn.rollback()
+            raise SeedLoadError("HARD_DELETE_REFERENCED", f"seed row {mid} is named by rows that have no delete "
+                                "rule; nothing was removed", origin=origin, memory_id=mid)
         conn.commit()
         after = conn.execute("SELECT COUNT(*) FROM memories WHERE seed = 1").fetchone()[0]
         gone = conn.execute("SELECT COUNT(*) FROM memories WHERE id = ?", (mid,)).fetchone()[0] == 0
