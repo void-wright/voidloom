@@ -812,8 +812,7 @@ def _embedder_lock():
     return embedder_lock
 
 
-def _weights_hash_for(conn: sqlite3.Connection, table: str, dim: int,
-                      ident: Dict[str, str]) -> Tuple[str, str]:
+def _weights_hash_for(conn: sqlite3.Connection, table: str, dim: int) -> Tuple[str, str]:
     """(weights_hash, source) for a vector this call just wrote to `table`.
 
     The install lock beside THIS connection's database is read FIRST (owner
@@ -864,7 +863,7 @@ def _weights_hash_for(conn: sqlite3.Connection, table: str, dim: int,
         return WEIGHTS_HASH_UNRESOLVED, "unresolved"
     computed = el.require_loaded_hash(vec_table=table, dim=int(dim))
     import embedding_upgrade                     # lazy: it imports this module's callers
-    entry = embedding_upgrade.brain_lock(conn, tier=ident["tier"])
+    entry = embedding_upgrade.brain_lock(conn, tier=model_identity(table)["tier"])
     if computed != entry["weights_hash"]:
         raise el.EmbedderLockError(
             "WEIGHTS_MISMATCH",
@@ -884,8 +883,9 @@ def _stamp_provenance(conn: sqlite3.Connection, memory_id: int, table: str, dim:
     stamp, and there is never a stamp describing a vector that is gone.
     """
     ensure_provenance_table(conn)
+    # The lock first: a table it does not name is its refusal, not the bijection's.
+    weights_hash, weights_source = _weights_hash_for(conn, table, int(dim))
     ident = model_identity(table)
-    weights_hash, weights_source = _weights_hash_for(conn, table, int(dim), ident)
     row = {
         "memory_id": int(memory_id), "vec_table": table,
         "model_id": ident["model_id"], "model_ref": ident["model_ref"],
@@ -1651,9 +1651,9 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
     (facts before policy):
       PROVENANCE_UNREADABLE   the sidecar / vector table cannot be read: UNMEASURED, not 0
       (empty brain)           0/0 is returned, unless the lock's checksum is not shipped
+      STAMP_INCONSISTENT      the lock's checksum on another table or width
       NO_ROWS_FOR_LOCK        active memories exist and none is stamped under the lock
       LOCK_NOT_SHIPPED        rows match, but the checksum is not in the catalogue
-      STAMP_INCONSISTENT      the lock's checksum on another table or width
     """
     el = _embedder_lock()
     table, whash, dim = flt.vec_table, flt.weights_hash, flt.dim
@@ -1734,6 +1734,11 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
                 "LOCK_NOT_SHIPPED", f"the lock at {flt.lock_path} names {whash[:12]}…, which is "
                 "not in the package catalogue", weights_hash=whash, coverage=cov.as_dict())
         return cov
+    if cov.inconsistent:
+        raise ProvenanceInconsistent(
+            f"REFUSED: {sum(x['rows'] for x in cov.inconsistent)} stamp(s) carry the lock's checksum "
+            f"{whash[:12]}… but disagree with the lock's ({table!r}, {dim}): {cov.inconsistent}. "
+            "A checksum that names one model on two shapes is a stamp that cannot be trusted.", cov)
     if cov.matched == 0:
         raise ProvenanceUnmatched(
             f"REFUSED: no active memory has a vector in {table!r} that the lock's search set "
@@ -1747,11 +1752,6 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
             "LOCK_NOT_SHIPPED", f"{cov.matched} row(s) carry {whash[:12]}…, but that checksum is "
             "not in the package catalogue: this database was embedded with a model this package "
             "does not ship", weights_hash=whash, coverage=cov.as_dict())
-    if cov.inconsistent:
-        raise ProvenanceInconsistent(
-            f"REFUSED: {sum(x['rows'] for x in cov.inconsistent)} stamp(s) carry the lock's checksum "
-            f"{whash[:12]}… but disagree with the lock's ({table!r}, {dim}): {cov.inconsistent}. "
-            "A checksum that names one model on two shapes is a stamp that cannot be trusted.", cov)
     return cov
 
 
