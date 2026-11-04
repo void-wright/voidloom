@@ -28,7 +28,9 @@ THE ORDER, and what each step guarantees:
      stamp naming the target's COMPUTED checksum for its CURRENT text is embedded and
      stamped (memory_write.attach_under_lock), committed per batch. The old tier
      keeps serving throughout: nothing it reads is touched. Kill it at any point and
-     re-run: finished rows are reused, the rest is work again.
+     re-run: finished rows are reused, the rest is work again. A batch that runs out of
+     memory on the accelerator is retried one item at a time. A consolidated memory
+     takes the average of its members' new vectors, not a vector of its text.
   4. FLIP, inside one write transaction (BEGIN IMMEDIATE, so no store lands
      between the check and the switch): embed whatever a concurrent writer added,
      require 100% coverage, write the PRE-IMAGE (the previous lock -- or its
