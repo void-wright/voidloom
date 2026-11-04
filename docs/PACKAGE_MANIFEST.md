@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-04T20:24:48Z from the working tree whose HEAD was `cbebaeb`
+> Generated 2026-11-04T20:26:18Z from the working tree whose HEAD was `dc2677f`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,9 +12,9 @@
 
 | | |
 |---|---|
-| files tracked | 490 |
-| files hashed | 490 |
-| total bytes | 11026634 |
+| files tracked | 491 |
+| files hashed | 491 |
+| total bytes | 11029661 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -101,7 +101,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  218 files, 3214490 bytes
+### `voidloom` — The CLI facade  ·  219 files, 3216904 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -255,6 +255,7 @@
 | `voidloom/tests/test_readers_lock_first.py` | 8699 | `2c622570e4347fd4` |
 | `voidloom/tests/test_recall_carries_coverage.py` | 11053 | `24d4f4ba01deb761` |
 | `voidloom/tests/test_recall_topk_after_placement.py` | 3824 | `b697d7b65e0fd52a` |
+| `voidloom/tests/test_release_check_reads_its_own_row.py` | 2414 | `8586fe740f8700fa` |
 | `voidloom/tests/test_release_gates_execute.py` | 3803 | `e8ae84f6b38ab25e` |
 | `voidloom/tests/test_reranker_gate.py` | 27921 | `77c41f4d1b428239` |
 | `voidloom/tests/test_reranker_pin_at_load.py` | 13381 | `7d8c60c48e3ebaa6` |
@@ -368,7 +369,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 960855 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 961127 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -385,7 +386,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 135114 | `21087e3dad85aae0` |
+| `install/lay_manifest.json` | 135386 | `2a09b94c0b7e344d` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15509 | `fb55c1f6b74f2ed1` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -499,7 +500,7 @@
 | `persona/skills/persona-forge/TEMPLATES/voice.md.tmpl` | 533 | `d66076ed2dea66a0` |
 | `persona/skills/persona-forge/validate_persona.py` | 12511 | `c2621de5c61e2740` |
 
-### `tools` — Maintainer-only: package gates + recall harness  ·  23 files, 247533 bytes
+### `tools` — Maintainer-only: package gates + recall harness  ·  23 files, 247785 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -524,10 +525,10 @@
 | `tools/harness/test_harness.py` | 17074 | `bb171866b5a5f1ff` |
 | `tools/leak_gate.py` | 15091 | `c5aae0965ffa23e7` |
 | `tools/pii_gate.py` | 27217 | `e36321c4c7ee2874` |
-| `tools/release_check.py` | 8671 | `378de4e7722bcc77` |
+| `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 222772 bytes
+### `docs` — Documentation  ·  12 files, 222861 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -535,10 +536,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19476 | `6f7f15fb93c9cacf` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `630dc53ed293aa2a` |
+| `docs/LAYOUT.md` | 8372 | `2b2bb94f03b6bf38` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 37549 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 37638 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9582 | `211dfb33c5af1760` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

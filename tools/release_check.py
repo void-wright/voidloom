@@ -121,6 +121,9 @@ def manifest_check() -> dict:
             tracked = {ln for ln in res.stdout.split("\n") if ln.strip()}
             population = len(tracked)
             listed = {rel for rel, _s, _h in rows}
+            # Its own row prints no digest, so the row pattern above cannot see it: ask for the row itself.
+            if re.search(r"^\|\s*`%s`\s*\|" % re.escape(self_ref), man.read_text(errors="replace"), re.M):
+                listed.add(self_ref)
             unlisted = sorted(tracked - listed)
     except Exception as e:
         out["population_error"] = f"{type(e).__name__}: {e}"

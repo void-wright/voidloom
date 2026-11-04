@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 472,
+    "core": 473,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 427,
+    "all": 428,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 254,
     "home": 2,
-    "null": 216,
+    "null": 217,
     "skills": 18
    }
   },
-  "derived_at_head": "1426ab3",
+  "derived_at_head": "dc2677f",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 490,
+  "entries": 491,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 205,
+     "count": 206,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 216
+   "total": 217
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "630dc53ed293aa2a1d7e3d659772c2f7f83cf127bff894e4fbfec1562fae5b28",
+   "sha256": "2b2bb94f03b6bf38ef3264cde52e91370da7b85057395b03a24ea2e591f301ec",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -2757,13 +2757,13 @@
    "src": "tools/pii_gate.py"
   },
   {
-   "bytes": 8671,
+   "bytes": 8923,
    "component": "core",
    "dst": "tools/release_check.py",
    "exec": true,
    "platform": "all",
    "root": "brain",
-   "sha256": "378de4e7722bcc77df1d99a6d84ba0d6ada1f0508b0c1094d8770c9885525c89",
+   "sha256": "c100a51e03cfd409087146b37d89161922f23de6f2b922727033f47970236ab6",
    "src": "tools/release_check.py"
   },
   {
@@ -4285,6 +4285,16 @@
    "root": null,
    "sha256": "b697d7b65e0fd52a2f7f041d4793d229fdcd8679cdda11ba8565c7f844d22ed4",
    "src": "voidloom/tests/test_recall_topk_after_placement.py"
+  },
+  {
+   "bytes": 2414,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "8586fe740f8700fa3218d7f6c6054d6758131b44af1c48c7fd2ec0b7a4adb8d5",
+   "src": "voidloom/tests/test_release_check_reads_its_own_row.py"
   },
   {
    "bytes": 3803,
