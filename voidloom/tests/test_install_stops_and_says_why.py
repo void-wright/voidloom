@@ -392,6 +392,29 @@ class TheVerifyGateCountsTheSearchSet(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertRegex(p.stdout, r"\blegacy=3\b")
 
+    def _unreadable_sidecar(self):
+        c = self._conn()
+        c.execute("DROP TABLE embedding_provenance")
+        c.commit()
+        c.close()
+
+    def test_an_unmeasurable_brain_with_an_empty_table_is_not_verified(self):
+        lock = self._lock()
+        self._fill(lock["vec_table"], lock["dim"], 0, None)
+        self._unreadable_sidecar()
+        p = self._gate()
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn("holds 0 vectors", p.stderr)
+
+    def test_an_unmeasurable_brain_says_its_figure_is_rows(self):
+        lock = self._lock()
+        self._fill(lock["vec_table"], lock["dim"], 2, None)
+        self._unreadable_sidecar()
+        p = self._gate()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertRegex(p.stdout, r"\bvectors=2\b")
+        self.assertIn("basis=rows_not_stamps", p.stdout)
+
     def test_control_a_lockless_brain_counts_its_table_as_today(self):
         c = self._conn()
         c.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES ('active_embedding_table', 'memory_embeddings_v2')")

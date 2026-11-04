@@ -4017,7 +4017,7 @@ brain = os.environ["BRAIN_DIR"]          # the dir that CONTAINS the laid voidlo
 # The active tier's table is a sqlite-vec VIRTUAL table, so counting it needs the
 # extension loaded exactly as the engine loads it; the venv has it (pip just put it there).
 vectors, tab, count_err, lock_refusal = None, None, None, None
-legacy, outside, cov_refusal = 0, 0, None
+legacy, outside, cov_refusal, rows_only = 0, 0, None, False
 try:
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db)), uri=True)
     try:
@@ -4039,7 +4039,13 @@ try:
             outside = max(int(cov.get("vectors") or 0) - vectors - legacy, 0)
             cov_refusal = None if cov.get("ok") else cov.get("error")
         else:
-            count_err = str(cov.get("error"))
+            # The reader could not measure (a sidecar older than this package, say). An unmeasured brain must still
+            # meet the zero check below, so fall back to the table's rows, and say that is what the figure is.
+            try:
+                vectors = c.execute(f"SELECT COUNT(*) FROM {tab}").fetchone()[0]
+                rows_only = True
+            except Exception:
+                count_err = str(cov.get("error"))
     elif tab:
         # No lock: the whole table is the search set, so its row count is the true figure.
         try:
@@ -4099,7 +4105,8 @@ if tier != 1 or data.get("degraded"):
     sys.exit(1)
 # SAY WHAT WAS OBSERVED, and no more. The weaker sentence when the count was unreadable.
 if vectors is not None:
-    extras = (f" legacy={legacy}" if legacy else "") + (f" outside_the_lock={outside}" if outside else "")
+    extras = (f" legacy={legacy}" if legacy else "") + (f" outside_the_lock={outside}" if outside else "") \
+        + (" basis=rows_not_stamps" if rows_only else "")
     print(f"VERIFIED tier=1 mode={data.get('mode')} vectors={vectors}{extras} results={n} table={tab}")
 else:
     print(f"PARTIAL tier=1 mode={data.get('mode')} results={n} table={tab} count_unavailable={count_err}")
