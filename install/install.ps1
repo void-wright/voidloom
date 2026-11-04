@@ -163,6 +163,15 @@ function Invoke-BrainInit {
     return $rc
 }
 
+# memories.skill_tier is added by code, not by a migration's own text, so a Tier-0 brain that never reaches `init` would
+# leave the skill-graduation job refusing. Additive and idempotent.
+function Invoke-SkillColumn {
+    $sg = Join-Path $BrainDir "organs\skill_graduation.py"
+    $mig = Join-Path $BrainDir "migrations\migration_007_skill_graduation.sql"
+    $null = @(Invoke-PyOut $PySys @($sg, $DbPath, "--apply-migration", $mig) 2>&1)
+    if ($LASTEXITCODE -ne 0) { Warn "could not add the skill-graduation column (rc $LASTEXITCODE); its job will refuse until you run: `"$sg`" `"$DbPath`" --apply-migration `"$mig`"" }
+}
+
 # The seed load. The denylist runs over the whole pack before the first write, and a hit refuses the load, rc 4, naming
 # the class and offset and never the matched text: a damaged package, and it stops the install. Any other failure is a
 # note, because an empty brain is a working brain.
@@ -420,6 +429,7 @@ print(f"  DB created. {res['brain_objects']} objects, "
         Invoke-Py $PySys @($tmp, $DbPath, $BrainDir) | Out-Null
         if ($LASTEXITCODE -ne 0) { Die "could not create the brain DB (Step B is the guaranteed tier — aborting)" }
         Remove-Item $tmp -ErrorAction SilentlyContinue
+        Invoke-SkillColumn
     } else { Say "  brain DB already exists; leaving it in place (idempotent)" }
 
     Say "  loading agnostic seed pack via lite CLI"

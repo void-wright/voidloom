@@ -42,7 +42,7 @@ PYTHONPATH=/abs/path/to/<dir-containing-voidloom> python3 -m voidloom bootstrap
 There is **nothing to build**. `bootstrap` works on a bare host with no models
 and no DB.
 
-## Verbs — all 14, and this list is checked
+## Verbs — every one, and this list is checked
 
 `voidloom/tests/test_docs_name_real_paths.py` compares this section against
 `voidloom --help` and fails when they diverge. It had to: until 2026-09-16 this
@@ -51,7 +51,7 @@ guide for the shipped version omitted half of that version's surface — includi
 `hooks`, which the onboarding guide calls *"the ONLY thing that wires hooks"*, and
 `batch-recall`/`batch-store`, which the product's own injected preamble calls
 *"the DEFAULT"* interface. (The machine-facing path was never wrong:
-`agent-context` has always emitted all 14. A human was the one left short.)
+`agent-context` has always emitted every verb. A human was the one left short.)
 
 ### Discovery + health
 
@@ -61,9 +61,14 @@ voidloom agent-context  [--json]   emit the self-describing toolkit manifest (LL
 voidloom capabilities   [--json]   full prose + examples view of the brain's L5 organs
 voidloom doctor         [--json]   health: DB, local-FS guard, engine, models, and the HOOK JOIN
                                    (NOT_INSTALLED / INSTALLED_NEVER_FIRED / DEAD / LIVE per platform)
-                                   and the reranker: on or off on this machine, and why
+                                   and the reranker: on or off on this machine, and why;
+                                   `models_present` answers for THIS brain's model, under the one
+                                   cache the hub reads; `embedding_coherence.derived_layer` counts
+                                   what was computed under another model
 voidloom preflight      [...]      prove THIS machine in a scratch folder (installs nothing); writes
                                    preflight.json -- every argument goes to install/preflight.py
+voidloom status         [--json]   this brain's index on one page: lock, coverage matched/total, the derived
+                                   layer's stale count, the seed numbers (read-only, no model)
 ```
 
 ### Memory
@@ -74,6 +79,13 @@ voidloom store    --content C --category CAT [--tags T] [--importance N] [--json
 voidloom context  [--project P] [--limit N] [--json]        session-start context load
 voidloom batch-recall --items '["q1","q2"]' [--top-k N] [--no-rerank] [--json]   N recalls, ONE model load
 voidloom batch-store  --items '[{"content":"...","category":"..."}]' [--json]   N stores, ONE model load
+```
+
+```
+voidloom inspect ID       [--json]             one memory: text, seed flag, origin, visibility (or
+                                               "unclassified"), model stamp, index coverage (read-only)
+voidloom export  --ids 1,2,3 [--json]          an explicit selection as plain JSON (read-only); --all
+                                               refuses, exit 3, naming the unbuilt wards
 ```
 
 **Batch is the default for more than one operation.** The single verbs reload the

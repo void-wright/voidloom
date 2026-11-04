@@ -117,6 +117,16 @@ class TheUntypedFailureStillFallsToTierZero(_Home):
         self.assertNotIn("full-engine init unavailable", p.stdout)
         self.assertIn("fresh brain initialized at Tier 0", p.stdout)
 
+    def test_a_tier_zero_brain_carries_the_column_the_armed_unit_needs(self):
+        p = self._run("--init-blank", "--tier0-only", "--force-cpu", WIZARD_EMBED_MODEL="nomic")
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-1500:])
+        c = sqlite3.connect(str(self.brain / "claude_memory.db"))
+        try:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(memories)")}
+        finally:
+            c.close()
+        self.assertIn("skill_tier", cols, "the armed skill-graduation unit refuses on a brain without this column")
+
 
 class TheVenvInitBlockKeepsTheCause(unittest.TestCase):
     """C.init, the shipped text under bash with a stub interpreter in the venv's place."""

@@ -3410,6 +3410,13 @@ else
         if WIZARD_LIBRARY_DB="$DB_PATH" "$PY_SYS" "$MIGRATOR" apply --db "$DB_PATH"; then
             say "  brain schema matches this package."
             note_step "migrations"
+            # memories.skill_tier is added by code, not by a migration's own text, so a brain that never reaches `init`
+            # (a Tier-0 build, a brain that already has a lock) would leave the armed skill-graduation unit refusing
+            # every night. Additive and idempotent. Not on the ambient shape, which changes nothing it was not asked to.
+            if [ "$SHAPE" != "ambient" ]; then
+                "$PY_SYS" "${BRAIN_DIR}/organs/skill_graduation.py" "$DB_PATH" --apply-migration "${BRAIN_DIR}/migrations/migration_007_skill_graduation.sql" >/dev/null 2>&1 \
+                    || warn "could not add the skill-graduation column; its nightly unit will refuse until you run: ${PY_SYS} '${BRAIN_DIR}/organs/skill_graduation.py' '${DB_PATH}' --apply-migration '${BRAIN_DIR}/migrations/migration_007_skill_graduation.sql'"
+            fi
             # R1: P3 again, AFTER the migrations -- a post-migration gate: the same one offline
             # semantic recall through the package's recall path must still answer.
             if [ "$SHAPE" = "ambient" ]; then

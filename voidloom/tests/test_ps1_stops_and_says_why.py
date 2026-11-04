@@ -74,7 +74,7 @@ class UnderPowerShell(unittest.TestCase):
             'function Say ($m) { Write-Host "[install] $m" }',
             'function Warn ($m) { Write-Host "WARN: $m" }',
             'function Die ($m) { Write-Host "FATAL: $m"; exit 1 }',
-            _fn("Invoke-PyOut"), _fn("Invoke-BrainInit"), _fn("Invoke-SeedLoad"), _fn("Invoke-SeedSelfTest"),
+            _fn("Invoke-PyOut"), _fn("Invoke-BrainInit"), _fn("Invoke-SeedLoad"), _fn("Invoke-SeedSelfTest"), _fn("Invoke-SkillColumn"),
             "$BrainDir = '%s'" % self._unc(self.tmp), "$VenvPy = '%s'" % self._unc(stub), "$PySys = $VenvPy",
             "$Lite = 'lite.py'; $Seed = 'pack.json'; $DbPath = 'b.db'",
             call, "Write-Host 'REACHED_THE_END'",
@@ -118,6 +118,16 @@ class UnderPowerShell(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("just emptier", p.stdout)
         self.assertIn("REACHED_THE_END", p.stdout)
+
+    def test_a_column_that_cannot_be_added_warns_and_goes_on(self):
+        p = self._ps(self._stub(["nope"], 1), "Invoke-SkillColumn")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("WARN: could not add the skill-graduation column (rc 1)", p.stdout)
+        self.assertIn("REACHED_THE_END", p.stdout)
+
+    def test_control_a_column_added_says_nothing(self):
+        p = self._ps(self._stub(["{}"], 0), "Invoke-SkillColumn")
+        self.assertNotIn("WARN", p.stdout, p.stdout + p.stderr)
 
     def test_the_self_test_prints_the_engines_number(self):
         line = json.dumps({"line": "seed doctrine self-test: 24 of 25: PASS"}).replace('"', '"')

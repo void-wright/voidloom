@@ -247,9 +247,10 @@ fixes it. The installer runs this same check before it finishes.
 voidloom doctor
 ```
 
-Look for `"brain_healthy": true`. The report also shows whether the session
-hook is installed and has fired, whether the reranker is on (and why), and
-which compute the brain uses.
+Look for `"brain_healthy": true`; `reason` names what failed, and `host_healthy`
+answers for the hook settings separately, so a bad settings file does not read as a
+sick brain. The report also shows whether the session hook is installed and has
+fired, whether the reranker is on (and why), and which compute the brain uses.
 
 **3. Recall by meaning** (semantic tier). Store something, then ask for it in
 different words — the [60-second taste](#a-60-second-taste) above is exactly
@@ -284,6 +285,13 @@ voidloom approvals --mode     # show (or set: --mode auto|manual) who decides
 # Health, and who thinks overnight.
 voidloom doctor
 voidloom thinker status
+
+# What the index covers, and one memory in full (both read-only, no model).
+voidloom status
+voidloom inspect 42
+
+# A chosen few memories as plain JSON. A full copy is refused: `--all` says why.
+voidloom export --ids 42,43
 ```
 
 Add `--json` to any verb for a structured `{status, code, data}` envelope.
