@@ -4,8 +4,8 @@
 WHY IT EXISTS. A fresh install loaded 66 seed memories and held **0 vectors**:
 100% of a new brain's content was keyword-only, and no shipped verb could fix it.
 `voidloom/cli.py:380-383` had already named the cause -- the one existing backfill,
-`embedding_upgrade.cmd_re_embed`, is hardcoded to Jina -> `memory_embeddings_v2`
-and is not generic, so it is wrong for a nomic brain and wrong for a qwen brain,
+`embedding_upgrade.cmd_re_embed`, was hardcoded to one tier and one table
+and was not generic, so it was wrong for a nomic brain and wrong for a qwen brain,
 which between them are every brain the installer builds.
 
 WHEN IT RUNS, and this is Drew's ruling (2026-09-17): **at install time.** The
@@ -28,8 +28,14 @@ tags a failure `embedding-missing` so it is findable by SQL. Re-implementing any
 of that here would be a second answer to a question that already has one.
 
 CONTRACT
-  * IDEMPOTENT: only memories with no row in the active table are touched. Running
-    it twice embeds nothing the second time.
+  * IDEMPOTENT, BY THE STAMP. On a brain with an install lock the unit of work is
+    memory_write's one predicate, the same one `re-embed` reads: an active memory with
+    no stamp under the lock's checksum at its width for the text it holds NOW, with its
+    vector present. A row in the table is not "done": an unstamped vector, a legacy
+    'unresolved' stamp and an edited memory are all work, and their vectors are replaced
+    in place. On a brain with no lock there is no checksum to hold a row to, so the work
+    is what it always was: live memories with no row in the active table.
+    Running it twice embeds nothing the second time.
   * DERIVED, NEVER TYPED: every number reported is counted at the moment of
     asking, including the denominator.
   * NEVER RAISES on a missing stack. A host with no torch gets
@@ -46,7 +52,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
+
+COMMIT_EVERY = 64
 
 
 def _organs_on_path() -> None:
@@ -84,8 +93,27 @@ def _connect(db_path: str) -> sqlite3.Connection:
     return conn
 
 
+def _sidecar_ready(conn: sqlite3.Connection) -> bool:
+    return "weights_hash" in {r[1] for r in conn.execute("PRAGMA table_info(embedding_provenance)")}
+
+
+def _locked_filter(conn: sqlite3.Connection):
+    """The reader's filter on a brain with an install lock, else None."""
+    import memory_write
+    flt = memory_write.provenance_filter(conn)
+    return flt if flt.locked else None
+
+
 def count_unembedded(conn: sqlite3.Connection, table: str) -> int:
-    """Live memories with no vector in `table`. The denominator, counted now."""
+    """The work left, counted now. On a locked brain, memory_write's predicate, so this
+    and `re-embed` give one answer about one brain; a sidecar too old to name a checksum
+    leaves every live memory as work. With no lock: live memories with no vector in `table`."""
+    import memory_write
+    flt = _locked_filter(conn)
+    if flt is not None:
+        if not _sidecar_ready(conn):
+            return conn.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
+        return len(_pending_rows(conn, table, None))
     # One uncorrelated `IN (SELECT memory_id FROM <vec table>)`, never a per-row EXISTS: a correlated look-up does
     # one vec0 point read per memory (~0.4 ms each; measured 10.76 s on a 31,904-memory brain, 0.016 s this way). The
     # vec0 `memory_id` is its INTEGER PRIMARY KEY, so it is never NULL and NOT IN cannot go empty on a NULL.
@@ -96,9 +124,47 @@ def count_unembedded(conn: sqlite3.Connection, table: str) -> int:
     ).fetchone()[0]
 
 
+def _pending_rows(conn: sqlite3.Connection, table: str, limit: Optional[int]) -> List[Dict[str, Any]]:
+    """[{id, content}] for the work count_unembedded counts, in id order."""
+    import memory_write
+    flt = _locked_filter(conn)
+    cap = f" LIMIT {int(limit)}" if limit else ""
+    if flt is not None and _sidecar_ready(conn):
+        # A consolidated memory stamped as a centroid under the lock is done: its vector is the
+        # average of its members, on purpose, and a text vector would bury it.
+        done = {r[0] for r in conn.execute(
+            f"SELECT memory_id FROM embedding_provenance WHERE input_kind = 'centroid' AND vec_table = ? "
+            f"AND weights_hash = ? AND dim = ? AND memory_id IN (SELECT memory_id FROM {flt.vec_table})",
+            flt.search_set_params).fetchall()}
+        rows = [{"id": mid, "content": content}
+                for mid, content in memory_write.pending_embeddings(conn, flt=flt) if mid not in done]
+        return rows[:limit] if limit else rows
+    where = "" if flt is not None else f"  AND m.id NOT IN (SELECT memory_id FROM {table}) "
+    return [dict(r) for r in conn.execute(
+        f"SELECT m.id, m.content FROM memories m WHERE COALESCE(m.is_archived, 0) = 0 {where}"
+        f"ORDER BY m.id{cap}").fetchall()]
+
+
+def _replace_under_lock(conn: sqlite3.Connection, memory_id: int, text: str,
+                        lock: Dict[str, Any]) -> Dict[str, Any]:
+    """Encode and write one row of a locked brain, replacing any vector it holds. attach_embedding's
+    answer shape; a failure tags the row exactly as attach_embedding does and leaves its vector alone."""
+    import memory_write
+    try:
+        vec = memory_write.default_encoder(text, conn)
+        memory_write.attach_under_lock(conn, memory_id, text, vec, lock=lock, organ="embed_backfill")
+        conn.execute("DELETE FROM memory_tags WHERE memory_id = ? AND tag = ?",
+                     (memory_id, memory_write.MISSING_TAG))
+        return {"embedded": True, "error": None}
+    except Exception as e:
+        conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
+                     (memory_id, memory_write.MISSING_TAG))
+        return {"embedded": False, "error": f"{type(e).__name__}: {e}"}
+
+
 def backfill(db_path: str, limit: Optional[int] = None,
              dry_run: bool = False) -> Dict[str, Any]:
-    """Embed every live memory missing a vector in the active tier.
+    """Embed every live memory that is work (see CONTRACT) in the active tier.
 
     Returns an envelope. Never raises for an absent encoder or an unresolved
     tier -- both are REFUSALS with a named code, because both describe a brain
@@ -112,6 +178,7 @@ def backfill(db_path: str, limit: Optional[int] = None,
                            "dry_run": bool(dry_run), "errors": []}
     try:
         import embed_resolver
+        import embedder_lock
         import memory_write
     except Exception as e:
         out.update({"status": "refused", "code": "organs_unavailable",
@@ -151,16 +218,12 @@ def backfill(db_path: str, limit: Optional[int] = None,
         if missing == 0:
             out["code"] = "backfill_nothing_to_do"
             out["unembedded_after"] = 0
-            out["message"] = (f"every live memory already has a vector in {table}. "
-                              "Nothing to do, and that is a measurement, not a default.")
+            out["message"] = (f"every live memory already has a vector in {table}"
+                              + (" stamped under the lock for its current text" if _locked_filter(conn) else "")
+                              + ". Nothing to do, and that is a measurement, not a default.")
             return out
 
-        rows = conn.execute(
-            f"SELECT m.id, m.content FROM memories m "
-            f"WHERE COALESCE(m.is_archived, 0) = 0 "
-            f"  AND m.id NOT IN (SELECT memory_id FROM {table}) "
-            f"ORDER BY m.id" + (f" LIMIT {int(limit)}" if limit else "")
-        ).fetchall()
+        rows = _pending_rows(conn, table, limit)
 
         if dry_run:
             out["code"] = "backfill_plan"
@@ -188,10 +251,29 @@ def backfill(db_path: str, limit: Optional[int] = None,
                             "make them semantically findable.")})
             return out
 
-        for r in rows:
-            res = memory_write.attach_embedding(
-                conn, r["id"], r["content"] or "", policy="best_effort",
-                organ="embed_backfill")
+        lock = None
+        if _locked_filter(conn) is not None:
+            memory_write.ensure_provenance_table(conn)
+            lock = embedder_lock.resolve(conn)
+            # A consolidated memory waits for its members, then takes their average; one
+            # whose member is gone can only take a text vector, below.
+            import tier_set
+            derived = tier_set.derived_members(conn, [r["id"] for r in rows])
+            if derived:
+                res = tier_set.rebuild_centroids(conn, derived, lock, organ="embed_backfill")
+                out["embedded"] += res["rebuilt"]
+                out["centroids_waiting_for_members"] = len(res["waiting"])
+                keep = set(res["orphaned"])
+                rows = [r for r in rows if r["id"] not in derived or r["id"] in keep]
+        for n, r in enumerate(rows, 1):
+            if lock is not None:
+                res = _replace_under_lock(conn, r["id"], r["content"] or "", lock)
+            else:
+                res = memory_write.attach_embedding(
+                    conn, r["id"], r["content"] or "", policy="best_effort",
+                    organ="embed_backfill")
+            if n % COMMIT_EVERY == 0:
+                conn.commit()                    # a pinned brain's backfill can be long: a kill keeps its work
             if res.get("embedded"):
                 out["embedded"] += 1
             else:

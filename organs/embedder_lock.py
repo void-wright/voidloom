@@ -495,7 +495,9 @@ def read_lock(path: Union[str, Path]) -> Dict[str, Any]:
             "(`claude_memory.py init`); nothing embeds or searches without it.",
             lock=str(p))
     except OSError as e:
-        raise EmbedderLockError("LOCK_MISSING", f"embedder lock at {p} unreadable: {e}", lock=str(p))
+        # It is THERE and cannot be read: never read as absent, which would put a locked
+        # brain on the lock-less rule and search its whole table.
+        raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} unreadable: {e}", lock=str(p))
     try:
         lock = json.loads(raw.decode("utf-8"))
     except (ValueError, UnicodeDecodeError) as e:

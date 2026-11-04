@@ -1,13 +1,12 @@
-"""The two side stores that embed with nomic load it AT THE SHIPPED PIN, never by name.
+"""The side store that embeds with nomic loads it AT THE SHIPPED PIN, never by name.
 
 THE CLAIM UNDER TEST
-  organs/website_memory.py (its own 768-wide database) and organs/whisper_network.py
-  (its connection-less fallback) used to call
+  organs/website_memory.py (its own 768-wide database) used to call
       SentenceTransformer("nomic-ai/nomic-embed-text-v1.5", revision=<pin>, trust_remote_code=True)
   which pins the model but resolves its remote-code repository at the hub's moving
   `main`. A model cache filled at the catalogue's pins (what the installer and
   organs/model_fetch.py write) holds no `main` ref, so that load fails offline, and
-  online it can run code bytes nobody checked. Both now go through
+  online it can run code bytes nobody checked. It now goes through
   embedding_upgrade.get_locked_embedder with the shipped catalogue's `cpu` entry
   (organs/embedders.lock.json): model and code at their revisions, the checksum
   verified before anything is instantiated.
@@ -89,33 +88,6 @@ class SideStoresLoadByPin(unittest.TestCase):
             self.assertEqual(lock[k], CPU[k], k)
         self.assertEqual(lock.get("code"), CPU.get("code"), "the remote-code repository at ITS pin")
         self.assertEqual(lock["tier"], "cpu")
-
-    # ---- whisper_network: the connection-less fallback
-    def test_whisper_control_fallback_encodes_through_the_catalogue_pin(self):
-        import whisper_network
-        self._record()
-        out = whisper_network._encode_for_embedding("a whisper", conn=None)
-        self.assertEqual(len(out), 4 * 768)
-        self.assertEqual(len(self.seen), 1)
-        self._assert_the_pin(self.seen[0])
-
-    def test_whisper_saboteur_empty_offline_cache_refuses_and_instantiates_nothing(self):
-        import whisper_network
-        self._empty_offline_cache()
-        trip = _Tripwire()
-        keep = sys.modules.get("sentence_transformers")
-        sys.modules["sentence_transformers"] = trip
-        try:
-            with self.assertLogs(whisper_network.logger, level="WARNING") as logs:
-                out = whisper_network._encode_for_embedding("a whisper", conn=None)
-        finally:
-            if keep is None:
-                sys.modules.pop("sentence_transformers", None)
-            else:
-                sys.modules["sentence_transformers"] = keep
-        self.assertIsNone(out)
-        self.assertEqual(_Tripwire.fired, 0, "nothing may be instantiated from unverified bytes")
-        self.assertIn("SNAPSHOT_ABSENT", "\n".join(logs.output))
 
     # ---- website_memory: its own nomic store
     def test_website_control_loads_through_the_catalogue_pin(self):

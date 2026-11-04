@@ -108,27 +108,26 @@ def _torch_device(torch_mod) -> str:
     return _td(torch_mod)
 
 
-def _reranker_offline_ok(repo_id: str) -> bool:
-    """H11: decide whether to load the reranker with local_files_only=True.
-
-    Honor an explicit offline request (HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE),
-    else auto-enable offline only when the model is already in the local HF
-    cache (warm cache => no hub round-trip). A cold machine (no cache) still
-    downloads on first call.
-    """
-    for var in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
-        v = os.environ.get(var)
-        if v is not None and v.strip().lower() in ("1", "true", "yes", "on"):
-            return True
+def _reranker_in_cache(repo_id: str) -> bool:
+    """Whether the model is in the local HF cache: a fact about the disk, whatever the
+    environment says."""
     try:
         import embedder_lock
         marker = "models--" + repo_id.replace("/", "--")
         cached = embedder_lock.hf_hub_cache() / marker / "snapshots"
-        if cached.exists() and any(cached.iterdir()):
-            return True
+        return cached.exists() and any(cached.iterdir())
     except Exception:
-        pass  # graceful: on any doubt, fall through to online (allow download)
-    return False
+        return False
+
+
+def _reranker_offline_ok(repo_id: str) -> bool:
+    """H11: True when an explicit offline request is set (HF_HUB_OFFLINE /
+    TRANSFORMERS_OFFLINE) or the model is already in the local HF cache."""
+    for var in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+        v = os.environ.get(var)
+        if v is not None and v.strip().lower() in ("1", "true", "yes", "on"):
+            return True
+    return _reranker_in_cache(repo_id)
 
 
 def _quiet_reranker_load_noise() -> None:
@@ -177,7 +176,7 @@ def _quiet_reranker_load_noise() -> None:
 
 # The reranker's device is the C1 resolver's answer (_torch_device). On CUDA the pin (CUDA_VISIBLE_DEVICES, set
 # before torch by claude_memory.py) leaves PyTorch one card, addressed as cuda:0.
-# The active embedding model (jina-embeddings-v5-text-small, 1024-dim, ~1.3GB)
+# The active embedding model (whatever the install lock names; see embedder_lock)
 # already lives there; the reranker (Qwen3-Reranker-0.6B by default, ~1.2GB, or
 # the bge-reranker-v2-m3 fallback ~1.1GB FP16) adds ~1GB+ — well within 11GB.
 _RERANKER_DEVICE = "cuda:0"   # documentation of the CUDA case only: the device is _torch_device()'s answer
@@ -414,7 +413,7 @@ def reranker_status(install_record: Optional[str] = None, confirm: bool = False,
     recorded one -- C4: PROVEN / PROVEN-BY-PROXY / SUPPORTED-UNPROVEN / FAILED-ON-THIS-MACHINE -- else what the code
     can claim for the backend), the installer's stored sweep (C3 ``reranker_gate``) beside the live answer, and
     whether the model is in the local cache -- "on but not cached" is what a RAM upgrade after a gated install
-    looks like, and the next recall would download ~1.2 GB."""
+    looks like: recall keeps its fused order, flagged, until the model is fetched. Recall itself never downloads."""
     gate = reranker_gate(confirm=confirm, torch_mod=torch_mod)
     st: Dict[str, Any] = dict(gate)
     st["proof_label"], st["proof_label_source"] = accelerator_proof_label(gate.get("accelerator") or "cpu",
@@ -426,10 +425,11 @@ def reranker_status(install_record: Optional[str] = None, confirm: bool = False,
     # C3: the sweep writes reranker_enabled beside reranker_gate{...}; with no sweep record there is nothing to compare.
     stored_on = gate["config_enabled"] if st["stored_gate"] else None
     st["stored_agrees"] = None if stored_on is None else (bool(stored_on) == bool(gate["enabled"]))
-    st["model_cached"] = _reranker_offline_ok(gate["model"]) if gate["enabled"] else None
+    st["model_cached"] = _reranker_in_cache(gate["model"]) if gate["enabled"] else None
     notes = []
     if gate["enabled"] and st["model_cached"] is False:
-        notes.append("reranker enabled but not cached: the next recall downloads %s" % gate["model"])
+        notes.append("reranker enabled but not cached: recall keeps its fused order until %s is fetched "
+                     "(python3 organs/model_fetch.py --db <brain>/claude_memory.db)" % gate["model"])
     if st["stored_agrees"] is False:
         notes.append("the installer recorded the reranker %s; this machine now says %s (the live answer decides)"
                      % ("on" if stored_on else "off", "on" if gate["enabled"] else "off"))
@@ -688,11 +688,13 @@ def _load_reranker(force_reload: bool = False):
     This is the GUARANTEED-fallback / VOIDLOOM_RERANKER=bge backend; the default
     runtime reranker is Qwen3-Reranker-0.6B (``_qwen_rerank``). Returns the
     loaded ``CrossEncoder`` on success, or ``None`` on failure. On failure,
-    ``None`` is cached so subsequent calls don't retry the expensive
-    download/load. Set ``force_reload=True`` to retry (e.g., if GPU comes back
-    online).
+    ``None`` is cached so subsequent calls don't retry the expensive load. Set
+    ``force_reload=True`` to retry (e.g., if GPU comes back online).
 
-    The model is ~1.1GB on disk and loads in ~7s warm from HF cache.
+    The model is ~1.1GB on disk and loads in ~7s warm from HF cache. It is not in
+    the package catalogue, and a model this package does not pin is one a recall
+    must not fetch: it loads ONLY from a cache the operator populated themselves.
+    A cold host gets the fused order, flagged in the recall's coverage.
     """
     if not force_reload and "model" in _reranker_cache:
         return _reranker_cache["model"]
@@ -701,16 +703,13 @@ def _load_reranker(force_reload: bool = False):
         import torch
         _quiet_reranker_load_noise()  # H3: load INFO + ST version warning off default stderr
         device = _torch_device(torch)
-        # H11 offline: warm cache => local-only (no HF "Fetching N files");
-        # honor HF_HUB_OFFLINE explicitly; cold machine still downloads on first
-        # call. `local_files_only` is a first-class CrossEncoder param (it flows
-        # to the underlying HF from_pretrained for both model + tokenizer).
-        offline = _reranker_offline_ok(_RERANKER_MODEL_NAME)
+        # `local_files_only` is a first-class CrossEncoder param (it flows to the
+        # underlying HF from_pretrained for both model + tokenizer).
         model = CrossEncoder(
             _RERANKER_MODEL_NAME,
             device=device,
             max_length=_RERANKER_MAX_LENGTH,
-            local_files_only=offline,
+            local_files_only=True,
         )
         _reranker_cache["model"] = model
         logger.info("Loaded reranker %s on %s", _RERANKER_MODEL_NAME, device)
@@ -801,6 +800,23 @@ def _temporal_status(conn: "sqlite3.Connection", ids: List[int]) -> Dict[int, di
         return {}
 
 
+# What the last reranker_score call actually did, for the recall that asked: 'ran' (with its backend), 'off'
+# (the gate), or 'degraded' (the gate allowed a reranker and none could run, so the fused order stands, and why).
+_rerank_outcome: Dict[str, Any] = {}
+
+
+def _rerank_said(state: str, backend: Optional[str] = None, reason: Optional[str] = None) -> None:
+    _rerank_outcome.clear()
+    _rerank_outcome.update({"state": state, "backend": backend})
+    if reason:
+        _rerank_outcome["reason"] = reason
+
+
+def _qwen_absence() -> Optional[str]:
+    mod = sys.modules.get("qwen_reranker")
+    return mod.absence_reason() if mod is not None else None
+
+
 def reranker_score(
     conn: sqlite3.Connection,
     query: str,
@@ -831,6 +847,7 @@ def reranker_score(
         candidates in their input order with synthetic scores (preserves
         the RRF ranking — graceful degradation).
     """
+    _rerank_outcome.clear()
     if not candidate_ids:
         return []
 
@@ -838,6 +855,7 @@ def reranker_score(
 
     # ---- THE GATE (owner ruling 2026-10-14): off -> no model load, RRF order kept. ----
     if not reranker_gate()["enabled"]:
+        _rerank_said("off")
         return [(mid, 1.0 / (i + 1)) for i, mid in enumerate(candidate_ids[:top_k])]
 
     # Pull candidate text in a single query (avoid N round-trips).
@@ -878,6 +896,7 @@ def reranker_score(
     if _RERANKER_BACKEND == "qwen":
         qwen_scored = _qwen_rerank(query, ordered_ids, id_to_text, top_k, temporal_status)
         if qwen_scored is not None:
+            _rerank_said("ran", "qwen")
             return qwen_scored
         logger.info("Qwen reranker unavailable/failed — falling back to bge CrossEncoder")
 
@@ -885,6 +904,7 @@ def reranker_score(
     model = _load_reranker()
     if model is None:
         # Graceful degradation: preserve input order, synthesise descending scores.
+        _rerank_said("degraded", reason=_qwen_absence() or "the fallback reranker is not in the local cache")
         return [(mid, 1.0 / (i + 1)) for i, mid in enumerate(ordered_ids[:top_k])]
 
     pairs: List[Tuple[str, str]] = [(query, id_to_text[mid]) for mid in ordered_ids]
@@ -892,8 +912,10 @@ def reranker_score(
         scores = model.predict(pairs, batch_size=_RERANK_BATCH_SIZE)
     except Exception as e:
         logger.warning("Reranker predict() failed: %s — fallback to RRF order", e)
+        _rerank_said("degraded", reason=f"the fallback reranker failed: {type(e).__name__}")
         return [(mid, 1.0 / (i + 1)) for i, mid in enumerate(ordered_ids[:top_k])]
 
+    _rerank_said("ran", "bge")
     scored = list(zip(ordered_ids, [float(s) for s in scores]))
     # ---- L5-C2: deterministic confidence-scaled penalty on superseded ids. ----
     if temporal_status:
@@ -1055,10 +1077,14 @@ def recall_hybrid_with_coverage(
       vector_arm   'ran' | 'refused' | 'off' (bm25-only) | 'empty' (no vectors at all)
       degraded     True when a vector mode was asked for and the arm refused, so
                    the rows are keyword rows only; `refusal` names the code.
+      reranker     what the rerank stage did, when it was reached: `state` 'ran'
+                   (`backend` qwen or bge), 'off' (the gate) or 'degraded' (no
+                   reranker could run, so the fused order stands; `reason` says why).
     Every row also carries it as ``row["coverage"]``. An EMPTY result set can
     carry nothing per row, which is why it is returned beside the list."""
     coverage = dict(_reader().coverage_envelope(conn))
     refusals: List[str] = []
+    _rerank_outcome.clear()
     rows = _recall_hybrid_rows(
         conn, query, query_vec, top_k=top_k, mode=mode, vec_candidates=vec_candidates,
         bm25_candidates=bm25_candidates, rrf_candidates=rrf_candidates, rrf_k=rrf_k,
@@ -1072,6 +1098,8 @@ def recall_hybrid_with_coverage(
         coverage["vector_arm"], coverage["degraded"] = "empty", False
     else:
         coverage["vector_arm"], coverage["degraded"] = "ran", False
+    if _rerank_outcome:
+        coverage["reranker"] = dict(_rerank_outcome)
     for r in rows:
         r["coverage"] = coverage
     return rows, coverage
@@ -1262,8 +1290,8 @@ def _recall_hybrid_rows(
     # ---- Stage 3: rerank -- through the gate (reranker_score asks it first and loads nothing when it is off) ----
     fused_ids = [mid for mid, _score in fused]
     reranked = reranker_score(conn, query, fused_ids, top_k=top_k)
-    if not reranker_gate()["enabled"]:
-        # The gate kept RRF order; give the rows their RRF scores and the label that says what ran.
+    if not reranker_gate()["enabled"] or _rerank_outcome.get("state") == "degraded":
+        # The fused order stands; give the rows their RRF scores and the label that says what ran.
         rrf = dict(fused)
         reranked = [(mid, rrf.get(mid, sc)) for mid, sc in reranked]
         return _hydrate_memory_rows(
