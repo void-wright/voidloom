@@ -11,6 +11,8 @@ denies every connect. Children inherit the suite's import blocker, so no model l
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -20,6 +22,7 @@ import textwrap
 import unittest
 import shutil
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SLEEP = ROOT / "organs" / "sleep_loop.py"
@@ -97,6 +100,24 @@ class OnAHostWithNoSnapshot(_SelfTest):
         self.assertEqual(r.returncode, 0, r.stdout[-800:] + r.stderr[-800:])
         self.assertIn("REFUSED: reflection_embedding SNAPSHOT_ABSENT", r.stdout)
         self.assertEqual(self.network_rows(), [], "the self-test opened a network socket")
+
+
+class ThePinIsCheckedWithoutTheRightToFetch(unittest.TestCase):
+    def test_saboteur_the_self_test_never_asks_to_fetch(self):
+        """The offline flags stop a fetch on their own, so the child runs above cannot see this: read the call."""
+        sys.path.insert(0, str(ROOT / "organs"))
+        import embedder_lock as el
+        import sleep_loop
+        seen = []
+
+        def absent(lock, *, allow_fetch=True, **kw):
+            seen.append(allow_fetch)
+            raise el.EmbedderLockError("SNAPSHOT_ABSENT", "not on this host")
+        with mock.patch.object(el, "verify_snapshot_against_lock", absent), \
+                mock.patch.dict(os.environ), contextlib.redirect_stdout(io.StringIO()):
+            sleep_loop.unit_tests()
+        self.assertTrue(seen)
+        self.assertFalse(seen[0], "the first check of the pin may not fetch")
 
 
 class TheCentroidRuleRunsInTheShippedSelfTest(_SelfTest):
