@@ -50,10 +50,16 @@ class TheDocumentedRouteIsTheRouteTheRefusalPrints(unittest.TestCase):
         self.assertIn("--db-path", p.stdout)
         self.assertIn("re-embed", p.stdout)
 
-    def test_the_backfill_is_not_offered_as_the_route(self):
-        i = README.index("NO_ROWS_FOR_LOCK")
-        section = README[i:i + 900]
-        self.assertIn("`embed_backfill.py` is not the tool for this", section)
+    def test_the_restore_guide_does_not_warn_of_a_call_the_reranker_no_longer_makes(self):
+        text = (ROOT / "docs" / "RESTORE_MANIFEST.md").read_text(encoding="utf-8")
+        self.assertNotIn("A recall makes a network call", text)
+        self.assertIn("SNAPSHOT_ABSENT", text)
+
+    def test_the_restore_guide_names_no_organ_that_does_not_ship(self):
+        text = (ROOT / "docs" / "RESTORE_MANIFEST.md").read_text(encoding="utf-8")
+        for name in set(re.findall(r"`([a-z_]+_[a-z_]+)` loads on every recall", text)):
+            self.assertTrue((ROOT / "organs" / (name + ".py")).is_file(), name)
+        self.assertNotIn("cross_tier_bridges", text)
 
 
 if __name__ == "__main__":

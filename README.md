@@ -467,8 +467,6 @@ cd ~/.claude/memory && venv/bin/python3 organs/embedding_upgrade.py --db-path cl
 
 Use the same command for a brain restored from before it had a lock. Its vectors
 stay searchable, but `re-embed` is what checks them against the lock.
-`embed_backfill.py` is not the tool for this: it gives vectors to memories that have
-none.
 
 [`docs/RESTORE_MANIFEST.md`](./docs/RESTORE_MANIFEST.md) lists what else a brain
 needs to stand up on another machine.
