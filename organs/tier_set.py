@@ -29,7 +29,8 @@ THE ORDER, and what each step guarantees:
      stamped (memory_write.attach_under_lock), committed per batch. The old tier
      keeps serving throughout: nothing it reads is touched. Kill it at any point and
      re-run: finished rows are reused, the rest is work again. A batch that runs out of
-     memory on the accelerator is retried one item at a time. A consolidated memory
+     memory on the accelerator is retried one item at a time, and a memory too long
+     to fit alone is embedded from its head (the receipt counts them). A consolidated memory
      takes the average of its members' new vectors, not a vector of its text.
   4. FLIP, inside one write transaction (BEGIN IMMEDIATE, so no store lands
      between the check and the switch): embed whatever a concurrent writer added,
@@ -330,7 +331,8 @@ def _ensure_target_table(conn: sqlite3.Connection, lock: Dict[str, Any]) -> None
 
 def _is_out_of_memory(e: BaseException) -> bool:
     import voidloom_device
-    return voidloom_device.is_out_of_memory(e)
+    # torch's CPU allocator says "not enough memory", which the device layer's test does not match
+    return voidloom_device.is_out_of_memory(e) or "not enough memory" in str(e).lower()
 
 
 def _release_accelerator_cache() -> None:
@@ -338,12 +340,48 @@ def _release_accelerator_cache() -> None:
     voidloom_device.empty_cache()
 
 
-def _encode_rows(rows: List[Any], texts: List[str], lock: Dict[str, Any],
-                 failed: Dict[int, str]) -> List[Any]:
-    """[(row, text, vector)] for `rows`. A batch that runs out of memory on the accelerator
-    is retried one item at a time, so one long memory cannot stop the whole run at the same
-    batch on every rerun. An item that does not fit alone goes in `failed`, id -> why. Any
-    other error is the caller's: it is not a property of one long memory."""
+# A memory that does not fit alone is embedded from its head. The model already cuts a long
+# text at its own window; this only cuts sooner, on a device too small for that window. Measured
+# on an 11 GB card: at the model's window (32,768 tokens) one text asked for 64 GiB, so no retry
+# at full length can ever finish. Both numbers are INVENTED, NOT TUNED: the first retry's length,
+# and the length below which the head says too little to stand for the memory.
+SHORTEN_START_CHARS = 32000
+SHORTEN_FLOOR_CHARS = 1000
+
+
+class _Outcome:
+    """What a build could not do in full: `failed` id -> why (no vector), `shortened` id -> the
+    characters its vector was embedded from."""
+
+    def __init__(self) -> None:
+        self.failed: Dict[int, str] = {}
+        self.shortened: Dict[int, int] = {}
+
+
+def _encode_alone(mid: int, text: str, lock: Dict[str, Any], outcome: _Outcome) -> Optional[bytes]:
+    """One text, full length first, then its head, halving down to the floor. The stamp still
+    names the whole text: this is that memory's vector, and the receipt counts the shortened."""
+    n = len(text)
+    while True:
+        try:
+            vec = _encode([text[:n]], lock)[0]
+            if n < len(text):
+                outcome.shortened[mid] = n
+            return vec
+        except (RuntimeError, MemoryError) as e:
+            if not _is_out_of_memory(e):
+                raise
+            _release_accelerator_cache()
+        n = SHORTEN_START_CHARS if n > SHORTEN_START_CHARS else n // 2
+        if n < SHORTEN_FLOOR_CHARS:
+            outcome.failed[mid] = f"out of memory embedding {len(text)} characters, and its head alone"
+            return None
+
+
+def _encode_rows(rows: List[Any], texts: List[str], lock: Dict[str, Any], outcome: _Outcome) -> List[Any]:
+    """[(row, text, vector)] for `rows`. A batch that runs out of memory on the accelerator is
+    retried one item at a time, so one long memory cannot stop the whole run at the same batch
+    on every rerun. Any other error is the caller's: it is not a property of one long memory."""
     try:
         return list(zip(rows, texts, _encode(texts, lock)))
     except (RuntimeError, MemoryError) as e:
@@ -352,13 +390,9 @@ def _encode_rows(rows: List[Any], texts: List[str], lock: Dict[str, Any],
     _release_accelerator_cache()
     done = []
     for row, text in zip(rows, texts):
-        try:
-            done.append((row, text, _encode([text], lock)[0]))
-        except (RuntimeError, MemoryError) as e:
-            if not _is_out_of_memory(e):
-                raise
-            failed[int(row[0])] = f"out of memory embedding {len(text)} characters alone"
-            _release_accelerator_cache()
+        vec = _encode_alone(int(row[0]), text, lock, outcome)
+        if vec is not None:
+            done.append((row, text, vec))
     return done
 
 
@@ -458,27 +492,27 @@ def rebuild_centroids(conn: sqlite3.Connection, derived: Dict[int, List[int]], l
 
 
 def _embed_pending(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *, batch_size: int,
-                   in_txn: bool, failed: Optional[Dict[int, str]] = None) -> int:
+                   in_txn: bool, outcome: Optional[_Outcome] = None) -> int:
     """Embed `ids`: text rows first, then the centroids over them. A centroid with a member that
     is gone takes a text vector, the only one it can still have."""
     derived = derived_members(conn, ids)
     plain = [i for i in ids if i not in derived]
-    done = _embed_ids(conn, plain, lock, batch_size=batch_size, in_txn=in_txn, failed=failed)
+    done = _embed_ids(conn, plain, lock, batch_size=batch_size, in_txn=in_txn, outcome=outcome)
     if derived:
         res = rebuild_centroids(conn, derived, lock)
         done += res["rebuilt"]
         if res["orphaned"]:
-            done += _embed_ids(conn, res["orphaned"], lock, batch_size=batch_size, in_txn=in_txn, failed=failed)
+            done += _embed_ids(conn, res["orphaned"], lock, batch_size=batch_size, in_txn=in_txn, outcome=outcome)
     return done
 
 
 def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *,
-               batch_size: int, in_txn: bool, failed: Optional[Dict[int, str]] = None) -> int:
+               batch_size: int, in_txn: bool, outcome: Optional[_Outcome] = None) -> int:
     """Embed `ids` under `lock`. Outside a transaction: one transaction per batch
     (kill-and-resume safe). Inside one (the flip): no commits here. Ids that could not
-    be embedded are recorded in `failed`, and the rest of the batch still lands."""
+    be embedded are recorded in `outcome`, and the rest of the batch still lands."""
     import memory_write
-    failed = {} if failed is None else failed
+    outcome = _Outcome() if outcome is None else outcome
     done = 0
     for start in range(0, len(ids), batch_size):
         chunk = ids[start:start + batch_size]
@@ -486,7 +520,7 @@ def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *
         rows = conn.execute(f"SELECT id, content FROM memories WHERE id IN ({marks}) ORDER BY id",
                             chunk).fetchall()
         texts = [c or "" for _i, c in rows]
-        encoded = _encode_rows(rows, texts, lock, failed) if rows else []
+        encoded = _encode_rows(rows, texts, lock, outcome) if rows else []
         if not in_txn:
             conn.execute("BEGIN IMMEDIATE")
         try:
@@ -502,14 +536,16 @@ def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *
     return done
 
 
-def _converge(conn: sqlite3.Connection, lock: Dict[str, Any], batch_size: int) -> int:
+def _converge(conn: sqlite3.Connection, lock: Dict[str, Any], batch_size: int,
+              outcome: Optional[_Outcome] = None) -> int:
     """Embed the pending rows until a pass finds nothing new; refuse, naming them, when a
     row could not be embedded. Finished rows are committed and reused by the next run."""
     built = 0
-    failed: Dict[int, str] = {}
+    outcome = _Outcome() if outcome is None else outcome
+    failed = outcome.failed
     for _pass in range(FLIP_ATTEMPTS):
         todo = [i for i in pending_ids(conn, lock) if i not in failed]
-        more = _embed_pending(conn, todo, lock, batch_size=batch_size, in_txn=False, failed=failed)
+        more = _embed_pending(conn, todo, lock, batch_size=batch_size, in_txn=False, outcome=outcome)
         built += more
         if not more:
             break
@@ -517,9 +553,9 @@ def _converge(conn: sqlite3.Connection, lock: Dict[str, Any], batch_size: int) -
         ids = sorted(failed)
         raise TierRefused(
             "COVERAGE_INCOMPLETE",
-            f"{len(ids)} memor(ies) could not be embedded even alone on this device (first: "
-            f"{failed[ids[0]]}); {built} were embedded and are kept for the next run, nothing switched. "
-            "Free the accelerator, or run on the CPU, and re-run.",
+            f"{len(ids)} memor(ies) could not be embedded on this device (first: {failed[ids[0]]}); "
+            f"{built} were embedded and are kept for the next run, nothing switched. Free the "
+            "accelerator's memory and re-run.",
             unembedded=ids[:50], unembedded_total=len(ids), embedded=built)
     return built
 
@@ -720,8 +756,9 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
         started = _log_start(conn, lock, pop["memories"])
         conn.execute("COMMIT")
 
+        outcome = _Outcome()
         try:
-            built = _converge(conn, lock, batch_size)           # converge OUTSIDE the write lock
+            built = _converge(conn, lock, batch_size, outcome)  # converge OUTSIDE the write lock
         except TierRefused as e:
             _log_failed(conn, started, "tier set", e.message)
             raise
@@ -734,7 +771,7 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
             late = pending_ids(conn, lock)
             if len(late) > FLIP_GAP_CAP:
                 conn.execute("ROLLBACK")
-                built += _converge(conn, lock, batch_size)
+                built += _converge(conn, lock, batch_size, outcome)
                 continue
             break
         else:
@@ -742,7 +779,7 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                               f"another writer added more than {FLIP_GAP_CAP} memories between each of "
                               f"{FLIP_ATTEMPTS} attempts to switch; stop it and re-run (finished rows are kept)")
         try:
-            gap = _embed_pending(conn, late, lock, batch_size=batch_size, in_txn=True) if late else 0
+            gap = _embed_pending(conn, late, lock, batch_size=batch_size, in_txn=True, outcome=outcome) if late else 0
             conn.execute(f"DELETE FROM {t} WHERE memory_id NOT IN (SELECT id FROM memories)")
             orphans = conn.execute("DELETE FROM embedding_provenance WHERE vec_table = ? AND memory_id NOT IN "
                                    "(SELECT id FROM memories)", (t,)).rowcount
@@ -788,6 +825,7 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                    "to": {"tier": lock["tier"], "vec_table": t, "model_id": lock["model_id"],
                           "weights_hash": written["weights_hash"]},
                    "embedded": built + gap, "reused": pop["memories"] - built - gap,
+                   "shortened_to_fit": len(outcome.shortened),
                    "coverage": cov, "population": pop, "orphans_pruned": int(orphans),
                    "already_on_target": already, "resumed_after_crash": resuming,
                    "old_vectors": f"kept in {from_table} (rollback path; removed only by tier cleanup)",
@@ -822,8 +860,9 @@ def _re_embed_prelock(db: Path, engine_tier: str, batch_size: int) -> Dict[str, 
             pop = _population(conn)
             started = _log_start(conn, lock, pop["memories"], notes="re-embed")
             conn.execute("COMMIT")
+            outcome = _Outcome()
             try:
-                built = _converge(conn, lock, batch_size)
+                built = _converge(conn, lock, batch_size, outcome)
             except TierRefused as e:
                 _log_failed(conn, started, "re-embed", e.message)
                 raise
@@ -838,7 +877,8 @@ def _re_embed_prelock(db: Path, engine_tier: str, batch_size: int) -> Dict[str, 
                "basis": "catalogue (no install lock beside this brain; none was written)",
                "to": {"tier": lock["tier"], "vec_table": lock["vec_table"], "model_id": lock["model_id"],
                       "weights_hash": lock["weights_hash"]},
-               "embedded": built, "reused": pop["memories"] - built, "coverage": cov, "population": pop,
+               "embedded": built, "reused": pop["memories"] - built, "shortened_to_fit": len(outcome.shortened),
+               "coverage": cov, "population": pop,
                "already_on_target": True}
     _receipt(data_dir, receipt)
     return {"status": "ok", "action": "re-embed", "receipt": receipt, "total_s": round(time.time() - t0, 2)}

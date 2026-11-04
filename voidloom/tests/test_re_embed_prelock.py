@@ -288,6 +288,45 @@ class OutOfMemoryRetry(_Seamed):
         env = self.eu.cmd_re_embed(_args(db))
         self.assertEqual((env["status"], env["receipt"]["embedded"]), ("ok", 7), env)
 
+    def _long_memory(self, n=100000):
+        db = make_brain(self.dir, "nomic")
+        c = _connect(db)
+        c.execute("UPDATE memories SET content = ? WHERE id = 4", ("tide " * (n // 5),))
+        c.commit(); c.close()
+        return db
+
+    def _fits_up_to(self, limit):
+        sizes = []
+
+        def enc(texts, lock):
+            sizes.append(sum(len(t) for t in texts))
+            if sum(len(t) for t in texts) > limit:
+                raise RuntimeError("CUDA out of memory. Tried to allocate 64.00 GiB")
+            return fake_encode(texts, lock)
+        self.ts._encode = enc
+        return sizes
+
+    def test_control_a_memory_too_long_alone_is_embedded_from_its_head_and_counted(self):
+        import memory_write as mw
+        db = self._long_memory()
+        sizes = self._fits_up_to(20000)
+        env = self.ts.set_tier(db, "qwen", batch_size=4)
+        self.assertEqual(env["status"], "ok", env)
+        self.assertEqual(env["receipt"]["shortened_to_fit"], 1)
+        self.assertIn(16000, sizes, "halved from the first shortened length")
+        c = _connect(db)
+        text = c.execute("SELECT content FROM memories WHERE id = 4").fetchone()[0]
+        h = c.execute("SELECT content_hash FROM embedding_provenance WHERE memory_id = 4 AND "
+                      "vec_table = 'memory_embeddings_v3'").fetchone()[0]
+        c.close()
+        self.assertEqual(h, mw.content_hash(text), "the stamp names the whole memory")
+        again = self.ts.set_tier(db, "qwen", batch_size=4)
+        self.assertEqual(again["receipt"]["embedded"], 0, "a rerun finds nothing: it cannot stall here")
+
+    def test_control_the_cpu_allocators_words_count_as_out_of_memory(self):
+        self.assertTrue(self.ts._is_out_of_memory(RuntimeError(
+            "[enforce fail at alloc_cpu.cpp:121] DefaultCPUAllocator: not enough memory: you tried to allocate 68719476736 bytes.")))
+
     def test_saboteur_an_error_that_is_not_out_of_memory_still_raises(self):
         db = make_brain(self.dir, "nomic")
 
