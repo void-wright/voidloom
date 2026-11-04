@@ -11,8 +11,8 @@ handing back five near-identical memories and stop burying the single best
 memory in the middle of the context (where LLMs read worst). It does three
 things in one pass:
 
-  1. **MMR (Maximal Marginal Relevance)** over the active ``memory_embeddings_v2``
-     vectors. Iteratively select the result maximizing
+  1. **MMR (Maximal Marginal Relevance)** over the brain's search set
+     (memory_write). Iteratively select the result maximizing
      ``lambda * relevance - (1 - lambda) * max_cosine_to_already_selected``.
      Near-duplicate memories (cosine ~1.0 to something already chosen) are
      pushed down and fall off the cap -> de-dup.
@@ -105,7 +105,7 @@ DIVERSITY_LAMBDA: float = 0.7
 # circuit-breaker's "is this a near-dup hub" decision. A result whose max cosine
 # to an already-selected item exceeds this is considered a near-duplicate. MMR
 # itself does not hard-threshold (it is a soft penalty); this is only for
-# provenance + the hub-suppression count. 0.92 on unit-normalized jina vectors
+# provenance + the hub-suppression count. 0.92 on unit-normalized 1024-dim vectors
 # corresponds to "almost the same memory" (paraphrase / re-store / near-clone).
 MMR_NEAR_DUP_COSINE: float = 0.92
 
@@ -126,7 +126,8 @@ MMR_CAP_MAX_MULT: float = 2.0   # at most 2x top_k surfaced for a diffuse query
 MMR_BM25_STRONG: float = 8.0    # |bm25| >= 8 == a strong exact-token hit
 MMR_BM25_WEAK: float = 2.0      # |bm25| <= 2 == diffuse / weak lexical signal
 
-# Active vec table resolver default (mirrors hybrid_retrieval._active_embedding_table).
+# There is no default vec table here: the tier comes from embed_resolver, and a
+# refusal means NO diversity signal for that call, never a read of another table.
 
 
 # ==========================================================================
@@ -673,7 +674,7 @@ class VectorLane(_BaseLane):
 
     name = "vector"
     enabled = True
-    wake_cost = "none (already active; reads memory_embeddings_v2)"
+    wake_cost = "none (already active; reads the brain's vector table through the search set)"
 
     def __init__(self, vector_search_fn: Optional[Callable[..., List[Tuple[int, float]]]] = None):
         # Late-bind hybrid_retrieval to avoid a hard import dependency (and to

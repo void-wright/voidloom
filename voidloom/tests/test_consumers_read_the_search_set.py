@@ -115,6 +115,17 @@ class RecallDiversityReadsTheSearchSet(_LockedBrain):
         import recall_diversity as rd
         self.assertEqual(set(rd._load_embeddings(self.conn, [self.V, self.L, self.F])), {self.V, self.L})
 
+    def test_an_unresolved_tier_gives_no_signal_and_reads_no_table(self):
+        import recall_diversity as rd
+        from unittest import mock
+        with mock.patch.object(rd, "_active_embedding_table", lambda _c: None):
+            self.assertEqual(rd._load_embeddings(self.conn, [self.V]), {})
+            self.assertFalse(rd.is_diversity_available(self.conn))
+
+    def test_the_lane_plan_names_no_tiers_table(self):
+        import recall_diversity as rd
+        self.assertNotIn("memory_embeddings", rd.VectorLane.wake_cost)
+
 
 class BeliefEngineReadsTheSearchSet(_LockedBrain):
     def test_neighbours_and_embedding_skip_the_foreign_row(self):
@@ -150,6 +161,29 @@ class MemoryDreamingReadsTheSearchSet(_LockedBrain):
                                           candidate_ids=[self.V, self.W, self.L, self.F])
         self.assertTrue(pairs)
         self.assertNotIn(self.F, {x for a, b, _ in pairs for x in (a, b)})
+
+    def test_close_context_pairs_never_pair_the_foreign_row(self):
+        import memory_dreaming as md
+        random.seed(7)
+        # Different contexts everywhere, so the context filter drops nothing the search set let through.
+        self.conn.execute("ALTER TABLE memories ADD COLUMN kind TEXT DEFAULT 'semantic'")
+        self.conn.execute("UPDATE memories SET source_project = 'p' || id, category = 'c' || id, "
+                          "created_at = '2026-0' || id || '-01T00:00:00'")
+        self.conn.commit()
+        pairs = md.select_close_context_pairs(self.conn, count=20, distance_max=2.0, min_criteria=1)
+        self.assertTrue(pairs)
+        self.assertNotIn(self.F, {x for p in pairs for x in p[:2]})
+
+    def test_persona_pairs_never_pair_the_foreign_row(self):
+        import memory_dreaming as md
+        random.seed(7)
+        self.conn.execute("INSERT INTO memory_tags (memory_id, tag) VALUES (?, 'persona-growth'), (?, 'persona-growth')",
+                          (self.V, self.F))
+        self.conn.commit()
+        for _ in range(12):                                     # the partner is a random draw: keep drawing
+            pairs = md.select_persona_pairs(self.conn, count=5)
+            self.assertTrue(pairs)
+            self.assertNotIn(self.F, {x for p in pairs for x in p[:2]})
 
 
 if __name__ == "__main__":

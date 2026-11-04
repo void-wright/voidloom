@@ -171,7 +171,7 @@ DEFAULT_CONFIG = {
     "close_context_pairs": 7,
     "persona_pair_fraction": 0.10,
     "divergent_distance_min": 0.6,
-    "close_context_distance_max": 0.40,  # Jina v5 1024-dim: 0.3 yields 0.1% of pairs; 0.40 yields 0.4% (4x). Calibrated empirically on 4073 prod memories (Reflector density probe, 5000 random checks at 7 thresholds).
+    "close_context_distance_max": 0.40,  # calibrated on a 1024-dim tier: 0.3 yields 0.1% of pairs; 0.40 yields 0.4% (4x). Empirical, 4073 memories (Reflector density probe, 5000 random checks at 7 thresholds).
     "close_context_min_criteria": 2,
     "max_content_chars": 300,
     "claude_model": "sonnet",
