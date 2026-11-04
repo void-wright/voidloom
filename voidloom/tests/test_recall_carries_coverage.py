@@ -166,7 +166,7 @@ class CoverageNeverProbesTheVectorTablePerRow(unittest.TestCase):
     # seed rows); the uncorrelated IN form read the same values in 0.016-0.11 s.
     _SEAM = r"[\"']\s*\n?\s*[fFrR]{0,2}[\"']"          # adjacent string literals, joined first
     _CORRELATED = (r"(?:EXISTS|IN)\s*\(\s*SELECT\s+[\w.*1]+\s+FROM\s+(\{[^}]+\}|memory_embeddings\w*)\s+(\w+)\s+"
-                   r"WHERE\s+\2\.memory_id\s*=\s*\w+\.(?:id|memory_id)\b")
+                   r"WHERE\s+\2\.memory_id\s*=\s*(?:\w+|\{[^}]+\})\.(?:id|memory_id)\b")
     # {PROVENANCE_TABLE} is embedding_provenance: an ordinary table keyed (memory_id, vec_table), not vec0.
     _NOT_A_VECTOR_TABLE = {"{PROVENANCE_TABLE}"}
 
@@ -184,6 +184,7 @@ class CoverageNeverProbesTheVectorTablePerRow(unittest.TestCase):
             'gap = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE NOT EXISTS "\n'
             '                   f"(SELECT 1 FROM {restored} v WHERE v.memory_id = m.id)")',
             "WHERE NOT EXISTS (SELECT 1 FROM memory_embeddings_v3 v WHERE v.memory_id = p.memory_id)",
+            'f"OR EXISTS (SELECT 1 FROM {flt.vec_table} v0 WHERE v0.memory_id = {mem_alias}.id)"',
         ]
         for sample in planted:
             self.assertEqual(len(self._correlated_hits(sample)), 1, sample)

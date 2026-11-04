@@ -779,6 +779,21 @@ def detect_communities(
     return result
 
 
+def _derived_hash(conn: sqlite3.Connection, table: str):
+    """The lock's checksum for a derived row (memory_write.derived_stamp); None when
+    the column or the lock is absent. Lazy import: this organ is importable without
+    memory_write, and stays so."""
+    try:
+        import os as _os, sys as _sys
+        _here = _os.path.dirname(_os.path.abspath(__file__))
+        if _here not in _sys.path:
+            _sys.path.insert(0, _here)
+        import memory_write as _mw
+        return _mw.derived_stamp(conn, table)
+    except Exception:
+        return None
+
+
 def _persist_partition(
     conn: sqlite3.Connection,
     epoch: int,
@@ -791,14 +806,27 @@ def _persist_partition(
     ``memory_community_members`` for one epoch. Idempotent per epoch (INSERT OR
     REPLACE on the composite keys). Touches NO other table."""
     cur = conn.cursor()
+    # A partition is computed over memory_edges, which temporal_edges derives from
+    # vectors, so every community row carries the lock's checksum (NULL on a brain
+    # without the column or a lock: unstamped, and reported as such).
+    _dh = _derived_hash(conn, "memory_communities")
     for c in communities:
-        cur.execute(
-            """INSERT OR REPLACE INTO memory_communities
-               (community_id, epoch, method, size, label, member_edge_hash, seed, batch_id)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (c["community_id"], epoch, method, c["size"], c.get("label"),
-             c.get("member_edge_hash"), seed, batch_id),
-        )
+        if _dh:
+            cur.execute(
+                """INSERT OR REPLACE INTO memory_communities
+                   (community_id, epoch, method, size, label, member_edge_hash, seed, batch_id, weights_hash)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (c["community_id"], epoch, method, c["size"], c.get("label"),
+                 c.get("member_edge_hash"), seed, batch_id, _dh),
+            )
+        else:
+            cur.execute(
+                """INSERT OR REPLACE INTO memory_communities
+                   (community_id, epoch, method, size, label, member_edge_hash, seed, batch_id)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (c["community_id"], epoch, method, c["size"], c.get("label"),
+                 c.get("member_edge_hash"), seed, batch_id),
+            )
         for mid in c["members"]:
             cur.execute(
                 """INSERT OR REPLACE INTO memory_community_members
@@ -879,6 +907,11 @@ def compute_summaries(
         (epoch,),
     ).fetchall()
     result["total"] = len(comm_rows)
+    _dh = _derived_hash(conn, "community_summaries")
+    # With a checksum to compare, the stamp is part of the cache check: the key is the
+    # members' edges, so a matching key after a model change would keep a stale row
+    # stale for good. An unstamped row is left alone: nothing says it is wrong.
+    cached_cols = "member_edge_hash, weights_hash" if _dh else "member_edge_hash, NULL"
 
     for (cid,) in comm_rows:
         cid = int(cid)
@@ -892,20 +925,28 @@ def compute_summaries(
 
         # SINGLE-FLIGHT cache check: skip if the cached summary matches the hash.
         cached = conn.execute(
-            "SELECT member_edge_hash FROM community_summaries WHERE community_id = ?",
+            f"SELECT {cached_cols} FROM community_summaries WHERE community_id = ?",
             (cid,),
         ).fetchone()
-        if (not force) and cached is not None and cached[0] == new_hash:
+        if (not force) and cached is not None and cached[0] == new_hash and cached[1] in (None, "", _dh):
             result["skipped"] += 1
             continue
 
         summary_text = _extractive_summary(conn, members, conf)
-        conn.execute(
-            """INSERT OR REPLACE INTO community_summaries
-               (community_id, summary, member_edge_hash, summary_mode, member_count, generated_at)
-               VALUES (?,?,?,?,?,datetime('now'))""",
-            (cid, summary_text, new_hash, str(conf.get("summary_mode", "extractive")), len(members)),
-        )
+        if _dh:
+            conn.execute(
+                """INSERT OR REPLACE INTO community_summaries
+                   (community_id, summary, member_edge_hash, summary_mode, member_count, generated_at, weights_hash)
+                   VALUES (?,?,?,?,?,datetime('now'),?)""",
+                (cid, summary_text, new_hash, str(conf.get("summary_mode", "extractive")), len(members), _dh),
+            )
+        else:
+            conn.execute(
+                """INSERT OR REPLACE INTO community_summaries
+                   (community_id, summary, member_edge_hash, summary_mode, member_count, generated_at)
+                   VALUES (?,?,?,?,?,datetime('now'))""",
+                (cid, summary_text, new_hash, str(conf.get("summary_mode", "extractive")), len(members)),
+            )
         result["regenerated"] += 1
 
     conn.commit()

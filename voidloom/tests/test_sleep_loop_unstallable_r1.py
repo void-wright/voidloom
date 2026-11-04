@@ -156,8 +156,7 @@ def no_model_writer():
     import types
     import memory_write as mw
     return types.SimpleNamespace(on_memory_written=lambda *a, **k: {"embedded": False}, search_set=mw.search_set,
-                                 stamp_centroid=mw.stamp_centroid, PROVENANCE_TABLE=mw.PROVENANCE_TABLE,
-                                 WEIGHTS_HASH_UNRESOLVED=mw.WEIGHTS_HASH_UNRESOLVED)
+                                 stamp_centroid=mw.stamp_centroid, legacy_episodics_held=mw.legacy_episodics_held)
 
 
 @pytest.fixture(autouse=True)
@@ -407,8 +406,7 @@ temporal_edges.extract_edges_heuristic = slow
 import types, memory_write as mw
 sleep_loop._vl_mw = types.SimpleNamespace(on_memory_written=lambda *a, **k: {"embedded": False},
                                           search_set=mw.search_set, stamp_centroid=mw.stamp_centroid,
-                                          PROVENANCE_TABLE=mw.PROVENANCE_TABLE,
-                                          WEIGHTS_HASH_UNRESOLVED=mw.WEIGHTS_HASH_UNRESOLVED)
+                                          legacy_episodics_held=mw.legacy_episodics_held)
 cfg = {"quickening_enabled": False, "communities_enabled": False, "min_unreflected_for_reflection": 10 ** 9,
        "budget_seconds": 0, "edge_batch_size": 5}
 res = sleep_loop.run_sleep_cycle(db, config=cfg)

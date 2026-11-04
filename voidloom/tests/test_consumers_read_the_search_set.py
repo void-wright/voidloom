@@ -110,10 +110,44 @@ class DreamPipelineReadsTheSearchSet(_LockedBrain):
         self.assertGreater(dp.compute_novelty(self.conn, self.V, embedding=Q), 0.01)
 
 
+    def test_the_eligible_pool_never_holds_the_foreign_row(self):
+        import dream_pipeline as dp
+        pool, _bias = dp.select_eligible_pool(self.conn, dict(dp.DEFAULT_CONFIG), 10, random.Random(7))
+        self.assertEqual(set(pool), {self.V, self.W, self.L})
+
+
 class RecallDiversityReadsTheSearchSet(_LockedBrain):
     def test_load_embeddings_drops_the_foreign_row_and_keeps_legacy(self):
         import recall_diversity as rd
         self.assertEqual(set(rd._load_embeddings(self.conn, [self.V, self.L, self.F])), {self.V, self.L})
+
+    def test_an_unresolved_tier_gives_no_signal_and_reads_no_table(self):
+        import recall_diversity as rd
+        from unittest import mock
+        with mock.patch.object(rd, "_active_embedding_table", lambda _c: None):
+            self.assertEqual(rd._load_embeddings(self.conn, [self.V]), {})
+            self.assertFalse(rd.is_diversity_available(self.conn))
+
+    def test_a_tier_that_cannot_resolve_answers_none_never_a_table(self):
+        import embed_resolver
+        import recall_diversity as rd
+        from unittest import mock
+        with mock.patch.object(embed_resolver, "resolve", side_effect=RuntimeError("no tier")):
+            self.assertIsNone(rd._active_embedding_table(self.conn))
+
+    def test_a_typed_refusal_keeps_relevance_order_and_names_itself(self):
+        import recall_diversity as rd
+        from unittest import mock
+        results = [{"id": self.V, "score": 0.9}, {"id": self.W, "score": 0.8}, {"id": self.L, "score": 0.7}]
+        refusal = self.mw.ProvenanceUnreadable("unreadable here")
+        with mock.patch.object(rd, "_load_embeddings", side_effect=refusal):
+            kept, info = rd.apply_diversity(self.conn, results, "q", top_k=2)
+        self.assertEqual(kept, results)
+        self.assertEqual(info["refusal"], "PROVENANCE_UNREADABLE")
+
+    def test_the_lane_plan_names_no_tiers_table(self):
+        import recall_diversity as rd
+        self.assertNotIn("memory_embeddings", rd.VectorLane.wake_cost)
 
 
 class BeliefEngineReadsTheSearchSet(_LockedBrain):
@@ -150,6 +184,38 @@ class MemoryDreamingReadsTheSearchSet(_LockedBrain):
                                           candidate_ids=[self.V, self.W, self.L, self.F])
         self.assertTrue(pairs)
         self.assertNotIn(self.F, {x for a, b, _ in pairs for x in (a, b)})
+
+    def test_close_context_pairs_never_pair_the_foreign_row(self):
+        import memory_dreaming as md
+        random.seed(7)
+        # Different contexts everywhere, so the context filter drops nothing the search set let through.
+        self.conn.execute("ALTER TABLE memories ADD COLUMN kind TEXT DEFAULT 'semantic'")
+        self.conn.execute("UPDATE memories SET source_project = 'p' || id, category = 'c' || id, "
+                          "created_at = '2026-0' || id || '-01T00:00:00'")
+        self.conn.commit()
+        pairs = md.select_close_context_pairs(self.conn, count=20, distance_max=2.0, min_criteria=1)
+        self.assertTrue(pairs)
+        self.assertNotIn(self.F, {x for p in pairs for x in p[:2]})
+
+    def test_persona_pairs_never_pair_the_foreign_row(self):
+        """F is outside the persona pool here, so it is a candidate partner; a bare-table pool would draw it."""
+        import memory_dreaming as md
+        random.seed(7)
+        self.conn.execute("INSERT INTO memory_tags (memory_id, tag) VALUES (?, 'persona-growth')", (self.V,))
+        self.conn.commit()
+        for _ in range(30):                                     # the partner is a random draw: keep drawing
+            pairs = md.select_persona_pairs(self.conn, count=5)
+            self.assertTrue(pairs)
+            self.assertNotIn(self.F, {x for p in pairs for x in p[:2]})
+
+    def test_a_persona_memory_outside_the_search_set_is_never_an_endpoint(self):
+        import memory_dreaming as md
+        random.seed(7)
+        self.conn.execute("INSERT INTO memory_tags (memory_id, tag) VALUES (?, 'persona-growth'), (?, 'persona-growth')",
+                          (self.V, self.F))
+        self.conn.commit()
+        pairs = md.select_persona_pairs(self.conn, count=5)
+        self.assertEqual({p[0] for p in pairs}, {self.V})
 
 
 if __name__ == "__main__":

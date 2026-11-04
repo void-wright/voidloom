@@ -574,17 +574,9 @@ def _any_embeddings(conn) -> bool:
 
 def _legacy_episodics_held(conn, flt, cutoff: str) -> int:
     """How many recent episodic memories hold a vector but no verified stamp on a locked brain: read by nothing else,
-    counted so a night that clusters nothing on a pinned brain says why. 0 on a brain with no lock."""
-    if not flt.locked:
-        return 0
-    vec_ids = f"SELECT memory_id FROM {flt.vec_table}"
-    return int(conn.execute(
-        f"""SELECT COUNT(*) FROM memories m
-            LEFT JOIN {_vl_mw.PROVENANCE_TABLE} p ON p.memory_id = m.id AND p.vec_table = ?
-            WHERE m.kind = 'episodic' AND m.is_archived = 0 AND m.created_at > ?
-              AND m.id IN ({vec_ids})
-              AND (p.memory_id IS NULL OR p.weights_hash = ?)""",
-        (flt.vec_table, cutoff, _vl_mw.WEIGHTS_HASH_UNRESOLVED)).fetchone()[0])
+    counted so a night that clusters nothing on a pinned brain says why. 0 on a brain with no lock. The same figure
+    ships in memory_write.derived_layer_report, where `doctor` and `status` read it."""
+    return _vl_mw.legacy_episodics_held(conn, flt, cutoff)[1]
 
 
 def consolidate_episodics(
@@ -2063,13 +2055,28 @@ def get_run_history(conn: sqlite3.Connection, limit: int = 10) -> List[dict]:
 # ============================================================
 
 def unit_tests():
-    """Self-contained unit tests. Returns (passed, failed, details)."""
+    """Self-contained unit tests. Returns (passed, failed, details).
+
+    THIS PROCESS NEVER FETCHES. HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE are set here before any hub call and the pin is
+    verified with allow_fetch=False, so the model-dependent half either runs on a snapshot already on disk or is
+    REFUSED, typed (`SNAPSHOT_ABSENT` when the cache lacks the pin; `EMBEDDER_UNAVAILABLE` when the stack cannot be
+    imported) and counted in the summary as `refused`: never a silent PASS and never a download. A refusal is not a
+    failure (rc stays 0 when failed == 0); it is the statement that the vectored half was not run, and why."""
     import tempfile
     import shutil
 
+    os.environ["HF_HUB_OFFLINE"] = "1"          # forced, never setdefault: a self-test fetches nothing
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
     passed = 0
     failed = 0
+    refused = 0
     details: List[str] = []
+
+    def refuse(name, code, message):
+        nonlocal refused
+        refused += 1
+        details.append(f"  REFUSED: {name} {code}: {message}")
 
     def assert_eq(name, got, expected):
         nonlocal passed, failed
@@ -2089,26 +2096,27 @@ def unit_tests():
             failed += 1
             details.append(f"  FAIL: {name}")
 
-    # SELF-CONTAINED (Round 3 G3): this suite died before its first row on two counts -- its fixture brain declared
-    # no embedding tier (embed_resolver REFUSES to guess: EmbedTierUnresolved at test 6), and a memory this organ
-    # writes is embedded through memory_write, which loads the real model (a network fetch on a fresh machine). The
-    # fixture now declares its tier (memory_embeddings, 768 wide -- the vectors it inserts), and for the suite's
-    # duration the write hook embeds with a deterministic stand-in vector of that width. Restored in `finally`.
-    global _vl_mw
-    _real_mw = _vl_mw
-    if _real_mw is not None:
-        import types
-        _unit = struct.pack("768f", *([1.0 / math.sqrt(768)] * 768))
-        _vl_mw = types.SimpleNamespace(on_memory_written=lambda *a, **k: _real_mw.on_memory_written(
-            *a, encoder=lambda _text: _unit, **k), search_set=_real_mw.search_set,
-            stamp_centroid=_real_mw.stamp_centroid)
-
-    # Create a temporary test database.
+    # Create a temporary test database, LOCKED: the install lock is written beside it from the shipped catalogue (cpu
+    # tier: nomic, 768, memory_embeddings), the sidecar is applied, and the loader's register is seeded with the
+    # catalogue's checksum so stamps can be written without a model.
     tmp_dir = tempfile.mkdtemp(prefix="sleep_loop_test_")
     test_db = os.path.join(tmp_dir, "test.db")
 
     try:
+        import embedder_lock as _el
+        _lock = _el.write_lock(tmp_dir, _el.DEFAULT_TIER, locked_by="sleep_loop.unit_tests")
+        _el.clear_loaded()
+        _el.register_loaded(model_id=_lock["model_id"], revision=_lock["revision"],
+                            weights_hash=_lock["weights_hash"], dim=int(_lock["dim"]),
+                            vec_table=_lock["vec_table"], tier=_lock["tier"])
         conn = sqlite3.connect(test_db)
+        try:
+            import sqlite_vec
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+        except Exception as _e:
+            return 0, 1, [f"  FAIL: sqlite_vec unavailable ({_e}); the unit tests need the vec0 table the lock names"]
         conn.execute("PRAGMA foreign_keys=ON")
 
         # Create minimal schema.
@@ -2132,9 +2140,9 @@ def unit_tests():
                 updated_at TEXT DEFAULT (datetime('now')),
                 version INTEGER DEFAULT 1
             );
-            CREATE TABLE memory_embeddings (
+            CREATE VIRTUAL TABLE memory_embeddings USING vec0(
                 memory_id INTEGER PRIMARY KEY,
-                embedding BLOB
+                embedding float[768]
             );
             CREATE TABLE memory_tags (
                 memory_id INTEGER,
@@ -2159,7 +2167,6 @@ def unit_tests():
                 value TEXT
             );
             INSERT INTO metadata (key, value) VALUES ('schema_version', '2.3-L2-procedural-memory');
-            INSERT INTO metadata (key, value) VALUES ('active_embedding_table', 'memory_embeddings');
         """)
 
         # Apply migration 005.
@@ -2193,6 +2200,8 @@ def unit_tests():
                     created_at TEXT DEFAULT (datetime('now'))
                 );
             """)
+        conn.commit()
+        _vl_mw.ensure_provenance_table(conn)
         conn.commit()
 
         # Test 1: Migration applied check.
@@ -2241,21 +2250,44 @@ def unit_tests():
                  f"-{i} hours"),
             )
             mid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-            conn.execute(
-                "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
-                (mid, emb),
-            )
+            # Through the guarded writer: vector + stamp under the lock, one unit.
+            _vl_mw.attach_embedding(conn, mid, f"Test memory {i} about clustering patterns",
+                                    embedding=emb, policy="require", organ="sleep_loop.unit_tests")
             conn.execute(
                 "INSERT INTO memory_tags (memory_id, tag) VALUES (?, ?)",
                 (mid, "test-cluster"),
             )
         conn.commit()
+        cov = _vl_mw.provenance_coverage(conn)
+        assert_eq("members_stamped_under_lock", (cov.matched, cov.vectors_without_stamp), (5, 0))
+
+        # Test 7b (SABOTEUR): a sixth member with a vector but NO stamp is a legacy row: searchable, but a centroid
+        # over it could not carry the lock's checksum, so consolidation must not take it.
+        _noise = rng.randn(768).astype(np.float32) * 0.01
+        _v6 = base_vec + _noise
+        _v6 = _v6 / np.linalg.norm(_v6)
+        conn.execute(
+            """INSERT INTO memories (content, summary, category, kind, importance, created_at)
+               VALUES ('unstamped sibling', 'unstamped', 'domain_knowledge', 'episodic', 0.7, datetime('now', '-1 hours'))""")
+        unstamped_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.execute("INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
+                     (unstamped_id, struct.pack("768f", *_v6.tolist())))
+        conn.commit()
+        assert_eq("saboteur_unstamped_vector_is_red", _vl_mw.provenance_coverage(conn).vectors_without_stamp, 1)
 
         clusters = consolidate_episodics(conn, lookback_days=7, similarity_threshold=0.6)
         assert_true("consolidate_found_cluster", len(clusters) >= 1)
         if clusters:
             assert_true("cluster_has_sources", len(clusters[0]['source_ids']) >= 3)
             assert_true("cluster_has_id", clusters[0]['consolidated_memory_id'] is not None)
+            _all_sources = {sid for c in clusters for sid in c['source_ids']}
+            assert_true("saboteur_unstamped_member_excluded", unstamped_id not in _all_sources)
+            # the centroid itself is stamped as a centroid under the lock
+            _cid = clusters[0]['consolidated_memory_id']
+            _crow = conn.execute("SELECT input_kind, weights_hash FROM embedding_provenance WHERE memory_id = ?",
+                                 (_cid,)).fetchone()
+            assert_eq("centroid_stamped", (_crow[0] if _crow else None, _crow[1] if _crow else None),
+                      ("centroid", _lock["weights_hash"]))
 
         # Test 8: Verify consolidated memory stored correctly.
         if clusters and clusters[0]['consolidated_memory_id']:
@@ -2338,7 +2370,26 @@ def unit_tests():
         reflections = generate_reflections(conn, min_unreflected=100)
         assert_eq("reflection_threshold_not_met", reflections, [])
 
-        # Test 14: Reflection generation with enough episodics.
+        # Test 14: Reflection generation with enough episodics. The reflection's EMBEDDING half needs the locked
+        # embedder: verify the pin FIRST, with allow_fetch=False, so the outcome is one of three NAMED things: loaded
+        # (the vector assertion below is live), SNAPSHOT_ABSENT (refused, typed; nothing downloaded), or
+        # EMBEDDER_UNAVAILABLE (the stack cannot be imported in this process).
+        _embedder_state = "loaded"
+        try:
+            _el.verify_snapshot_against_lock(_lock, allow_fetch=False)
+        except _el.EmbedderLockError as _e:
+            _embedder_state = _e.code
+            refuse("reflection_embedding", _e.code, str(_e)[:240])
+        if _embedder_state == "loaded":
+            try:
+                import embedding_upgrade as _eu
+                _eu.get_locked_embedder(_lock)
+            except _el.EmbedderLockError as _e:
+                _embedder_state = _e.code
+                refuse("reflection_embedding", _e.code, str(_e)[:240])
+            except Exception as _e:   # ImportError, CUDA absent, ...
+                _embedder_state = "EMBEDDER_UNAVAILABLE"
+                refuse("reflection_embedding", "EMBEDDER_UNAVAILABLE", f"{type(_e).__name__}: {str(_e)[:200]}")
         for i in range(30):
             conn.execute(
                 """INSERT INTO memories (content, summary, category, kind, importance, created_at)
@@ -2358,6 +2409,12 @@ def unit_tests():
                 "SELECT kind FROM memories WHERE id = ?", (reflections[0],)
             ).fetchone()
             assert_eq("reflection_kind", row[0], 'reflection')
+            if _embedder_state == "loaded":
+                # the loaded half: the reflection carries a vector AND a stamp under the lock
+                _stamped = conn.execute(
+                    "SELECT COUNT(*) FROM embedding_provenance WHERE memory_id = ? AND weights_hash = ?",
+                    (reflections[0], _lock["weights_hash"])).fetchone()[0]
+                assert_eq("reflection_vectored_under_lock", _stamped, 1)
 
         # Test 15: Run history.
         conn.execute(
@@ -2391,10 +2448,14 @@ def unit_tests():
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        _vl_mw = _real_mw
+        try:
+            import embedder_lock as _el2
+            _el2.clear_loaded()                  # the seeded register is this test's, not the process's
+        except Exception:
+            pass
 
     print(f"\n{'='*60}")
-    print(f"Sleep Loop Unit Tests: {passed} passed, {failed} failed")
+    print(f"Sleep Loop Unit Tests: {passed} passed, {failed} failed, {refused} refused (typed; nothing fetched: HF_HUB_OFFLINE=1)")
     print(f"{'='*60}")
     for d in details:
         print(d)

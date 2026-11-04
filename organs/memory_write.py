@@ -69,7 +69,7 @@ import logging
 import os
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fractions import Fraction
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -157,53 +157,48 @@ def assert_width(blob: bytes, dim: int) -> None:
 
 
 def default_encoder(text: str, conn: Optional[sqlite3.Connection] = None) -> bytes:
-    """The canonical encoder, forced onto the CALLER'S tier.
+    """The canonical encoder, forced onto the CALLER'S brain.
 
-    FOUND BY THIS MODULE'S OWN ASSERTION, in this round, in my own first draft:
+    FOUND BY THIS MODULE'S OWN ASSERTION, in a first draft:
     the first version delegated straight to `claude_memory._encode`, which asks
-    `_active_embed_model()` which reads a MODULE-LEVEL `DB_PATH`. That is a
-    different question from "which tier is the database this connection is
-    attached to", and on a supervised daytime hand-run out of a staging directory
-    the two answers differed -- the TABLE resolved to jina/1024 from the caller's
-    connection while the ENCODER resolved to nomic/768 from a DB_PATH that did
-    not exist. 28 playbook memories were written with no vector. The width
-    assertion caught every one and tagged every one, which is exactly what it is
-    for, but the right repair is upstream: ask ONE question, of ONE object.
+    `_active_embed_model()` about a MODULE-LEVEL `DB_PATH`. That is a different
+    question from "which tier is the database this connection is attached to",
+    and on a supervised daytime hand-run out of a staging directory the two
+    answers differed -- 28 playbook memories were written with no vector. The
+    width assertion caught every one, but a second brain of the SAME width would
+    pass it, so the repair is upstream: ask ONE question, of ONE object.
 
-    So when a connection is available, the tier is resolved FROM THAT CONNECTION
-    and claude_memory's own documented per-process cache is set to match before
-    the encode. Encoder and table cannot then disagree, by construction.
+    So when a connection is available the brain beside THAT connection decides: its
+    install lock, or for a brain that predates the lock the shipped catalogue entry
+    of the tier it already uses (`embedding_upgrade.brain_lock`), is handed to
+    `_encode`, which hands it to the one loader; the loader refuses (WEIGHTS_MISMATCH)
+    if a different model is already resident in this process. A tier the catalogue
+    does not ship (jina) has no lock path and uses its own encoder. Encoder and table
+    cannot then disagree, by construction, and no process-level cache is set.
+
+    The tier comes from `_TABLE_TO_TIER`, built from `EMBED_TIERS` and bijective on
+    purpose: a binary here once mapped the qwen table to nomic, and one table per
+    model means a fourth tier needs no edit here.
 
     Imported inside the call, not at module scope: `claude_memory` imports
     several of this module's own callers, and a module-scope import is circular.
     """
     import claude_memory                       # lazy: circular at module scope
-    if conn is not None:
-        table, dim = _resolve_tier(conn)
-        # THE BIJECTION, NOT A BINARY. This read
-        #     "jina" if table == "memory_embeddings_v2" else "nomic"
-        # which is a TWO-tier answer to a THREE-tier question: it mapped
-        # `memory_embeddings_v3` -- Qwen3-Embedding-0.6B, the tier the engine
-        # itself calls "the SHIPPED tier" -- to NOMIC, and would have encoded
-        # 768-wide vectors for a 1024-wide table. `assert_width` below catches
-        # that, so nothing was ever corrupted; what it means is that a qwen-tier
-        # brain could not embed AT ALL through this path, every write tagged
-        # `embedding-missing`. Exactly the census-of-two-over-three shape found in
-        # voidloom/_bootstrap the same week.
-        #
-        # claude_memory already owns the inverse map -- `_TABLE_TO_TIER`, built
-        # FROM `EMBED_TIERS` and bijective on purpose ("one table per model, so
-        # reverse-mapping a table name back to a model can never be ambiguous").
-        # Asking it means a fourth tier needs no edit here.
-        tier = getattr(claude_memory, "_TABLE_TO_TIER", {}).get(table)
-        if tier is None:
-            raise EmbeddingUnavailable(
-                f"no embedding tier maps to table {table!r} (dim {dim}); "
-                "claude_memory._TABLE_TO_TIER knows "
-                f"{sorted(getattr(claude_memory, '_TABLE_TO_TIER', {}))}. Refusing "
-                "to guess a model: same dimension is not the same space.")
-        claude_memory._active_model_cache["model"] = tier
-    return claude_memory._encode(text, "search_document")
+    if conn is None:
+        return claude_memory._encode(text, "search_document")
+    table, dim = _resolve_tier(conn)
+    tier = getattr(claude_memory, "_TABLE_TO_TIER", {}).get(table)
+    if tier is None:
+        raise EmbeddingUnavailable(
+            f"no embedding tier maps to table {table!r} (dim {dim}); "
+            "claude_memory._TABLE_TO_TIER knows "
+            f"{sorted(getattr(claude_memory, '_TABLE_TO_TIER', {}))}. Refusing "
+            "to guess a model: same dimension is not the same space.")
+    import embedding_upgrade                   # lazy: it imports this module's callers
+    if tier == "jina":
+        return embedding_upgrade.encode_jina_document(text)
+    return claude_memory._encode(text, "search_document",
+                                 lock=embedding_upgrade.brain_lock(conn, tier=tier))
 
 
 # --------------------------------------------------------------------------
@@ -509,7 +504,8 @@ def attach_embedding(
         # about WHICH MODEL produced it. The producing model lived in ONE MUTABLE
         # metadata row (`active_embedding_model`), so after any tier change the
         # table could not say which of its rows predate the change. `embed_resolver`
-        # refused to guess a TABLE; nothing refused to guess a row's PRODUCER.
+        # refused to guess a TABLE; nothing refused to guess a row's PRODUCER. Now the
+        # stamp carries the checksum the embedder COMPUTED from the bytes it loaded.
         #
         # The trap, kept beside the write because that is where it bites:
         #
@@ -520,7 +516,7 @@ def attach_embedding(
         #     assert a producer for rows nobody re-embedded, and the migration
         #     would look complete the instant it ran. NULL means UNKNOWN, and
         #     UNKNOWN IS NOT ZERO: a backfill must be able to tell "never stamped"
-        #     from "stamped as jina", and a DEFAULT destroys exactly that
+        #     from "stamped under some checksum", and a DEFAULT destroys exactly that
         #     distinction at the moment it is created.
         #
         # `_insert_vector_and_stamp` writes both rows or neither; every stamp
@@ -583,23 +579,27 @@ def unfindable_report(conn: sqlite3.Connection) -> Dict[str, Any]:
 # PER-ROW VECTOR PROVENANCE.
 #
 # THE STAMP is written by the embed call itself, in the SAME savepoint as the
-# vector, by this module alone. THE READER derives its filter from the tier
-# bijection (claude_memory.EMBED_TIERS via _TABLE_TO_TIER) on every call, REFUSES
+# vector, by this module alone, and it carries the checksum THE EMBEDDER COMPUTED
+# from the bytes it loaded (embedder_lock.require_loaded_hash): never a schema
+# DEFAULT, never the lock's string copied over. THE READER opens the install lock
+# beside the connection's database on every call and filters on its `weights_hash`
+# (a brain with no lock falls back to the tier bijection and its whole table), REFUSES
 # with a typed error when no rows match, and reports coverage on every call —
-# success or refusal. DDL lives in migrations/migration_033_embedding_provenance.sql
-# and is read from there, so it has exactly one home. No column has a DEFAULT.
+# success or refusal. DDL lives in migrations/migration_033_* (the sidecar) and
+# migration_042_* (the checksum, the input kind) and is read from there, so it has
+# exactly one home. No column has a DEFAULT.
 #
 # WHY THE TABLE IS ALSO ENSURED AT WRITE TIME
 #     `cmd_init` applies every migration through schema_migrator, so a FRESH brain
-#     has the sidecar. A brain that predates this migration and is upgraded by
+#     has the sidecar. A brain that predates a migration and is upgraded by
 #     replacing the tree (which is how the live tree is deployed: 16 systemd units
 #     ExecStart into organs/) would otherwise fail every embed write until someone
-#     remembered to run `schema_migrator apply`. Ensuring here is idempotent
-#     (IF NOT EXISTS) and costs one file read per process.
+#     remembered to run `schema_migrator apply`. Ensuring here is shape-driven,
+#     statement-at-a-time and inside one savepoint.
 #
 # ⚠ NEVER executescript() ON THIS PATH. Python's sqlite3 documents that
-#     executescript "first issues a COMMIT". Inside attach_embedding's SAVEPOINT
-#     that COMMITS THE VECTOR and destroys the savepoint before the stamp lands —
+#     executescript "first issues a COMMIT". Inside _insert_vector_and_stamp's
+#     SAVEPOINT that COMMITS THE VECTOR and destroys the savepoint before the stamp lands —
 #     the pair that claims to be atomic commits its first half. Found by the
 #     provisional draft's own test on its second run (P-list 2). Statements are
 #     executed one at a time; that opens no transaction and commits nothing.
@@ -812,8 +812,7 @@ def _embedder_lock():
     return embedder_lock
 
 
-def _weights_hash_for(conn: sqlite3.Connection, table: str, dim: int,
-                      ident: Dict[str, str]) -> Tuple[str, str]:
+def _weights_hash_for(conn: sqlite3.Connection, table: str, dim: int) -> Tuple[str, str]:
     """(weights_hash, source) for a vector this call just wrote to `table`.
 
     The install lock beside THIS connection's database is read FIRST (owner
@@ -864,7 +863,7 @@ def _weights_hash_for(conn: sqlite3.Connection, table: str, dim: int,
         return WEIGHTS_HASH_UNRESOLVED, "unresolved"
     computed = el.require_loaded_hash(vec_table=table, dim=int(dim))
     import embedding_upgrade                     # lazy: it imports this module's callers
-    entry = embedding_upgrade.brain_lock(conn, tier=ident["tier"])
+    entry = embedding_upgrade.brain_lock(conn, tier=model_identity(table)["tier"])
     if computed != entry["weights_hash"]:
         raise el.EmbedderLockError(
             "WEIGHTS_MISMATCH",
@@ -884,8 +883,9 @@ def _stamp_provenance(conn: sqlite3.Connection, memory_id: int, table: str, dim:
     stamp, and there is never a stamp describing a vector that is gone.
     """
     ensure_provenance_table(conn)
+    # The lock first: a table it does not name is its refusal, not the bijection's.
+    weights_hash, weights_source = _weights_hash_for(conn, table, int(dim))
     ident = model_identity(table)
-    weights_hash, weights_source = _weights_hash_for(conn, table, int(dim), ident)
     row = {
         "memory_id": int(memory_id), "vec_table": table,
         "model_id": ident["model_id"], "model_ref": ident["model_ref"],
@@ -932,17 +932,17 @@ def _insert_vector_and_stamp(conn: sqlite3.Connection, memory_id: int, table: st
 
 
 def stamp_after_vector_insert(conn: sqlite3.Connection, memory_id: int, text: str,
-                              *, organ: str) -> Dict[str, Any]:
+                              *, organ: str, table: str, dim: int) -> Dict[str, Any]:
     """For a caller that has ALREADY inserted the vector inside its own open
     transaction (claude_memory's cmd_store / cmd_update / cmd_migrate) and will
-    commit or roll back the whole thing itself. Resolves the tier from the
-    connection so the stamp names the table the caller just wrote.
+    commit or roll back the whole thing itself.
 
-    The atomicity here is the caller's transaction: a raise propagates, the
-    caller does not commit, and memory + vector + stamp are all absent together.
+    `table` and `dim` are REQUIRED and are what the caller wrote: there is no
+    second resolver here that could disagree with the write. The atomicity is the
+    caller's transaction: a raise propagates, the caller does not commit, and
+    memory + vector + stamp are all absent together.
     """
-    table, dim = _resolve_tier(conn)
-    return _stamp_provenance(conn, memory_id, table, dim, text, organ)
+    return _stamp_provenance(conn, memory_id, table, int(dim), text, organ)
 
 
 def centroid_content_hash(member_vectors: Sequence[bytes]) -> str:
@@ -1267,15 +1267,19 @@ def provenance_filter(conn: sqlite3.Connection) -> ProvenanceFilter:
 
 
 # --------------------------------------------------------------------------
-# THE READER. Filter from the bijection, refuse on zero match, coverage always.
+# THE READER. Filter from the lock, refuse on zero match, coverage always.
 # --------------------------------------------------------------------------
 
 @dataclass
 class ProvenanceCoverage:
     """What the sidecar says about this brain, under the ACTIVE tier's filter.
 
+    reachable         active memories with a vector in vec_table: what a search of
+                      this brain can return, its rule being the whole table. This
+                      is `matched`, the figure on every answer.
     covered           rows with a vector in vec_table AND a stamp naming
-                      (vec_table, model_id). This is the set a reader may search.
+                      (vec_table, model_id): the part whose producer is on record,
+                      which is what a re-embed moves.
     stamped_foreign   stamps on vec_table under a DIFFERENT model_id: the mixed
                       population, wearing a label. Same width, different space.
     stamped_without_vector
@@ -1304,13 +1308,14 @@ class ProvenanceCoverage:
     stamped_without_vector: int
     vectors_without_stamp: int
     stale_content_hash: int
+    reachable: int = 0
 
     basis = "lockless"
     search_rule = SEARCH_RULE_LOCKLESS
 
     @property
     def matched(self) -> int:
-        return self.covered
+        return self.reachable
 
     @property
     def total(self) -> int:
@@ -1318,7 +1323,7 @@ class ProvenanceCoverage:
 
     @property
     def coverage(self) -> Dict[str, Any]:
-        return _three_numbers(self.covered, self.active_memories)
+        return _three_numbers(self.reachable, self.active_memories)
 
     @property
     def coverage_of_active(self) -> Fraction:
@@ -1412,9 +1417,14 @@ def provenance_coverage(conn: sqlite3.Connection):
         denominator = "memories WHERE is_archived = 0"
         active = conn.execute(
             "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
+        reach_pred = "AND COALESCE(m.is_archived, 0) = 0"
     else:
         denominator = "memories (schema has no is_archived column)"
         active = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        reach_pred = ""
+    reachable = conn.execute(
+        f"SELECT COUNT(*) FROM memories m WHERE m.id IN (SELECT memory_id FROM {table}) {reach_pred}"
+    ).fetchone()[0]
 
     covered = conn.execute(
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p "
@@ -1449,7 +1459,7 @@ def provenance_coverage(conn: sqlite3.Connection):
         dim=dim, denominator=denominator, active_memories=int(active),
         vectors=int(vectors), covered=int(covered), stamped_foreign=int(foreign),
         stamped_without_vector=int(stamp_no_vec), vectors_without_stamp=int(vec_no_stamp),
-        stale_content_hash=int(stale),
+        stale_content_hash=int(stale), reachable=int(reachable),
     )
     if cov.covered == 0:
         raise ProvenanceUnmatched(
@@ -1641,9 +1651,9 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
     (facts before policy):
       PROVENANCE_UNREADABLE   the sidecar / vector table cannot be read: UNMEASURED, not 0
       (empty brain)           0/0 is returned, unless the lock's checksum is not shipped
+      STAMP_INCONSISTENT      the lock's checksum on another table or width
       NO_ROWS_FOR_LOCK        active memories exist and none is stamped under the lock
       LOCK_NOT_SHIPPED        rows match, but the checksum is not in the catalogue
-      STAMP_INCONSISTENT      the lock's checksum on another table or width
     """
     el = _embedder_lock()
     table, whash, dim = flt.vec_table, flt.weights_hash, flt.dim
@@ -1724,6 +1734,11 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
                 "LOCK_NOT_SHIPPED", f"the lock at {flt.lock_path} names {whash[:12]}…, which is "
                 "not in the package catalogue", weights_hash=whash, coverage=cov.as_dict())
         return cov
+    if cov.inconsistent:
+        raise ProvenanceInconsistent(
+            f"REFUSED: {sum(x['rows'] for x in cov.inconsistent)} stamp(s) carry the lock's checksum "
+            f"{whash[:12]}… but disagree with the lock's ({table!r}, {dim}): {cov.inconsistent}. "
+            "A checksum that names one model on two shapes is a stamp that cannot be trusted.", cov)
     if cov.matched == 0:
         raise ProvenanceUnmatched(
             f"REFUSED: no active memory has a vector in {table!r} that the lock's search set "
@@ -1737,11 +1752,6 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
             "LOCK_NOT_SHIPPED", f"{cov.matched} row(s) carry {whash[:12]}…, but that checksum is "
             "not in the package catalogue: this database was embedded with a model this package "
             "does not ship", weights_hash=whash, coverage=cov.as_dict())
-    if cov.inconsistent:
-        raise ProvenanceInconsistent(
-            f"REFUSED: {sum(x['rows'] for x in cov.inconsistent)} stamp(s) carry the lock's checksum "
-            f"{whash[:12]}… but disagree with the lock's ({table!r}, {dim}): {cov.inconsistent}. "
-            "A checksum that names one model on two shapes is a stamp that cannot be trusted.", cov)
     return cov
 
 
@@ -1774,6 +1784,160 @@ def coverage_envelope(conn: sqlite3.Connection) -> Dict[str, Any]:
             return {"ok": False, "error": code, "message": str(e), "coverage_basis": "measured",
                     **det["coverage"]}
         return unbuildable(code, str(e))
+
+
+# --------------------------------------------------------------------------
+# THE DERIVED LAYER: the checksum a derived row was computed under.
+#
+# A link strength from a cosine distance, a community's membership and a community
+# summary are all computed from vectors, so after a model change they are numbers
+# from the old space, and vector coverage cannot see them. Those rows carry the
+# lock's checksum (migration_045's column), and the report below names how many do
+# not. It also names the memories a locked brain cannot consolidate: a legacy vector
+# stays searchable, but a centroid over it could not carry the lock's checksum.
+# --------------------------------------------------------------------------
+DERIVED_TABLES = ("memory_links", "memory_communities", "community_summaries")
+
+# The window a night's consolidation reads unless its config says otherwise.
+CONSOLIDATION_LOOKBACK_DAYS = 7
+
+
+def derived_stamp(conn: sqlite3.Connection, table: str) -> Optional[str]:
+    """The lock's checksum for a row a writer is about to compute from vectors, or
+    None when the brain has no readable lock or `table` has no `weights_hash` column
+    (migration_045 not applied). Never raises: a derived writer on a brain with no
+    lock still writes, its row is then UNSTAMPED and the report says so. A writer
+    recording a row a PERSON asserted (`link`) must not call this: that strength was
+    computed under no model."""
+    try:
+        if "weights_hash" not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}:
+            return None
+        return _embedder_lock().resolve(conn)["weights_hash"]
+    except Exception:
+        return None
+
+
+def legacy_episodics_held(conn: sqlite3.Connection, flt: ProvenanceFilter,
+                          cutoff: str) -> Tuple[int, int]:
+    """(all time, since `cutoff`): the active episodic memories on a locked brain that
+    hold a vector no stamp verifies and have not been consolidated. They are readable
+    (the search set's legacy part), so nothing else says they are out of consolidation;
+    a re-embed brings them in. (0, 0) on a brain with no lock, which requires no stamp.
+    One statement, no per-row subquery; raises sqlite3.Error when a table is unreadable.
+    """
+    if not flt.locked:
+        return 0, 0
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE name = 'consolidation_sources'").fetchall()}
+    # IS NOT NULL: `NOT IN` over a set holding one NULL matches nothing.
+    done = ("AND m.id NOT IN (SELECT source_memory_id FROM consolidation_sources "
+            "WHERE source_memory_id IS NOT NULL)" if tables else "")
+    total, recent = conn.execute(
+        f"""SELECT COUNT(*), COALESCE(SUM(m.created_at > ?), 0) FROM memories m
+            LEFT JOIN {PROVENANCE_TABLE} p ON p.memory_id = m.id AND p.vec_table = ?
+            WHERE m.kind = 'episodic' AND m.is_archived = 0
+              AND m.id IN (SELECT memory_id FROM {flt.vec_table}) {done}
+              AND (p.memory_id IS NULL OR p.weights_hash = ?)""",
+        (cutoff, flt.vec_table, WEIGHTS_HASH_UNRESOLVED)).fetchone()
+    return int(total), int(recent)
+
+
+def _consolidation_report(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """The report's consolidation block. A figure that could not be read is None and
+    says why (`unmeasured`), never 0."""
+    out: Dict[str, Any] = {"legacy_held": None, "legacy_held_recent": None,
+                           "lookback_days": CONSOLIDATION_LOOKBACK_DAYS, "basis": None, "hint": None}
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=CONSOLIDATION_LOOKBACK_DAYS)
+              ).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        flt = provenance_filter(conn)
+        out["legacy_held"], out["legacy_held_recent"] = legacy_episodics_held(conn, flt, cutoff)
+    except Exception as e:
+        code = getattr(e, "code", None) or type(e).__name__
+        out["basis"] = f"not measured ({code}: {str(e)[:160]})"
+        out["unmeasured"] = f"consolidation: {code}"
+        return out
+    if not flt.locked:
+        out["basis"] = "no lock on this brain: consolidation requires no stamp, so nothing is held"
+        return out
+    out["basis"] = ("active episodic memories, not yet consolidated, holding a vector with no verified stamp: "
+                    "searchable, but outside consolidation until re-embedded")
+    if out["legacy_held"]:
+        out["hint"] = re_embed_hint(out["legacy_held"], _db_file(conn), flt.tier)
+    return out
+
+
+def derived_layer_report(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """For each derived table: rows computed under a checksum OTHER than the lock's
+    (`stale`), rows stamped under the lock (`current`), and rows carrying no stamp
+    (`unstamped`: written before migration_045, on a brain with no lock, or asserted
+    by a person). Raw counts, derived on this connection for this call, from one
+    GROUP BY per table. A table without the column is UNMEASURED, never 0.
+
+    With no lock there is no current checksum, so nothing is `current` and every
+    stamped row is counted as stale: a stamp names a model this brain no longer
+    promises (`basis` says so). Never raises; `stale_derived` is the figure to read,
+    `unstamped` sits beside it because a row nobody can vouch for is not current.
+
+    `consolidation` counts the legacy memories outside the nightly consolidation.
+    It needs vec0 on the connection; without it the figure is None, never 0."""
+    out: Dict[str, Any] = {"lock_weights_hash": None, "basis": None, "tables": {},
+                           "stale_derived": 0, "unstamped": 0, "current": 0, "total": 0, "unmeasured": []}
+    el = _embedder_lock()
+    whash = None
+    try:
+        whash = el.resolve(conn)["weights_hash"]
+        out["lock_weights_hash"] = whash
+        out["basis"] = "a stamp other than the lock's is stale; no stamp is unstamped; the lock's is current"
+    except el.EmbedderLockError as e:
+        out["basis"] = ("no lock on this brain: no checksum is current, every stamped row counts as stale"
+                        if e.code == "LOCK_MISSING" else
+                        f"lock unreadable ({e.code}): no checksum is current, every stamped row counts as stale")
+    except Exception as e:
+        out["basis"] = f"lock unreadable ({type(e).__name__}): no checksum is current, every stamped row counts as stale"
+    for tab in DERIVED_TABLES:
+        blank = {"total": None, "current": None, "stale": None, "unstamped": None}
+        try:
+            cols = {r[1] for r in conn.execute(f"PRAGMA table_info({tab})").fetchall()}
+            if not cols:
+                out["tables"][tab] = {"present": False, **blank}
+                out["unmeasured"].append(f"{tab}: table absent")
+                continue
+            if "weights_hash" not in cols:
+                n = conn.execute(f"SELECT COUNT(*) FROM {tab}").fetchone()[0]
+                out["tables"][tab] = {"present": True, **blank, "total": int(n),
+                                      "note": "no weights_hash column: migration_045 not applied; UNMEASURED, not 0"}
+                out["unmeasured"].append(f"{tab}: no weights_hash column")
+                continue
+            groups = conn.execute(f"SELECT weights_hash, COUNT(*) FROM {tab} GROUP BY weights_hash").fetchall()
+        except sqlite3.Error as e:
+            out["tables"][tab] = {"present": None, **blank, "error": f"{type(e).__name__}: {e}"}
+            out["unmeasured"].append(f"{tab}: unreadable ({type(e).__name__})")
+            continue
+        hist = {h: int(n) for h, n in groups if h}
+        total = sum(int(n) for _h, n in groups)
+        unstamped = total - sum(hist.values())
+        current = hist.get(whash, 0) if whash else 0
+        stale = total - unstamped - current
+        out["tables"][tab] = {"present": True, "total": total, "current": current, "stale": stale,
+                              "unstamped": unstamped, "histogram": hist}
+        out["stale_derived"] += stale
+        out["unstamped"] += unstamped
+        out["current"] += current
+        out["total"] += total
+    cons = _consolidation_report(conn)
+    gap = cons.pop("unmeasured", None)
+    if gap:
+        out["unmeasured"].append(gap)
+    out["consolidation"] = cons
+    held = cons["legacy_held"]
+    out["line"] = (f"derived layer: {out['stale_derived']} stale (another model's checksum) · "
+                   f"{out['unstamped']} unstamped · {out['current']} current of {out['total']} rows "
+                   f"across {len(DERIVED_TABLES)} tables"
+                   + (f"; {held} legacy episodic memories outside consolidation until re-embedded "
+                      f"({cons['legacy_held_recent']} from the last {cons['lookback_days']} days)" if held else "")
+                   + (f"; UNMEASURED: {'; '.join(out['unmeasured'])}" if out["unmeasured"] else ""))
+    return out
 
 
 def search_set(conn: sqlite3.Connection) -> Optional[ProvenanceFilter]:
@@ -1892,7 +2056,9 @@ def _locked_filter(conn: sqlite3.Connection, flt: Optional[ProvenanceFilter]) ->
 def needs_embedding_sql(flt: ProvenanceFilter, mem_alias: str = "m", scope: str = "active") -> str:
     """The predicate over `memories {mem_alias}` for a LOCKED filter; bind
     `search_set_params` for its three `?`. `scope` 'active' is the active
-    memories; 'vectored' adds any memory holding a vector in the lock's table."""
+    memories; 'vectored' adds any memory holding a vector in the lock's table.
+    A centroid under the lock is finished: its vector is the average of its members,
+    which is how a query about them finds it, and a text vector would bury it."""
     if not flt.locked:
         raise ValueError("needs_embedding_sql needs a locked filter")
     if scope not in ("active", "vectored"):
@@ -1900,12 +2066,13 @@ def needs_embedding_sql(flt: ProvenanceFilter, mem_alias: str = "m", scope: str 
     if scope == "active":
         population = f"COALESCE({mem_alias}.is_archived, 0) = 0"
     else:
-        population = (f"(COALESCE({mem_alias}.is_archived, 0) = 0 OR EXISTS "
-                      f"(SELECT 1 FROM {flt.vec_table} v0 WHERE v0.memory_id = {mem_alias}.id))")
+        population = (f"(COALESCE({mem_alias}.is_archived, 0) = 0 OR "
+                      f"{mem_alias}.id IN (SELECT memory_id FROM {flt.vec_table}))")
     return (f"{population} AND NOT EXISTS ("
             f"SELECT 1 FROM {PROVENANCE_TABLE} p WHERE p.memory_id = {mem_alias}.id "
             f"AND p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? "
-            f"AND p.input_kind = 'text' AND p.content_hash = vl_sha256({mem_alias}.content) "
+            f"AND (p.input_kind = 'centroid' OR (p.input_kind = 'text' "
+            f"AND p.content_hash = vl_sha256({mem_alias}.content))) "
             f"AND p.memory_id IN (SELECT memory_id FROM {flt.vec_table}))")
 
 
