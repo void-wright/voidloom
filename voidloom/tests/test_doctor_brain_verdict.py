@@ -138,6 +138,29 @@ class TheHostDoesNotDecideTheBrain(_Brain):
         self.assertIs(d["host_healthy"], True)
         self.assertIn("LOCK_MALFORMED", d["reason"])
 
+    def test_control_a_real_settings_file_that_will_not_parse_reaches_host_healthy_only(self):
+        """No stub: the verb in a child, under a HOME whose hook settings are not JSON. (A 0-byte file is {} now.)"""
+        import subprocess
+        self.memory(whash=self.h)
+        home = self.d / "home"
+        (home / ".claude").mkdir(parents=True)
+        (home / ".claude" / "settings.local.json").write_text("not json", encoding="utf-8")
+        env = {k: v for k, v in os.environ.items() if k not in ("WIZARD_LIBRARY_DB", "CLAUDE_MEMORY_DB")}
+        env.update({"HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1", "CUDA_VISIBLE_DEVICES": "none"})
+        code = ("import sys, json\n"
+                f"sys.path.insert(0, {str(ROOT)!r}); sys.path.insert(0, {str(ROOT / 'organs')!r})\n"
+                "import memory_write as mw\n"
+                "if not hasattr(mw, 'derived_layer_report'):\n"
+                "    mw.derived_layer_report = lambda c: {'stale_derived': 0}\n"
+                "from voidloom import cli\n"
+                f"sys.exit(cli.dispatch(['doctor', '--db', {str(self.db)!r}, '--json']))\n")
+        r = subprocess.run([sys.executable, "-c", code], cwd=str(self.d), env=env, capture_output=True, text=True,
+                           timeout=120)
+        data = json.loads(r.stdout)["data"]
+        self.assertIs(data["host_healthy"], False, data["warnings"])
+        self.assertIs(data["brain_healthy"], True, data["reason"])
+        self.assertTrue(data["warnings"])
+
     def test_an_absent_brain_says_so(self):
         self.conn.close()
         self.db.unlink()
