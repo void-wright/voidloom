@@ -32,8 +32,10 @@ SHADOW-POINTER DISCIPLINE:
   The bge path is the guaranteed fallback and is never removed.
 
 GRACEFUL-ABSENT (mirrors hybrid_retrieval._load_reranker + model_garden):
-  * model not downloaded / package missing / load exception -> ``load_model()``
-    returns ``None`` and CACHES the None (don't retry a known-absent model).
+  * model not downloaded / bytes that do not match the catalogue's pin / package
+    missing / load exception -> ``load_model()`` returns ``None`` and CACHES the None
+    (don't retry a known-absent model). It never downloads: the install fetches the
+    pin (organs/model_fetch.py), a recall does not.
   * any per-call scoring exception -> ``score_pairs()`` returns ``None``.
   A half-provisioned machine still recalls (via bge); it never crashes.
 
@@ -50,9 +52,11 @@ alongside hybrid_retrieval.py after the loop closes.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
-from typing import Any, Dict, List, Optional, Sequence
+import sys
+from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 logger = logging.getLogger("voidloom.qwen_reranker")
 
@@ -60,10 +64,85 @@ logger = logging.getLogger("voidloom.qwen_reranker")
 # Model identity + device (mirror hybrid_retrieval's reranker constants).
 # ============================================================
 QWEN_RERANKER_MODEL_NAME = "Qwen/Qwen3-Reranker-0.6B"
+QWEN_RERANKER_CATALOGUE_NAME = "qwen3-reranker-0.6b"   # the pin in organs/embedders.lock.json `rerankers`
 # Pinned for reproducibility (Apache-2.0, no remote code). Verified 2026-10-27:
 # HF refs and commits/main agree on this SHA.
 QWEN_RERANKER_REVISION = "e61197ed45024b0ed8a2d74b80b4d909f1255473"
 QWEN_RERANKER_DEVICE = "cuda:0"  # the CUDA case only, for diagnostics: the device is _torch_device()'s answer
+
+# The pin the last successful verification resolved -- {model_id, revision, snapshot,
+# weights_hash, files, computed} -- so a record can say which bytes the reranker was
+# loaded from. None until a verification has passed.
+_pin_verified: Optional[Dict[str, Any]] = None
+
+
+def pin_verified() -> Optional[Dict[str, Any]]:
+    return None if _pin_verified is None else dict(_pin_verified)
+
+
+def _lock_module():
+    """organs/embedder_lock (stdlib-only), imported the way _torch_device imports its module."""
+    try:
+        import embedder_lock as _el
+    except ImportError:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import embedder_lock as _el
+    return _el
+
+
+def resolve_pin(*, allow_fetch: bool = False) -> Dict[str, Any]:
+    """The catalogue's pin for this reranker, VERIFIED on disk: locate the snapshot at the
+    pinned hub revision, hash its listed files, compare to the catalogue's weights_hash.
+    Returns the pin with `snapshot` and `computed` added; raises embedder_lock.EmbedderLockError,
+    typed (LOCK_NOT_SHIPPED / SNAPSHOT_ABSENT / WEIGHTS_MISMATCH), otherwise. Nothing is
+    instantiated here. `allow_fetch` is the install's to pass: a read verb never fetches."""
+    el = _lock_module()
+    pin = el.catalogue_reranker(QWEN_RERANKER_CATALOGUE_NAME)
+    if pin["model_id"] != QWEN_RERANKER_MODEL_NAME:
+        raise el.EmbedderLockError(
+            "LOCK_NOT_SHIPPED",
+            f"the catalogue pins {pin['model_id']} under {QWEN_RERANKER_CATALOGUE_NAME!r} but this "
+            f"adapter is written for {QWEN_RERANKER_MODEL_NAME}; refusing to load a different model "
+            "through a judge template verified against another")
+    snap, computed = el.verify_snapshot_against_lock(pin, allow_fetch=allow_fetch, pin_kind="reranker")
+    out = dict(pin)
+    out["snapshot"] = str(snap)
+    out["computed"] = computed
+    return out
+
+
+_HUB_FLAGS = (("huggingface_hub.constants", "HF_HUB_OFFLINE"), ("transformers.utils.hub", "_is_offline_mode"))
+_HUB_ENV = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
+
+
+@contextlib.contextmanager
+def _hub_closed() -> Iterator[None]:
+    """No hub traffic while the reranker loads, whatever the environment says. The load runs
+    on a recall: a snapshot on disk loads from disk, and one that is not there fails here and
+    the recall degrades. Both libraries read their offline flag once, at import, so a process
+    that imported them already needs the flag set as well as the variables; one that has not
+    yet imported them takes it from the variables. Both are put back afterwards, so a later
+    fetch in this process (the install's) is not left offline."""
+    was_offline = _lock_module().hf_offline()
+    saved = {k: os.environ.get(k) for k in _HUB_ENV}
+    for k in _HUB_ENV:
+        os.environ[k] = "1"
+
+    def _flags(value: bool) -> None:
+        for module, attr in _HUB_FLAGS:
+            mod = sys.modules.get(module)
+            if mod is not None and hasattr(mod, attr):
+                setattr(mod, attr, value)
+    _flags(True)
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        _flags(was_offline)
 
 # Per-(query, doc) max length fed to the model (the judge prompt prefix/suffix are
 # reserved out of this budget). 8192 is the model card's documented working
@@ -185,6 +264,7 @@ def logits_to_keep_kwargs(model) -> Dict[str, int]:
     return {}
 
 
+@_hub_closed()
 def load_model(force_reload: bool = False) -> Optional[Dict[str, Any]]:
     """Lazy-load + process-cache the Qwen3-Reranker-0.6B causal-LM bundle.
 
@@ -195,10 +275,17 @@ def load_model(force_reload: bool = False) -> Optional[Dict[str, Any]]:
     mirroring ``hybrid_retrieval._load_reranker``'s contract. ``force_reload=True``
     retries (e.g. after the GPU comes back).
 
+    THE BYTES ARE HASHED BEFORE ANYTHING IS IMPORTED, against the catalogue's pin, and
+    the load runs with the hub closed: nothing here can reach the network, on a warm
+    host or a cold one. Bytes that do not match refuse, typed. A snapshot that is not
+    on disk at all has nothing to verify and nothing to load: the pinned load below
+    fails offline, and ``absence_reason()`` says SNAPSHOT_ABSENT. Nothing that was not
+    verified reaches a score.
+
     GRACEFUL-ABSENT: never raises. A failure here means the integration falls
     back to bge.
     """
-    global _absence_reason
+    global _absence_reason, _pin_verified
 
     if not force_reload and "bundle" in _qwen_cache:
         return _qwen_cache["bundle"]
@@ -210,11 +297,30 @@ def load_model(force_reload: bool = False) -> Optional[Dict[str, Any]]:
         _qwen_cache["bundle"] = None
         return None
 
+    # 1. THE PIN, BEFORE ANY HEAVY IMPORT: a refusal here is typed, and a process that
+    # cannot import torch still runs this step.
+    pin: Optional[Dict[str, Any]] = None
+    absent: Optional[str] = None
+    _pin_verified = None
+    try:
+        pin = resolve_pin()
+    except Exception as e:  # EmbedderLockError, typed; or the catalogue is unreadable
+        code = getattr(e, "code", type(e).__name__)
+        if code != "SNAPSHOT_ABSENT":
+            _absence_reason = f"{code}: {e}"
+            logger.warning("qwen_reranker.load_model: %s -> None (fall back to bge)", _absence_reason)
+            _qwen_cache["bundle"] = None
+            return None
+        absent = f"{code}: {e}"
+    if pin is not None:
+        _pin_verified = {k: pin[k] for k in ("model_id", "revision", "snapshot", "weights_hash", "files")}
+        _pin_verified["computed"] = pin["computed"]
+
     try:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
     except Exception as e:  # transformers/torch absent -> graceful-absent.
-        _absence_reason = f"import failed: {type(e).__name__}: {e}"
+        _absence_reason = absent or f"import failed: {type(e).__name__}: {e}"
         logger.warning("qwen_reranker.load_model: %s -> None (fall back to bge)", _absence_reason)
         _qwen_cache["bundle"] = None
         return None
@@ -237,6 +343,8 @@ def load_model(force_reload: bool = False) -> Optional[Dict[str, Any]]:
             # NO attn_implementation="flash_attention_2": FA2 needs Ampere+; this
             # is Turing sm_75. The default ("eager"/"sdpa") path is correct here.
         )
+        if pin is None:
+            raise RuntimeError("no verified snapshot for the pin; refusing bytes nobody hashed")
         model = model.to(device).eval()
 
         # Resolve the affirmative/negative token ids FROM the loaded tokenizer
@@ -271,12 +379,13 @@ def load_model(force_reload: bool = False) -> Optional[Dict[str, Any]]:
         _qwen_cache["bundle"] = bundle
         _absence_reason = None
         logger.info(
-            "qwen_reranker.load_model: loaded %s on %s (yes=%s no=%s)",
-            QWEN_RERANKER_MODEL_NAME, device, token_true_id, token_false_id,
+            "qwen_reranker.load_model: loaded %s@%s (weights %s…) on %s (yes=%s no=%s)",
+            QWEN_RERANKER_MODEL_NAME, pin["revision"][:12], pin["computed"][:12], device,
+            token_true_id, token_false_id,
         )
         return bundle
     except Exception as e:  # graceful-absent: any load failure degrades to bge.
-        _absence_reason = f"load failed: {type(e).__name__}: {e}"
+        _absence_reason = absent or f"load failed: {type(e).__name__}: {e}"
         logger.warning(
             "qwen_reranker.load_model: %s -> None (fall back to bge for the rest of this process)",
             _absence_reason,

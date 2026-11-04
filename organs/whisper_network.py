@@ -49,7 +49,6 @@ import json
 import logging
 import os
 import sqlite3
-import struct
 import subprocess
 import sys
 import time
@@ -105,31 +104,8 @@ VALID_OBSERVATION_TYPES = (
     'meta',         # about the process — observation about observing
 )
 
-# Nomic Embed v1.5 dimension (needed for embedding the digest memory).
-_NOMIC_DIM = 768
-
-# Voidloom #176 (RCE/iter2): pin the embedder to a verified HuggingFace commit
-# SHA. nomic-embed-text-v1.5 carries `custom_code` and loads via the remote-code
-# path (trust_remote_code=True is required -- trust_remote_code=False makes
-# sentence-transformers raise). Pinning `revision` to a fixed commit makes the
-# remote code tree IMMUTABLE, so a moved/replaced `main` tag can no longer swap
-# modeling_*.py for an attacker payload (the RCE Thessaly named). The residual
-# (the pinned, auditable remote code still runs) is documented in the seal.
-# SHA verified 2026-06-11 against HF /api/models/.../refs AND /commits/main.
-_NOMIC_REVISION = "e9b6763023c676ca8431644204f50c2b100d9aab"
-
-
-def _torch_device(torch_mod) -> str:
-    """THE device for this organ (handoff round 1, lane L1): voidloom_device.torch_device() -- the backend's pin first,
-    then the backend's own API (CUDA, ROCm, MPS, XPU); 'cpu' on any degraded, refused or unconfirmed basis. Replaces
-    the per-organ `"cuda:0" if _cuda_usable(torch) else "cpu"`, which could only ever say CUDA or CPU."""
-    try:
-        from voidloom_device import torch_device as _td
-    except ImportError:
-        import sys as _s
-        _s.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from voidloom_device import torch_device as _td
-    return _td(torch_mod)
+# The embedder, its width and its pin are the brain's (its install lock, or the tier
+# it already uses); this organ names none of them.
 
 
 def is_whisper_migration_applied(conn: sqlite3.Connection) -> bool:
@@ -402,13 +378,9 @@ def _synthesize_llm(
     return None
 
 
-def _serialize_f32(vec) -> bytes:
-    """Serialize a float32 vector for sqlite-vec."""
-    return struct.pack(f"{len(vec)}f", *vec)
-
-
-def _encode_for_embedding(text: str, conn=None) -> Optional[bytes]:
-    """Encode `text` for THE TIER THE CALLER'S DATABASE IS ON.
+def _encode_for_embedding(text: str, conn) -> Optional[bytes]:
+    """Encode `text` for THE TIER THE CALLER'S DATABASE IS ON, through the one guarded
+    encoder, and nothing else.
 
     ROUND GAMMA (A6). This function used to end in `vec[:_NOMIC_DIM]` -- a hard
     768 -- while the brain moved to jina/1024 on 2026-05-28. beta routed the
@@ -436,43 +408,23 @@ def _encode_for_embedding(text: str, conn=None) -> Optional[bytes]:
     using the RIGHT ENCODER. memory_write.default_encoder resolves the tier from
     the caller's connection and routes to the matching model.
 
-    `conn=None` keeps the old signature working for any caller that has no
-    connection to offer; it then falls back to the local nomic path and the
-    width assertion downstream refuses rather than the write failing silently.
+    THERE IS NO SECOND ENCODER. A local nomic path used to follow a failure here. On a
+    brain locked to another model it would have fetched nomic onto the host, through an
+    exception, for a vector the write then refuses. A failure to encode is now the
+    answer: None, said at ERROR, and the digest is written with no vector and tagged
+    'embedding-missing'. `conn` is REQUIRED: there is no tier without a database.
     """
-    if conn is not None:
-        try:
-            import sys as _s, os as _o
-            _d = _o.path.dirname(_o.path.abspath(__file__))
-            if _d not in _s.path:
-                _s.path.insert(0, _d)
-            import memory_write
-            return memory_write.default_encoder(text, conn)
-        except Exception as e:
-            logger.error("whisper: tier-correct encode failed (%s: %s); "
-                         "falling back to the local nomic path, which will be "
-                         "REFUSED downstream if this brain is on jina/1024.",
-                         type(e).__name__, e)
     try:
-        # setdefault is FORBIDDEN (#15708): it yields to an existing OR EMPTY
-        # value, so an exported-but-empty variable silently wins.  Resolve.
-        from voidloom_device import apply_cuda_pin as _apply
-        _apply()
-        # The local nomic path loads THROUGH THE SHIPPED CATALOGUE ENTRY (organs/
-        # embedders.lock.json, tier 'cpu'): the model AND its remote-code repository
-        # at their pinned revisions, the bytes checksum-verified before anything is
-        # instantiated, read from the verified snapshot directory. A by-name load
-        # resolves the hub's moving `main` for the remote code, which a cache
-        # holding only the pinned bytes cannot satisfy offline -- and could run
-        # bytes nobody checked online.
-        import embedding_upgrade as _eu
-        lock = dict(_eu._lock_module().catalogue_tiers()["cpu"])
-        lock["tier"] = "cpu"
-        if int(lock["dim"]) != _NOMIC_DIM:
-            raise ValueError("the shipped cpu tier is %s wide, this path writes %d" % (lock["dim"], _NOMIC_DIM))
-        return _eu.encode_locked(text, is_query=False, lock=lock)
+        import sys as _s, os as _o
+        _d = _o.path.dirname(_o.path.abspath(__file__))
+        if _d not in _s.path:
+            _s.path.insert(0, _d)
+        import memory_write
+        return memory_write.default_encoder(text, conn)
     except Exception as e:
-        logger.warning("Embedding failed: %s", e)
+        logger.error("whisper: encoding for this brain's tier FAILED (%s: %s); no fallback encoder "
+                     "exists -- the digest is written without a vector and tagged "
+                     "'embedding-missing'.", type(e).__name__, e)
         return None
 
 

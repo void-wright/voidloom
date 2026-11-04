@@ -306,7 +306,7 @@ def test_doctor_without_a_record_states_the_codes_label_and_the_reason(monkeypat
 
 def test_on_but_not_cached_is_said(monkeypatch):
     _machine(monkeypatch, "cuda", 23.47)
-    monkeypatch.setattr(hr, "_reranker_offline_ok", lambda repo: False)
+    monkeypatch.setattr(hr, "_reranker_in_cache", lambda repo: False)
     st = hr.reranker_status()
     assert st["model_cached"] is False and "not cached" in st["notes"][0]
     assert "not cached" in hr.reranker_banner_line(st)
