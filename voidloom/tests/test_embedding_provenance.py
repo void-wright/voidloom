@@ -512,7 +512,7 @@ class C11_NoImplicitCommitOnTheProvenancePath(_BrainCase):
 
 # ------------------------------------------ C12: every engine vector write stamps
 class C12_EngineVectorWritesStamp(_BrainCase):
-    VEC_INSERT = re.compile(r"INSERT INTO \{(?:_active_embed_table\(\)|table)\} \(memory_id, embedding\)")
+    VEC_INSERT = re.compile(r"INSERT INTO \{(?:_vt|table)\} \(memory_id, embedding\)")
 
     def _unstamped_sites(self, src: str):
         lines = src.splitlines()
@@ -532,7 +532,8 @@ class C12_EngineVectorWritesStamp(_BrainCase):
 
     def test_saboteur_a_site_with_the_stamp_removed_is_flagged(self):
         src = (ROOT / "organs" / "claude_memory.py").read_text(encoding="utf-8")
-        sab = src.replace('_stamp_vector_provenance(conn, args.id, args.content, "claude_memory.update")', "pass")
+        sab = src.replace('_stamp_vector_provenance(conn, args.id, args.content, "claude_memory.update", '
+                          'table=table, dim=_vd)', "None")
         self.assertNotEqual(sab, src, "saboteur did not plant")
         self.assertEqual(len(self._unstamped_sites(sab)), 1)
 

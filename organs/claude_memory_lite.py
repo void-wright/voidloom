@@ -167,6 +167,97 @@ def _has_columns(conn: sqlite3.Connection, table: str, cols) -> set:
 # recall — FTS5 keyword search
 # ---------------------------------------------------------------------------
 _SYNTH_CLAUSE = "\n      AND COALESCE(m.derived_from, '') NOT IN ('dream_synthesis', 'playbook_synthesis')"
+_UNRESOLVED_STAMP = "unresolved"
+
+
+def _read_lock():
+    """The install lock beside the database file (symlinks followed, the rule the reader applies), read
+    with the standard library alone so a bare copy of this file can still read it. (lock, None), or
+    (None, why) when it cannot be read."""
+    path = os.path.join(os.path.dirname(os.path.realpath(str(DB_PATH))), "embedder.lock.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            lk = json.load(f)
+        return {"vec_table": str(lk["vec_table"]), "weights_hash": str(lk["weights_hash"]),
+                "dim": int(lk["dim"])}, None
+    except FileNotFoundError:
+        return None, "LOCK_MISSING"
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return None, f"LOCK_MALFORMED ({type(e).__name__})"
+
+
+def _vector_ids_sql(conn: sqlite3.Connection, table: str):
+    """A subquery naming the memories with a vector in `table`, readable on a stdlib connection: sqlite-vec
+    keeps one row per vector in the ordinary shadow table `<table>_rowids`. None when it cannot be read."""
+    if table not in ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3"):
+        return None
+    try:
+        conn.execute(f"SELECT COUNT(*) FROM {table}_rowids")
+    except sqlite3.Error:
+        return None
+    return f"SELECT rowid FROM {table}_rowids"
+
+
+def _lock_coverage(conn: sqlite3.Connection) -> dict:
+    """The degraded answer carries coverage too: `matched` of `total`, derived on this connection for this
+    call. Tier 0 loads no model and opens no vec0 table, so it counts by SQL, over the same population the
+    reader's search set is: active memories with a vector in the lock's table whose stamp does not name
+    another checksum. `verified` carries the lock's checksum; `legacy_unverified` is the rest. With no lock
+    the whole table is the set, as for the reader. Nothing to measure against: matched 0 by construction,
+    and `basis` says why. `measured` is True only when both the vectors and the stamps were read."""
+    has_arch = "is_archived" in _has_columns(conn, "memories", ("is_archived",))
+    active = "COALESCE(m.is_archived, 0) = 0" if has_arch else "1"
+    total = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active}").fetchone()[0]
+    out = {"matched": 0, "total": int(total), "value": 0.0, "basis": None, "measured": False,
+           "mode": "fts5-keyword: the keyword result set; matched counts rows a vector search could reach"}
+
+    def settle(matched: int, basis: str, **extra) -> dict:
+        out.update(extra)
+        out.update({"matched": int(matched), "value": (matched / total) if total else 0.0, "basis": basis})
+        out["coverage"] = {"matched": out["matched"], "total": out["total"], "value": out["value"]}
+        return out
+
+    lock, why = _read_lock()
+    if lock is None and why != "LOCK_MISSING":
+        return settle(0, f"lock unreadable beside the database ({why}); matched 0 by construction")
+    if lock is None:
+        er = _embed_resolver()
+        try:
+            table = er.resolve(conn)[0] if er is not None else None
+        except Exception:
+            table = None
+        if table is None:
+            return settle(0, f"lock unreadable beside the database ({why}) and no tier declared; "
+                             "matched 0 by construction")
+        ids = _vector_ids_sql(conn, table)
+        if ids is None:
+            return settle(0, f"no lock, and the vectors of {table} cannot be read here; matched 0 by "
+                             "construction", vec_table=table)
+        matched = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active} AND m.id IN ({ids})").fetchone()[0]
+        return settle(matched, "no lock: the whole vector table is the search set", measured=True,
+                      vec_table=table, search_rule="lockless: whole table", legacy_unverified=None)
+
+    vt, wh, dim = lock["vec_table"], lock["weights_hash"], lock["dim"]
+    named = {"lock": {"vec_table": vt, "weights_hash": wh}, "vec_table": vt}
+    if len(_has_columns(conn, "embedding_provenance", {"weights_hash", "vec_table", "memory_id", "dim"})) < 4:
+        return settle(0, "embedding_provenance absent or without weights_hash; matched 0 by construction", **named)
+    stamped = ("SELECT memory_id FROM embedding_provenance WHERE vec_table = ? AND weights_hash = ? AND dim = ?")
+    foreign = ("SELECT memory_id FROM embedding_provenance WHERE vec_table = ? "
+               "AND NOT ((weights_hash = ? AND dim = ?) OR weights_hash = ?)")
+    ids = _vector_ids_sql(conn, vt)
+    if ids is None:         # no shadow table to read: the stamps alone, and the figure says so
+        verified = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active} AND m.id IN ({stamped})",
+                                (vt, wh, dim)).fetchone()[0]
+        return settle(verified, "embedding_provenance rows carrying the lock's checksum; the vector table "
+                                "cannot be read on this connection",
+                      verified=int(verified), legacy_unverified=None, **named)
+    verified = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active} AND m.id IN ({ids}) "
+                            f"AND m.id IN ({stamped})", (vt, wh, dim)).fetchone()[0]
+    matched = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active} AND m.id IN ({ids}) "
+                           f"AND m.id NOT IN ({foreign})", (vt, wh, dim, _UNRESOLVED_STAMP)).fetchone()[0]
+    return settle(matched, "active memories with a vector in the lock's table and no stamp naming another "
+                           "checksum (derived on this connection)", measured=True,
+                  search_rule="lock: verified + legacy", verified=int(verified), legacy_unverified=int(matched) - int(verified), **named)
 
 
 def cmd_recall(args: argparse.Namespace) -> int:
@@ -210,9 +301,13 @@ def cmd_recall(args: argparse.Namespace) -> int:
             conn.close()
             return 1
     results = [_row_dict(c, r) for r in rows]
+    coverage = _lock_coverage(conn)
+    for r in results:
+        r["coverage"] = coverage
     out = {
         "status": "ok", "action": "recall", "mode": "fts5-keyword",
         "query": args.query, "result_count": len(results), "results": results,
+        "coverage": coverage,
     }
     print(json.dumps(out, default=str))
     conn.close()
@@ -597,6 +692,10 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
     common_tag = data.get("common_tag", "seed-pack-agnostic")
     anchored = all(len(_entry_anchor(m)) == 1 for m in mems)
     plan_only = bool(getattr(args, "plan", False))
+    limit = getattr(args, "limit", None)
+    if limit is not None and limit < 0:
+        sys.stderr.write("ERROR: --limit must be 0 or more.\n")
+        return 2
 
     version = str(data.get("seed_pack_version") or "")
     embed = bool(getattr(args, "embed", False))
@@ -610,12 +709,17 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
         conn = _connect(readonly=plan_only)
         plan = seed_plan(conn, mems, common_tag)
         written = {"new": [], "changed": [], "adopted": [], "superseded_ids": [], "columns_set": 0}
+        deferred = []                                   # entries --limit left for a later load
         if not plan_only:
             try:
                 if embed:
                     lib.enable_vec(conn)
                 for action, i, anchor, row_id in plan["actions"]:
                     m = mems[i]
+                    if (action in ("new", "changed") and limit is not None
+                            and len(written["new"]) + len(written["changed"]) >= limit):
+                        deferred.append(anchor)
+                        continue
                     rev_tag = SEED_REV_PREFIX + seed_revision(_entry_summary(m), m.get("content", ""))
                     if action == "new":
                         _insert_seed_entry(conn, m, common_tag, (rev_tag,), version, embed)
@@ -642,7 +746,7 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
             conn.commit()
         total = conn.execute("SELECT COUNT(*) FROM memories WHERE is_archived = 0").fetchone()[0]
         conn.close()
-        by = {k: [a[2] for a in plan["actions"] if a[0] == k]
+        by = {k: [a[2] for a in plan["actions"] if a[0] == k and a[2] not in deferred]
               for k in ("new", "changed", "adopted", "left", "held-untagged")}
         print(json.dumps({
             "status": "ok", "action": "load-seed", "mode": "plan" if plan_only else "anchor-delta",
@@ -653,6 +757,7 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
             "present": plan["counts"].get("present", 0), "left_as_found": by["left"],
             "held_untagged": by["held-untagged"],
             "held_untagged_ids": [a[3] for a in plan["actions"] if a[0] == "held-untagged"],
+            "limit": limit, "deferred_by_limit": deferred,
             "superseded_ids": written["superseded_ids"],
             "seed_columns_set_on_existing_rows": written["columns_set"],
             "writer": ("memory_write.write_memory via organs/seed_loader.py" if lib is not None
@@ -700,6 +805,8 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
     loaded = 0
     skipped = 0
     for m in mems:
+        if limit is not None and loaded >= limit:
+            break
         category = m.get("category")
         kind = m.get("kind", "episodic")
         if category not in VALID_CATEGORIES or kind not in VALID_KINDS:
@@ -795,19 +902,22 @@ def cmd_stats(_args: argparse.Namespace) -> int:
         by_kind = dict(c.execute(
             "SELECT kind, COUNT(*) FROM memories WHERE is_archived = 0 GROUP BY kind"
         ).fetchall())
-    # Embedding coverage: how many vectors does THIS brain's table hold? The table comes from the
-    # install lock first (metadata only for a brain with no lock), never a literal: a qwen brain's
-    # vectors are not in the nomic table. The count reads on this stdlib connection (see
-    # embed_resolver.stored_vector_count); it used to ask the vec0 table directly, which a stdlib
-    # connection cannot read, so a brain holding vectors reported "not present".
-    embedded, emb_table, emb_unresolved = None, None, None
+    # Embedding coverage: how many memories can THIS brain's vector search reach? The table comes from
+    # the install lock first (metadata only for a brain with no lock), never a literal: a qwen brain's
+    # vectors are not in the nomic table. The figure is the search set's, from the provenance sidecar
+    # (_lock_coverage), not presence in the table: an other-checksum or archived row is not embedded
+    # for any search here. It reads on this stdlib connection: a vec0 table cannot be asked directly.
+    embedded, emb_table, emb_unresolved, coverage, stored = None, None, None, None, None
     er = _embed_resolver()
     if er is None:
         emb_unresolved = "organs/embed_resolver.py is not beside this file"
     else:
         try:
             emb_table, _dim = er.resolve(conn)
-            embedded = er.stored_vector_count(conn, emb_table)
+            coverage = _lock_coverage(conn)
+            stored = er.stored_vector_count(conn, emb_table)
+            # no sidecar or no readable table to measure against: what the table holds, and `coverage` says so
+            embedded = coverage["matched"] if coverage["measured"] else stored
         except er.EmbedTierUnresolved as e:
             vec_tables = c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN "
                                    "('memory_embeddings', 'memory_embeddings_v2', 'memory_embeddings_v3')"
@@ -827,9 +937,11 @@ def cmd_stats(_args: argparse.Namespace) -> int:
         "by_kind": by_kind,
         "embedded_memories": embedded,
         "embedding_table": emb_table,
+        "coverage": coverage if coverage is not None else _lock_coverage(conn),
         "semantic_tier": ("active" if embedded else
                           f"unknown: {emb_unresolved}" if emb_unresolved else
                           "present, vector count unreadable on this interpreter" if embedded is None else
+                          "present, no vector in the search set" if stored else
                           "not present (Tier 0 / keyword-only)"),
         "latest_5": [{"id": r[0], "summary": (r[1] or "")[:100], "created_at": r[2]}
                      for r in latest],
@@ -980,6 +1092,8 @@ def main() -> int:
     ls.add_argument("--embed", action="store_true",
                     help="write every row with its vector through the locked embedder (Tier 1); "
                          "without it rows are keyword-findable and embed_backfill.py vectors them later")
+    ls.add_argument("--limit", type=int, default=None,
+                    help="insert at most N rows; a later load takes up where this one stopped")
     ls.set_defaults(func=cmd_load_seed)
 
     _seed_dir = Path(__file__).resolve().parent.parent / "seed"

@@ -144,8 +144,9 @@ if _log_file:
 
 # --- Two-tier embedding (Council #4258): one codebase, tier chosen by flag ---
 # Jina v5 (1024-dim) is a GPU tier (opt-in, non-commercial licence); Nomic (768-dim)
-# is the lighter tier (laptop + teammate handoff). The active tier is resolved
-# from WIZARD_EMBED_MODEL env > metadata.active_embedding_table > 'nomic' default.
+# is the lighter tier (laptop + teammate handoff). The active tier is the install
+# lock's; a brain with no lock resolves WIZARD_EMBED_MODEL env >
+# metadata.active_embedding_table > 'nomic' default.
 JINA_MODEL_NAME = "jinaai/jina-embeddings-v5-text-small"
 JINA_DIM = 1024
 QWEN_MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
@@ -308,13 +309,27 @@ def _source_user_stamp(args) -> Optional[str]:
 def _compute_write_novelty(conn, memory_id, embedding) -> Optional[float]:
     """Epistemic novelty = cosine distance to the nearest OTHER memory (1 ANN
     MATCH against the active vec table). Returns [0,1] (1.0 == maximally novel)
-    or None on any failure. EPISTEMIC only -- never arousal/affect."""
+    or None on any failure. EPISTEMIC only -- never arousal/affect.
+
+    The neighbourhood is the search set every reader uses (the row just written
+    is in it, in this transaction): novelty feeds importance, so a vector the
+    reader would not return must not make a memory look familiar. A brain with no
+    lock has no checksum to hold a row to, so its whole table is the set."""
     table = _active_embed_table()
     try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import memory_write
+        in_set, in_set_params = "", ()
+        try:
+            _flt = memory_write.provenance_filter(conn)
+        except Exception:
+            _flt = None                     # no lock and no declared tier: nothing to filter on
+        if _flt is not None and _flt.locked:
+            table, in_set, in_set_params = _flt.vec_table, f"AND {_flt.search_set_sql} ", _flt.search_set_params
         rows = conn.execute(
             f"SELECT memory_id, distance FROM {table} "
-            f"WHERE embedding MATCH ? AND k = 5 ORDER BY distance",
-            (embedding,),
+            f"WHERE embedding MATCH ? AND k = 5 {in_set}ORDER BY distance",
+            (embedding, *in_set_params),
         ).fetchall()
         for nid, dist in rows:
             if nid != memory_id:
@@ -769,7 +784,18 @@ def _load_model():
         _error(f"Failed to load embedding model: {e}")
 
 
-def _encode(text: str, prefix: str = "search_document") -> bytes:
+def _encode(text: str, prefix: str = "search_document", *,
+            lock: Optional[Dict[str, Any]] = None) -> bytes:
+    # A caller holding a connection to another brain passes the lock it resolved from
+    # THAT connection (memory_write.default_encoder), and that lock is the one the
+    # loader verifies and encodes under: the encoder and the table it writes to are one
+    # answer to one question. Everything below answers for DB_PATH.
+    if lock is not None:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import contextlib
+        import embedding_upgrade
+        with contextlib.redirect_stdout(sys.stderr):      # a first load's chatter belongs on stderr
+            return embedding_upgrade.encode_locked(text, is_query=(prefix == "search_query"), lock=lock)
     # THREE-tier routing. This was a two-way `if jina ... else nomic`, and adding a
     # tier to EMBED_TIERS without adding a branch here sent qwen down the nomic
     # path — 768-dim vectors into the 1024-dim table it had just been given. A
@@ -796,10 +822,22 @@ def _encode(text: str, prefix: str = "search_document") -> bytes:
                                            lock=embedding_upgrade.brain_lock(DB_PATH, tier="nomic"))
 
 
+def _derived_hash(conn: sqlite3.Connection, table: str):
+    """The lock's checksum for a row DERIVED from vectors (memory_write.derived_stamp);
+    None on a brain without the column or the lock: the row is then unstamped and the
+    derived-layer report says so."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import memory_write
+    return memory_write.derived_stamp(conn, table)
+
+
 def _stamp_vector_provenance(conn: sqlite3.Connection, memory_id: int,
-                             text: str, organ: str) -> None:
-    """M1-C2: every vector THIS ENGINE writes carries its producer, written by
-    the same call, inside the same open transaction as the vector.
+                             text: str, organ: str, *, table: str, dim: int) -> Optional[Dict[str, Any]]:
+    """Every vector THIS ENGINE writes carries its producer, written by the same
+    call, inside the same open transaction as the vector, naming the TABLE AND WIDTH
+    THIS CALL WROTE: a stamp that resolved the tier again could disagree with the
+    write. Returns the stamp written, so an envelope can report the fact rather than
+    the intent.
 
     Delegates to memory_write (lazy import: memory_write imports this module, so
     a module-scope import would be circular). A raise PROPAGATES: the caller has
@@ -809,7 +847,7 @@ def _stamp_vector_provenance(conn: sqlite3.Connection, memory_id: int,
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import memory_write
-    memory_write.stamp_after_vector_insert(conn, memory_id, text, organ=organ)
+    return memory_write.stamp_after_vector_insert(conn, memory_id, text, organ=organ, table=table, dim=dim)
 
 
 def _get_conn() -> sqlite3.Connection:
@@ -1193,6 +1231,24 @@ def _cmd_init_body(args):
         else:
             gap_mapping_migration = {"status": "already-applied"}
 
+    # L3 Skill Graduation. migration_007's column is added PROGRAMMATICALLY (SQLite has
+    # no ALTER ... IF NOT EXISTS, and its own text says so), so the schema sweep below
+    # cannot reach it: without this the armed `skill-graduation` unit refuses
+    # `graduation_schema_absent` (rc 3) at every fire on every clean install. The organ's
+    # own idempotent applier runs here. Best-effort like its siblings: the envelope says.
+    graduation_migration: Dict[str, Any] = {"status": "skipped"}
+    try:
+        conn.close()
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import skill_graduation as _sg  # type: ignore
+        _mig = Path(__file__).resolve().parent.parent / "migrations" / "migration_007_skill_graduation.sql"
+        if _mig.exists():
+            graduation_migration = _sg.apply_graduation_migration(str(DB_PATH), str(_mig))
+    except Exception as e:
+        graduation_migration = {"status": "error", "message": f"{type(e).__name__}: {e}"}
+    finally:
+        conn = _get_conn()
+
     # L4 Pre-Cognitive Recall — auto-apply migration_016 if available and not yet applied.
     precognitive_migration: Dict[str, Any] = {"status": "skipped"}
     if pre_cognitive_recall is not None:
@@ -1259,6 +1315,7 @@ def _cmd_init_body(args):
         "procedural_migration": proc_migration,
         "sleep_loop_migration": sleep_migration,
         "gap_mapping_migration": gap_mapping_migration,
+        "graduation_migration": graduation_migration,
         "precognitive_migration": precognitive_migration,
         "time_ms": int((time.time() - t0) * 1000),
     })
@@ -1404,11 +1461,12 @@ def cmd_store(args):
     )
     memory_id = cursor.lastrowid
 
+    _vt, _vd = _active_embed_table(), _active_embed_dim()
     conn.execute(
-        f"INSERT INTO {_active_embed_table()} (memory_id, embedding) VALUES (?, ?)",
+        f"INSERT INTO {_vt} (memory_id, embedding) VALUES (?, ?)",
         (memory_id, embedding),
     )
-    _stamp_vector_provenance(conn, memory_id, args.content, "claude_memory.store")
+    _stamp_vector_provenance(conn, memory_id, args.content, "claude_memory.store", table=_vt, dim=_vd)
 
     # L5-G surprise birth-certificate: compute novelty at WRITE time (1 ANN MATCH;
     # the embedding already exists). Best-effort -- the store ALWAYS proceeds even
@@ -1694,7 +1752,10 @@ def cmd_recall(args):
         _cmd_recall_legacy(args, conn, t0)
         return
 
-    query_vec = _encode(args.query, "search_query")
+    # A keyword-only recall needs no embedder: the search reads no vector, so encoding
+    # here would refuse SNAPSHOT_ABSENT on a host with an empty cache and pay the model
+    # load on every other host.
+    query_vec = _encode(args.query, "search_query") if mode != "bm25-only" else None
 
     multi_hop_depth = getattr(args, 'multi_hop', 0) or 0
 
@@ -1906,7 +1967,7 @@ def cmd_recall(args):
         and not getattr(args, "no_cross_tier", False)
         and not _env_flag("VOIDLOOM_NO_CROSS_TIER")
     )
-    if want_cross_tier and cross_tier_bridges is not None and results:
+    if want_cross_tier and cross_tier_bridges is not None and results and query_vec is not None:
         try:
             if cross_tier_bridges.is_cross_tier_migration_applied(conn):
                 ct_top_k = max(2, args.top_k // 2)
@@ -2003,7 +2064,7 @@ def cmd_recall(args):
 
     # (5) Recall diversity: MMR de-dup + adaptive cap + Lost-in-the-Middle
     # placement. The LAST re-rank touch on `results` before the post-fetch
-    # filter/cut. MMR over memory_embeddings_v2 collapses near-duplicate
+    # filter/cut. MMR over the brain's vector table collapses near-duplicate
     # memories; the adaptive cap (modulated by the strongest BM25 hit) tightens
     # on a sharp exact query and widens on a diffuse one, flooring at top_k;
     # LitM placement puts the strongest results at positions 0 and -1 (LLMs read
@@ -2244,6 +2305,15 @@ def cmd_recall(args):
     _output(result)
 
 
+def _refuse_recall(conn, args, t0, err, coverage):
+    """A typed refusal as the recall's answer, with the coverage measured on this call."""
+    _payload = {"status": "error", "error": err.code, "action": "recall", "query": args.query,
+                "mode": "vector-only-legacy", "message": str(err), "coverage": coverage,
+                "time_ms": int((time.time() - t0) * 1000)}
+    conn.close()
+    _output(_payload, exit_code=1)
+
+
 def _cmd_recall_legacy(args, conn, t0):
     """Verbatim pre-L2 vector-only recall path.
 
@@ -2251,6 +2321,35 @@ def _cmd_recall_legacy(args, conn, t0):
     even if the hybrid module is unavailable (e.g., on a fresh checkout
     before the FTS5 migration has been applied).
     """
+    # The reader comes first, as on the hybrid path: a refusal is typed and is the
+    # answer, and it costs no model load. Rows come from the search set only. A brain
+    # with no lock and no declared tier has no set to build: it keeps its old read of the
+    # active table, and the envelope says the rows carry no filter.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embed_resolver
+    import memory_write
+    _cov = memory_write.coverage_envelope(conn)
+    try:
+        _flt = memory_write.search_set(conn)
+        _vec_from, _in_set, _in_set_params = None, "", ()
+        if _flt is not None:
+            _vec_from, _in_set, _in_set_params = (_flt.vec_table, f"AND emb.{_flt.search_set_sql}",
+                                                  _flt.search_set_params)
+    except embed_resolver.EmbedTierUnresolved:
+        _vec_from, _in_set, _in_set_params = _active_embed_table(), "", ()
+        _cov = {**_cov, "filter": "none: this brain has no lock and declares no tier, so the rows are "
+                                  "unfiltered reads of the active table"}
+    except Exception as _e:
+        if not getattr(_e, "code", None):
+            raise
+        return _refuse_recall(conn, args, t0, _e, _cov)
+    if _vec_from is None:                       # an empty brain: 0 of 0 is coverage, not a refusal
+        conn.close()
+        _output({"status": "ok", "action": "recall", "query": args.query, "mode": "vector-only-legacy",
+                 "results": [], "result_count": 0, "coverage": _cov,
+                 "time_ms": int((time.time() - t0) * 1000)})
+        return
+
     query_vec = _encode(args.query, "search_query")
 
     # Check if kind column exists for enrichment.
@@ -2273,12 +2372,13 @@ def _cmd_recall_legacy(args, conn, t0):
     if has_kind_col:
         sql += ",\n            m.kind,\n            m.confidence"
     sql += f"""
-        FROM {_active_embed_table()} AS emb
+        FROM {_vec_from} AS emb
         JOIN memories AS m ON m.id = emb.memory_id
         WHERE emb.embedding MATCH ?
           AND k = ?
+          {_in_set}
     """
-    params = [query_vec, args.top_k * 3]
+    params = [query_vec, args.top_k * 3, *_in_set_params]
 
     rows = conn.execute(sql, params).fetchall()
 
@@ -2361,6 +2461,7 @@ def _cmd_recall_legacy(args, conn, t0):
         "mode": "vector-only-legacy",
         "results": results,
         "result_count": len(results),
+        "coverage": _cov,
         "time_ms": int((time.time() - t0) * 1000),
     })
 
@@ -2481,14 +2582,19 @@ def cmd_update(args):
     conn.execute(f"UPDATE memories SET {', '.join(updates)} WHERE id = ?", params)
 
     if args.content:
+        # `re_embedded` reports the STAMP WRITTEN, not the intent: a stamp call that wrote
+        # nothing must not read as a re-embed, the reader would count the row stale.
         embedding = _encode(args.content, "search_document")
-        table = _active_embed_table()
+        table, _vd = _active_embed_table(), _active_embed_dim()
         conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (args.id,))
         conn.execute(
             f"INSERT INTO {table} (memory_id, embedding) VALUES (?, ?)",
             (args.id, embedding),
         )
-        _stamp_vector_provenance(conn, args.id, args.content, "claude_memory.update")
+        _prov = _stamp_vector_provenance(conn, args.id, args.content, "claude_memory.update", table=table, dim=_vd)
+        re_embedded = bool(_prov and isinstance(_prov, dict) and _prov.get("weights_hash"))
+    else:
+        re_embedded = False
 
     if args.tags:
         conn.execute("DELETE FROM memory_tags WHERE memory_id = ?", (args.id,))
@@ -2507,7 +2613,7 @@ def cmd_update(args):
         "status": "ok",
         "action": "update",
         "memory_id": args.id,
-        "re_embedded": args.content is not None,
+        "re_embedded": re_embedded,
         "time_ms": int((time.time() - t0) * 1000),
     })
 
@@ -2574,6 +2680,20 @@ def _is_archive_protected(foundation_score, kind, importance) -> bool:
     return False
 
 
+def _rows_holding_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, int]:
+    """{"table.column": rows} for every foreign key that names this memory and has no
+    delete rule, the rows that stop a hard delete."""
+    held: Dict[str, int] = {}
+    for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' "
+                                 "AND name NOT LIKE 'sqlite_%'").fetchall():
+        for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
+            if fk[2] == "memories" and fk[6] in ("NO ACTION", "RESTRICT"):
+                n = conn.execute(f'SELECT COUNT(*) FROM "{table}" WHERE "{fk[3]}" = ?', (memory_id,)).fetchone()[0]
+                if n:
+                    held[f"{table}.{fk[3]}"] = int(n)
+    return held
+
+
 def cmd_delete(args):
     t0 = time.time()
     conn = _get_conn()
@@ -2592,11 +2712,36 @@ def cmd_delete(args):
         "1", "true", "yes", "on")
     did_hard_delete = False
     if args.hard and hard_allowed:
-        conn.execute(f"DELETE FROM {_active_embed_table()} WHERE memory_id = ?", (args.id,))
+        # A hard delete removes the memory's vector from EVERY tier table that exists
+        # (the row is gone; a vector for it on any table is an orphan, and `tier set`
+        # keeps the old tier's table) and every stamp for it: a stamp describing a vector
+        # that is gone is the defect the reader counts as stamped_without_vector. One
+        # transaction: nothing commits until the row itself is gone.
+        _present = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()}
+        for _tab, _d, _r in EMBED_TIERS.values():
+            if _tab in _present:
+                conn.execute(f"DELETE FROM {_tab} WHERE memory_id = ?", (args.id,))
+        if "embedding_provenance" in _present:
+            conn.execute("DELETE FROM embedding_provenance WHERE memory_id = ?", (args.id,))
         conn.execute("DELETE FROM memory_tags WHERE memory_id = ?", (args.id,))
         conn.execute("DELETE FROM memory_links WHERE source_id = ? OR target_id = ?", (args.id, args.id))
         conn.execute("DELETE FROM access_log WHERE memory_id = ?", (args.id,))
-        conn.execute("DELETE FROM memories WHERE id = ?", (args.id,))
+        try:
+            conn.execute("DELETE FROM memories WHERE id = ?", (args.id,))
+        except sqlite3.IntegrityError as e:
+            if "FOREIGN KEY" not in str(e):
+                raise
+            # A log or lineage row names this memory with no delete rule, so the row cannot go
+            # yet. Nothing was removed: say which rows hold it, rather than a traceback.
+            conn.rollback()
+            _held_by = _rows_holding_memory(conn, args.id)
+            conn.close()
+            _output({"status": "error", "error": "HARD_DELETE_REFERENCED", "action": "delete",
+                     "memory_id": args.id, "held_by": _held_by,
+                     "message": f"memory {args.id} is named by rows that have no delete rule ({_held_by}); "
+                                "nothing was removed",
+                     "time_ms": int((time.time() - t0) * 1000)}, exit_code=1)
         did_hard_delete = True
     else:
         # Default path AND the demoted `forget --hard`: soft-archive only.
@@ -2761,12 +2906,27 @@ def cmd_stats(args):
     ).fetchall():
         importance_dist[row[0]] = row[1]
 
-    embedding_count = 0
+    # The vector figure a shipped verb renders is THE READER'S envelope, matched of total
+    # under the lock, never a presence COUNT(*) over the table: that counts other-checksum
+    # and archived rows as if they were searchable. A brain with no lock has no checksum
+    # to hold a row to, so its whole table is the search set: the active rows in it, the
+    # figure the stdlib engine reads for the same brain.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import memory_write as _mw
+    _cov_env = _mw.coverage_envelope(conn)
+    embedding_count = int(_cov_env.get("matched") or 0)
+    if _cov_env.get("basis") != "lock":
+        try:
+            embedding_count = conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0 "
+                f"AND id IN (SELECT memory_id FROM {_active_embed_table()})").fetchone()[0]
+        except Exception:
+            pass
+    # The DERIVED layer's stale count, on the organ's own status surface.
     try:
-        embedding_count = conn.execute(
-            f"SELECT COUNT(*) FROM {_active_embed_table()}").fetchone()[0]
-    except Exception:
-        pass
+        _derived = _mw.derived_layer_report(conn)
+    except Exception as _de:
+        _derived = {"error": f"{type(_de).__name__}: {_de}", "stale_derived": None}
 
     # L2 — surface FTS5 + schema version state.
     hybrid_state: Dict[str, Any] = {}
@@ -2818,6 +2978,8 @@ def cmd_stats(args):
         "total_memories": total,
         "archived_memories": archived,
         "embedded_memories": embedding_count,
+        "coverage": _cov_env,
+        "derived_layer": _derived,
         "unique_tags": tags_count,
         "total_links": links_count,
         "by_category": by_category,
@@ -2984,10 +3146,30 @@ def cmd_maintain(args):
     # 2. Deduplication: find near-identical memories in same category
     deduped = 0
     linked = 0
+    dedup_refused = None
     if not args.skip_dedup:
         categories = [r[0] for r in conn.execute(
             "SELECT DISTINCT category FROM memories WHERE is_archived = 0"
         ).fetchall()]
+
+        # Only vectors IN THE SEARCH SET may be compared: this comparison archives a
+        # memory, and a vector the reader does not vouch for is not grounds for that. A
+        # refusal (a brain whose rows nothing here can read) ends the dedup pass and no
+        # other: nothing is archived on a comparison that cannot be made, the decay
+        # pass above stands, and the envelope names the refusal. None is an empty brain.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import memory_write as _mw
+        try:
+            _flt = _mw.search_set(conn)
+        except Exception as _e:
+            _code = getattr(_e, "code", None)
+            if not _code:
+                raise
+            _flt, dedup_refused = None, {"error": _code, "message": str(_e)}
+            actions.append(f"Dedup refused: {_code}")
+        if _flt is None:
+            categories = []
+        _dh = _derived_hash(conn, "memory_links") if categories else None
 
         for cat in categories:
             mems = conn.execute(
@@ -2998,16 +3180,8 @@ def cmd_maintain(args):
             if len(mems) < 2:
                 continue
 
-            embeddings = {}
-            _emb_table = _active_embed_table()
-            _emb_dim = _active_embed_dim()
-            for mem_id, content in mems:
-                row = conn.execute(
-                    f"SELECT embedding FROM {_emb_table} WHERE memory_id = ?", (mem_id,)
-                ).fetchone()
-                if row:
-                    vec = struct.unpack(f"{_emb_dim}f", row[0])
-                    embeddings[mem_id] = vec
+            _blobs = _mw.read_vectors(conn, [mem_id for mem_id, _c in mems], flt=_flt)
+            embeddings = {mem_id: struct.unpack(f"{_flt.dim}f", blob) for mem_id, blob in _blobs.items()}
 
             ids = list(embeddings.keys())
             for i in range(len(ids)):
@@ -3039,10 +3213,18 @@ def cmd_maintain(args):
                             (ids[i], ids[j]),
                         ).fetchone()
                         if not existing:
-                            conn.execute(
-                                "INSERT OR IGNORE INTO memory_links (source_id, target_id, link_type, strength) VALUES (?, ?, 'related', ?)",
-                                (ids[i], ids[j], 1.0 - distance),
-                            )
+                            # This strength is a cosine distance between two vectors, so it
+                            # carries the checksum it was computed under.
+                            if _dh:
+                                conn.execute(
+                                    "INSERT OR IGNORE INTO memory_links (source_id, target_id, link_type, strength, weights_hash) VALUES (?, ?, 'related', ?, ?)",
+                                    (ids[i], ids[j], 1.0 - distance, _dh),
+                                )
+                            else:
+                                conn.execute(
+                                    "INSERT OR IGNORE INTO memory_links (source_id, target_id, link_type, strength) VALUES (?, ?, 'related', ?)",
+                                    (ids[i], ids[j], 1.0 - distance),
+                                )
                             linked += 1
 
     if deduped:
@@ -3059,6 +3241,7 @@ def cmd_maintain(args):
         "archived": archived_count,
         "decayed": decayed,
         "deduplicated": deduped,
+        "dedup_refused": dedup_refused,
         "linked": linked,
         "actions": actions,
         "time_ms": int((time.time() - t0) * 1000),
@@ -3183,11 +3366,12 @@ def cmd_migrate(args):
             )
             memory_id = cursor.lastrowid
 
+            _vt, _vd = _active_embed_table(), _active_embed_dim()
             conn.execute(
-                f"INSERT INTO {_active_embed_table()} (memory_id, embedding) VALUES (?, ?)",
+                f"INSERT INTO {_vt} (memory_id, embedding) VALUES (?, ?)",
                 (memory_id, embedding),
             )
-            _stamp_vector_provenance(conn, memory_id, mem["content"], "claude_memory.migrate")
+            _stamp_vector_provenance(conn, memory_id, mem["content"], "claude_memory.migrate", table=_vt, dim=_vd)
 
             for tag in mem.get("tags", []):
                 conn.execute(
@@ -4398,6 +4582,9 @@ def main():
         if not code or not isinstance(code, str):
             raise
         payload = {"status": "error", "error": code, "action": args.command, "message": str(e)}
+        cov = getattr(e, "coverage", None)
+        if hasattr(cov, "as_dict"):
+            payload["coverage"] = cov.as_dict()
         det = getattr(e, "detail", None) or {}
         if isinstance(det, dict):
             for k, v in det.items():
