@@ -52,10 +52,11 @@ class FacadeError(Exception):
 def _active_tier_repo():
     """The HuggingFace repo id the engine would load for THIS brain, or None.
 
-    Mirrors `claude_memory._active_embed_model()`'s resolution (env var first,
-    then `metadata.active_embedding_table`, then the nomic default) and maps it
-    through EMBED_TIERS. Returns None rather than guessing when the engine is not
-    importable -- the caller degrades that to a weaker check instead of asserting.
+    Asks `claude_memory._active_embed_model()`, which reads the install lock first
+    and, on a brain with no lock, the env var, then `metadata.active_embedding_table`,
+    then the nomic default, and maps it through EMBED_TIERS. Returns None rather than
+    guessing when the engine is not importable or the lock refuses -- the caller
+    degrades that to a weaker check instead of asserting.
     """
     try:
         engine = _import_engine_for_probe()
@@ -234,7 +235,7 @@ def _tier0_only_requested() -> bool:
 
 def _import_engine():
     """Lazily import the canonical engine. Adds the brain dir to sys.path so the
-    engine + its organ siblings resolve. Heavy modules (torch/jina) are NOT
+    engine + its organ siblings resolve. Heavy modules (torch/the embedder) are NOT
     pulled by the import itself — only by actually running recall/store.
 
     The brain dir is resolved through the single package resolver

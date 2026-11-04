@@ -6,7 +6,7 @@ first thing a fresh install runs, and it must succeed on a bare host that has no
 torch, no models, and maybe not even the DB yet.
 
 Hard rules (plan #6042):
-  * **Cannot import torch / jina / claude_memory.** Everything here is Python
+  * **Cannot import torch / an embedder / claude_memory.** Everything here is Python
     stdlib + best-effort subprocess to ``nvidia-smi``. (We deliberately do NOT
     ``import claude_memory`` — even though importing it happens to be torch-free
     today, presence-checking the brain by *path inspection* guarantees the
@@ -152,7 +152,7 @@ def detect_brain(db_path: Optional[str] = None) -> Dict[str, Any]:
     except Exception:
         engine_present = False
 
-    models = _detect_models()
+    models = _detect_models(db)
     return {
         "db_path": str(db),
         "db_present": db_present,
@@ -163,22 +163,39 @@ def detect_brain(db_path: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
-def _hf_cache_roots() -> List[Path]:
-    """The one cache the models load from, by the package's one reader (organs/embedder_lock.py, stdlib-only, loaded
-    from its file so this module still imports nothing heavy and leaves sys.path alone). Listing other roots here
-    would report models present that the loader cannot see. With no organs laid, the library's default."""
+def _lock_reader():
+    """organs/embedder_lock.py, the package's one reader of the lock and the cache: stdlib-only, loaded from its file
+    so this module still imports nothing heavy and leaves sys.path alone. None with no organs laid."""
     try:
         import importlib.util
         spec = importlib.util.spec_from_file_location("_vl_embedder_lock", _paths.organ_dir() / "embedder_lock.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        return [mod.hf_hub_cache()]
+        return mod
     except Exception:
-        return [Path.home() / ".cache" / "huggingface" / "hub"]
+        return None
+
+
+def _hf_cache_roots() -> List[Path]:
+    """The one cache the models load from. Listing other roots here would report models present that the loader
+    cannot see. With no organs laid, the library's default."""
+    mod = _lock_reader()
+    if mod is not None:
+        try:
+            return [mod.hf_hub_cache()]
+        except Exception:
+            pass
+    return [Path.home() / ".cache" / "huggingface" / "hub"]
 
 
 def _engine_model_dirs() -> tuple:
-    """``({tier: hf_cache_dirname}, source)`` read from the engine's EMBED_TIERS.
+    """``({tier: hf_cache_dirname}, source)`` read from the engine's EMBED_TIERS."""
+    tiers, source = _engine_tiers()
+    return {tier: dirname for tier, (_table, dirname) in tiers.items()}, source
+
+
+def _engine_tiers() -> tuple:
+    """``({tier: (vec_table, hf_cache_dirname)}, source)`` read from the engine's EMBED_TIERS.
 
     BY AST, NEVER BY IMPORT. This module is the stdlib-only host detector -- the
     one thing that must run on a bare machine -- so importing ``claude_memory``
@@ -186,15 +203,16 @@ def _engine_model_dirs() -> tuple:
 
     The engine writes ``EMBED_TIERS = {"nomic": (table, dim, NOMIC_MODEL_NAME), ...}``
     where the repo id is a module constant, so the constants are resolved first
-    and then substituted. Anything unparseable yields the two-tier literal with
+    and then substituted. Anything unparseable yields the literal table with
     ``source`` saying so: a fallback that pretends to be a derivation is the
     defect this replaces.
     """
     def _dirname(repo: str) -> str:
         return "models--" + repo.replace("/", "--")
 
-    fallback = ({"nomic": _dirname("nomic-ai/nomic-embed-text-v1.5"),
-                 "jina": _dirname("jinaai/jina-embeddings-v5-text-small")},
+    fallback = ({"nomic": ("memory_embeddings", _dirname("nomic-ai/nomic-embed-text-v1.5")),
+                 "jina": ("memory_embeddings_v2", _dirname("jinaai/jina-embeddings-v5-text-small")),
+                 "qwen": ("memory_embeddings_v3", _dirname("Qwen/Qwen3-Embedding-0.6B"))},
                 "FALLBACK LITERAL (engine EMBED_TIERS unreadable) — this census "
                 "may be narrower than the engine's tier table")
     try:
@@ -216,7 +234,7 @@ def _engine_model_dirs() -> tuple:
                 tiers = node.value
         if tiers is None:
             return fallback
-        out: Dict[str, str] = {}
+        out: Dict[str, tuple] = {}
         for k, v in zip(tiers.keys, tiers.values):
             if not (isinstance(k, ast.Constant) and isinstance(k.value, str)):
                 continue
@@ -228,8 +246,9 @@ def _engine_model_dirs() -> tuple:
                 repo = repo_node.value
             elif isinstance(repo_node, ast.Name):
                 repo = consts.get(repo_node.id)
+            table = v.elts[0].value if isinstance(v.elts[0], ast.Constant) else None
             if repo:
-                out[k.value] = _dirname(repo)
+                out[k.value] = (table, _dirname(repo))
         if not out:
             return fallback
         return out, "derived from organs/claude_memory.py EMBED_TIERS (AST)"
@@ -237,10 +256,70 @@ def _engine_model_dirs() -> tuple:
         return fallback
 
 
-def _detect_models() -> Dict[str, Any]:
-    """Heuristic: are the embedding models the engine names present in the HF
-    cache? Path-only; we never import or load them. The HF hub cache encodes a
-    repo id ``org/name`` as a directory ``models--org--name``.
+def _brain_tier(db: Path, tiers: Dict[str, tuple]) -> tuple:
+    """``(tier, how)`` for a brain with no lock, by the read the engine itself makes for one: WIZARD_EMBED_MODEL, then
+    `metadata.active_embedding_table`, then nomic. ``tier`` is None when the brain cannot be read."""
+    env = os.environ.get("WIZARD_EMBED_MODEL", "").strip().lower()
+    if env in tiers:
+        return env, "WIZARD_EMBED_MODEL"
+    try:
+        import sqlite3
+        conn = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            row = conn.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
+        finally:
+            conn.close()
+    except Exception:
+        return None, "the brain could not be read"
+    for tier, (table, _dirname) in tiers.items():
+        if row and row[0] == table:
+            return tier, "metadata.active_embedding_table"
+    return "nomic", "the engine's default for a brain with no recorded table"
+
+
+def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple]) -> None:
+    """Narrow `present` from "some model is cached" to "the model THIS brain loads is cached". A brain with a lock
+    answers for every snapshot the lock names, in the one cache the loader reads, its remote code included; a lock that
+    cannot be read answers no. A brain with no lock answers for its tier's model, whichever tier that is, shipped or
+    not. With no brain on disk there is nothing to narrow to, and the census stands, labelled."""
+    if db is None:
+        return
+    db = Path(db)
+    lock_path = db.resolve().parent / "embedder.lock.json"      # symlinks followed, as the lock's own reader does
+    if not lock_path.exists():
+        if not db.is_file():
+            return
+        tier, how = _brain_tier(db, tiers)
+        out["brain_tier"] = tier
+        out["present"] = bool(out["by_model"].get(tier))
+        out["present_semantics"] = (f"this brain's: the {tier} model, its tier by {how} (the brain has no lock)"
+                                    if tier else f"this brain's: unknown, {how}")
+        return
+    mod = _lock_reader()
+    try:
+        if mod is None:
+            raise ValueError("organs/embedder_lock.py is not importable")
+        lock = mod.read_lock(lock_path)
+        pins = [(lock["model_id"], lock["revision"])]
+        if isinstance(lock.get("code"), dict):
+            pins.append((lock["code"]["model_id"], lock["code"]["revision"]))
+        snaps = {f"{mid}@{rev[:12]}": mod.snapshot_dir_for(mid, rev) is not None for mid, rev in pins}
+    except Exception as e:
+        out.update({"lock": str(lock_path), "lock_snapshots": {}, "present": False,
+                    "lock_refusal": getattr(e, "code", type(e).__name__),
+                    "present_semantics": "the lock's: it cannot be read, so no model can be vouched for"})
+        return
+    out.update({"lock": str(lock_path), "lock_snapshots": snaps, "present": all(snaps.values()),
+                "present_semantics": "the lock's: every snapshot the install lock names (model + remote code) "
+                                     "is under the one cache the loader reads"})
+
+
+def _detect_models(db: Optional[Path] = None) -> Dict[str, Any]:
+    """Heuristic: are the embedding models present in the HF cache? Path-only; we never import or load them. The HF hub
+    cache encodes a repo id ``org/name`` as a directory ``models--org--name``.
+
+    `present` answers for `db`'s own model (`_brain_model`). The census of every tier the engine names stays beside it
+    as `by_model` and `any_engine_tier_present`, because a model cached for some other tier does nothing for this one.
     """
     # CRUCIBLE-3 D1-F2: this was a HAND-TYPED dict of TWO, against an engine that
     # names THREE -- and the one it omitted, Qwen3-Embedding-0.6B, is the one the
@@ -263,7 +342,8 @@ def _detect_models() -> Dict[str, Any]:
     # a bare host. The derivation source is published beside the result, and a
     # parse that yields nothing falls back to the literal AND SAYS SO rather than
     # silently censusing two again.
-    wanted, _derivation = _engine_model_dirs()
+    tiers, _derivation = _engine_tiers()
+    wanted = {tier: dirname for tier, (_table, dirname) in tiers.items()}
     found: Dict[str, bool] = {k: False for k in wanted}
     for root in _hf_cache_roots():
         try:
@@ -275,13 +355,15 @@ def _detect_models() -> Dict[str, Any]:
         except Exception:
             continue
     any_present = any(found.values())
-    return {"present": any_present, "by_model": found,
-            # `present` is an ANY over the set and the field never said so.
-            # D1-F2's secondary claim; stating the semantics costs one key.
-            "present_semantics": "any: true when AT LEAST ONE named model is cached",
-            "tiers_censused": sorted(found),
-            "census_derived_from": _derivation,
-            "cache_roots_checked": [str(r) for r in _hf_cache_roots()]}
+    out: Dict[str, Any] = {"present": any_present, "by_model": found,
+                           # An ANY over the set, until a brain narrows it; stating the semantics costs one key.
+                           "present_semantics": "any: true when AT LEAST ONE named model is cached",
+                           "any_engine_tier_present": any_present,
+                           "tiers_censused": sorted(found),
+                           "census_derived_from": _derivation,
+                           "cache_roots_checked": [str(r) for r in _hf_cache_roots()]}
+    _brain_model(out, db, tiers)
+    return out
 
 
 def bootstrap(db_path: Optional[str] = None) -> Dict[str, Any]:
@@ -317,8 +399,8 @@ def _tier_notes(tier: str, brain: Dict[str, Any],
     notes: List[str] = []
     if tier == "gpu":
         n = len(gpu.get("gpus", []))
-        notes.append(f"CUDA GPU tier: {n} GPU(s) visible — Jina (1024-dim) "
-                     "embedding tier is available.")
+        notes.append(f"CUDA GPU tier: {n} GPU(s) visible — the Qwen3-Embedding-0.6B "
+                     "(1024-dim) embedding tier is available.")
     else:
         notes.append("CPU-only tier: no CUDA GPU visible — the lighter Nomic "
                      "(768-dim) tier is the path here.")
