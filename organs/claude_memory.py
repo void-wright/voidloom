@@ -1243,24 +1243,6 @@ def _cmd_init_body(args):
         else:
             gap_mapping_migration = {"status": "already-applied"}
 
-    # L3 Skill Graduation. migration_007's column is added PROGRAMMATICALLY (SQLite has
-    # no ALTER ... IF NOT EXISTS, and its own text says so), so the schema sweep below
-    # cannot reach it: without this the armed `skill-graduation` unit refuses
-    # `graduation_schema_absent` (rc 3) at every fire on every clean install. The organ's
-    # own idempotent applier runs here. Best-effort like its siblings: the envelope says.
-    graduation_migration: Dict[str, Any] = {"status": "skipped"}
-    try:
-        conn.close()
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import skill_graduation as _sg  # type: ignore
-        _mig = Path(__file__).resolve().parent.parent / "migrations" / "migration_007_skill_graduation.sql"
-        if _mig.exists():
-            graduation_migration = _sg.apply_graduation_migration(str(DB_PATH), str(_mig))
-    except Exception as e:
-        graduation_migration = {"status": "error", "message": f"{type(e).__name__}: {e}"}
-    finally:
-        conn = _get_conn()
-
     # L4 Pre-Cognitive Recall — auto-apply migration_016 if available and not yet applied.
     precognitive_migration: Dict[str, Any] = {"status": "skipped"}
     if pre_cognitive_recall is not None:
@@ -1303,6 +1285,25 @@ def _cmd_init_body(args):
         }
     except Exception as e:
         schema_sweep = {"status": "error", "message": f"{type(e).__name__}: {e}"}
+    finally:
+        conn = _get_conn()
+
+    # L3 Skill Graduation. migration_007's column is added PROGRAMMATICALLY (SQLite has
+    # no ALTER ... IF NOT EXISTS, and its own text says so), so the schema sweep below
+    # cannot reach it: without this the armed `skill-graduation` unit refuses
+    # `graduation_schema_absent` (rc 3) at every fire on every clean install. The organ's
+    # own idempotent applier runs here. Best-effort like its siblings: the envelope says.
+    # After the sweep, so the column lands last on a new brain and on a migrated one, and the two read as one schema.
+    graduation_migration: Dict[str, Any] = {"status": "skipped"}
+    try:
+        conn.close()
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import skill_graduation as _sg  # type: ignore
+        _mig = Path(__file__).resolve().parent.parent / "migrations" / "migration_007_skill_graduation.sql"
+        if _mig.exists():
+            graduation_migration = _sg.apply_graduation_migration(str(DB_PATH), str(_mig))
+    except Exception as e:
+        graduation_migration = {"status": "error", "message": f"{type(e).__name__}: {e}"}
     finally:
         conn = _get_conn()
 

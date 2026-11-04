@@ -93,7 +93,7 @@
       "migration_044_seed_origin.sql",
       "migration_045_derived_layer_stamp.sql"
     ],
-    "schema_sha256": "590f0b6839a3d2374bbecbc9f9edb5afae60585e219854f59c515f29699c395b"
+    "schema_sha256": "40b7fb7035267700d48669a03b81c94f12b25b16844d24fc94f04fc9ec987bfd"
   },
   "version": "1.0.0"
 }

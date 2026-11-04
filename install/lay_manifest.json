@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "3c78fae",
+  "derived_at_head": "4dadff2",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 489,
   "not_laid": {
@@ -193,7 +193,7 @@
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "d9d6cb32980d4bfe91fc464142ee0f696b9eb60e961693abacf93e66c64137f0",
+   "sha256": "fd1c349c71739b63505ee4254593bb4110da55966b0f4084d9c7a9b555bdd4f9",
    "src": "COMPAT.json"
   },
   {
@@ -1637,13 +1637,13 @@
    "src": "organs/calibration_memory.py"
   },
   {
-   "bytes": 213246,
+   "bytes": 213364,
    "component": "core",
    "dst": "organs/claude_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "5ace4fbcf210de4aa68f1ca9407ea3ff01bddd3f2db27daae6870fec627fe7b4",
+   "sha256": "03d717a02d6bfef598644868b26759b0e7c2e8409d9b44c3c0ec4aa262f570c3",
    "src": "organs/claude_memory.py"
   },
   {

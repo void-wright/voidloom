@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-04T18:58:07Z from the working tree whose HEAD was `3c78fae`
+> Generated 2026-11-04T19:24:03Z from the working tree whose HEAD was `4dadff2`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,12 +14,12 @@
 |---|---|
 | files tracked | 489 |
 | files hashed | 489 |
-| total bytes | 11021513 |
+| total bytes | 11021631 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4741364 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4741482 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -33,7 +33,7 @@
 | `organs/belief_cli.py` | 19007 | `356c2411a17e146e` |
 | `organs/belief_engine.py` | 74066 | `b312c857d174f333` |
 | `organs/calibration_memory.py` | 47193 | `00fea3a3d28f1ded` |
-| `organs/claude_memory.py` | 213246 | `5ace4fbcf210de4a` |
+| `organs/claude_memory.py` | 213364 | `03d717a02d6bfef5` |
 | `organs/claude_memory_lite.py` | 59148 | `a7e322465868c1d8` |
 | `organs/cognitive_map.py` | 40183 | `794e44f65a79e4e3` |
 | `organs/communities.py` | 46994 | `331522b97b374104` |
@@ -384,7 +384,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 134845 | `c3853c86ce13776b` |
+| `install/lay_manifest.json` | 134845 | `e890db7efdc0cc46` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15509 | `fb55c1f6b74f2ed1` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -550,7 +550,7 @@
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
 | `CHANGELOG.md` | 30514 | `58184d7df9d2d11f` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
-| `COMPAT.json` | 3050 | `d9d6cb32980d4bfe` |
+| `COMPAT.json` | 3050 | `fd1c349c71739b63` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
 | `NOTICE` | 4391 | `6608b4df230ab445` |
