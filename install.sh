@@ -4388,13 +4388,19 @@ try:
     # remote-code repository at lock.code.revision -- checksum both against
     # lock.weights_hash, and instantiate nothing. A brain with no lock (a tier the
     # catalogue does not ship) keeps the by-name load.
-    import embedding_upgrade
     try:
-        _lock = embedding_upgrade.brain_lock(os.environ["WIZARD_LIBRARY_DB"], tier=os.environ.get("WIZARD_EMBED_MODEL", ""))
+        _lock = embedder_lock.resolve(os.environ["WIZARD_LIBRARY_DB"])
     except embedder_lock.EmbedderLockError as _e:
-        if _e.code != "LOCK_NOT_SHIPPED":
+        if _e.code != "LOCK_MISSING":
             raise
-        _lock = None            # a tier the catalogue does not ship: it has no pin, so it loads by name below
+        _lock = None
+    if _lock is None:           # a shipped tier still fetches by its pin; only a tier with none loads by name below
+        import embedding_upgrade
+        try:
+            _lock = embedding_upgrade.brain_lock(os.environ["WIZARD_LIBRARY_DB"], tier=os.environ.get("WIZARD_EMBED_MODEL", ""))
+        except embedder_lock.EmbedderLockError as _e:
+            if _e.code != "LOCK_NOT_SHIPPED":
+                raise
     if _lock is not None:
         if _lock["model_id"] != os.environ["EMBED_REPO"]:
             raise RuntimeError("the install lock names %s but this run selected %s; the lock is the promise"
