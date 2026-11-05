@@ -384,6 +384,8 @@ def _standalone_cli() -> int:
     parser.add_argument("--release-ids", dest="release_ids", nargs="+", type=int, default=None,
                         metavar="ID", help="quarantine: release these belief_quarantine rows")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help="say how many rows a scan would read; write nothing")
     # R4/P5. `default=DEFAULT_DB_PATH` made `_resolve_db`'s
     # `getattr(args, "db", None) or os.environ.get("CLAUDE_MEMORY_DB")`
     # unreachable: argparse always supplied a truthy first operand, so
@@ -394,6 +396,10 @@ def _standalone_cli() -> int:
                         help="path to the memory DB (default: "
                              "$CLAUDE_MEMORY_DB, else the canonical path)")
     args = parser.parse_args()
+    if args.dry_run:
+        import dry_plan
+        return dry_plan.plan("belief-scan", _resolve_db(args), f"{args.belief_action}: read up to {args.limit} queued rows "
+                             "for contradictions", {"queued": "SELECT COUNT(*) FROM belief_scan_queue"})
     return cmd_belief(args)
 
 

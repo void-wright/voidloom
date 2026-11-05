@@ -315,7 +315,9 @@ def write_owner_marker(d: Path, root: Optional[Path] = None) -> Path:
     m = d / OWNER_MARKER
     tmp = d / (OWNER_MARKER + ".tmp")
     named = Path(root).resolve() if root is not None else acting_root()
-    tmp.write_text(json.dumps({"schema": OWNER_SCHEMA, "install_root": str(named)}) + "\n", encoding="utf-8")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"schema": OWNER_SCHEMA, "install_root": str(named)}) + "\n")
     os.replace(str(tmp), str(m))
     return m
 
@@ -326,7 +328,7 @@ def claim_env_dir(d: Path, root: Path) -> bool:
     d = Path(d)
     d.parent.mkdir(parents=True, exist_ok=True)
     try:
-        os.mkdir(str(d))
+        os.mkdir(str(d), 0o700)
     except FileExistsError:
         return False
     write_owner_marker(d, root)

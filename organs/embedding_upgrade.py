@@ -1136,8 +1136,7 @@ def cmd_swap(args) -> Dict[str, Any]:
         "(`--plan` first for the counts; the old vectors are kept until `voidloom tier "
         "cleanup`).",
         replacement="tier set", built=True,
-        usage="voidloom tier set <nomic|qwen> [--plan]  (or: python3 organs/tier_set.py "
-              "--db <brain>/claude_memory.db set <nomic|qwen>)",
+        usage="voidloom tier set <nomic|qwen> [--plan]",
         db_path=getattr(args, "db_path", None))
 
 

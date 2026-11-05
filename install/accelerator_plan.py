@@ -395,8 +395,9 @@ def write_gate(config_path, p, dry_run=False):
         os.makedirs(d, mode=0o700)
     if os.path.exists(config_path):
         shutil.copy2(config_path, config_path + ".bak")
+        os.chmod(config_path + ".bak", 0o600)
     tmp = "%s.tmp.%d" % (config_path, os.getpid())
-    with open(tmp, "w", encoding="utf-8") as fh:
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as fh:
         json.dump(merged, fh, indent=2, sort_keys=True)
         fh.write("\n")
     os.replace(tmp, config_path)

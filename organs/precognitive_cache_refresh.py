@@ -109,10 +109,16 @@ def main(argv) -> int:
                     help="Interpreter to run the CLI (default: this interpreter)")
     ap.add_argument("--session-id", default=None,
                     help="Optional session id stamped into the anticipation log row")
+    ap.add_argument("--dry-run", dest="dry_run", action="store_true",
+                    help="say what the refresh would write; write nothing, load no model")
     args = ap.parse_args(argv)
 
     here = Path(__file__).resolve().parent
     db = Path(args.db)
+    if args.dry_run:
+        import dry_plan
+        return dry_plan.plan("pre-cognitive", db, f"anticipate the top {args.top_k} memories into the cache for "
+                             f"{args.ttl_hours} hours")
     cli = Path(args.cli) if args.cli else (here / "claude_memory.py")
     py = args.python or sys.executable
     cache = Path(

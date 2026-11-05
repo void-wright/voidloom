@@ -142,7 +142,7 @@ def set_mode(mode: str, *, set_by: str, path: Optional[str] = None,
     if os.path.exists(p):
         shutil.copy2(p, p + ".approvals.bak")   # not .bak: that is the reranker gate's pre-image
     tmp = "%s.tmp.%d" % (p, os.getpid())
-    with open(tmp, "w", encoding="utf-8") as fh:
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as fh:
         json.dump(merged, fh, indent=2, sort_keys=True)
         fh.write("\n")
     os.replace(tmp, p)

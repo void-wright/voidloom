@@ -724,6 +724,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="max rows in the digest (default 50)")
     p.add_argument("--calm-demo", action="store_true",
                    help="prove the calm-restorer fires on stuck telemetry (no writes)")
+    p.add_argument("--dry-run", dest="dry_run", action="store_true",
+                   help="say which transcripts a run would scan; write nothing")
     p.add_argument("--json", action="store_true",
                    help="force machine JSON output for --digest (default is human)")
     return p
@@ -731,6 +733,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: "list[str] | None" = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.dry_run:
+        import dry_plan
+        found = sorted(Path(args.project_dir).expanduser().glob("**/*.jsonl")) if args.project_dir else []
+        return dry_plan.plan("affect-probe", _resolve_db_arg(args.db), "scan new transcript lines for affect markers",
+                             transcripts=len(found))
 
     if args.calm_demo:
         print(json.dumps(run_calm_demo(), indent=2))

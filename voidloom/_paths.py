@@ -146,4 +146,11 @@ def organ_dir(override: Optional[str] = None) -> Path:
     """
     root = brain_dir(override)
     cand = root / "organs"
-    return cand if cand.is_dir() else root
+    if cand.is_dir() or (root / "claude_memory.py").is_file():
+        return cand if cand.is_dir() else root
+    # An attached brain lives away from the install: the code is where the install says, or beside this package.
+    home = os.environ.get("WIZARD_LIBRARY_HOME")
+    for there in ((Path(home) / "organs") if home else None, Path(__file__).resolve().parent.parent / "organs"):
+        if there is not None and there.is_dir():
+            return there
+    return root

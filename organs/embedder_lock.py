@@ -485,6 +485,15 @@ def lock_path_for(target: Union[None, str, Path, sqlite3.Connection]) -> Path:
     return p / LOCK_NAME
 
 
+def append_receipt(data_dir: Union[str, Path], receipt: Dict[str, Any]) -> None:
+    """One line on the lock's history, owner-only whatever the umask: `lost_lock` trusts what this file says."""
+    fd = os.open(str(Path(data_dir) / LOCK_HISTORY_NAME), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as h:
+        h.write(json.dumps(receipt, sort_keys=True) + "\n")
+        h.flush()
+        os.fsync(h.fileno())
+
+
 def brain_python() -> str:
     """The interpreter that can run this install's organs: its own venv when it has one. Whatever `python3` means on the
     caller's PATH usually has no sqlite_vec, so a repair command that names it fails where it is printed."""
@@ -758,10 +767,7 @@ def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Uni
         "previous": ({"tier": previous["tier"], "weights_hash": previous["weights_hash"]}
                      if previous else None),
     }
-    with open(d / LOCK_HISTORY_NAME, "a", encoding="utf-8") as h:
-        h.write(json.dumps(receipt, sort_keys=True) + "\n")
-        h.flush()
-        os.fsync(h.fileno())
+    append_receipt(d, receipt)
     lock["_path"] = str(target)
     return lock
 

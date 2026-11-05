@@ -2639,7 +2639,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--migration", default=None, help="Path to migration_027 .sql")
     parser.add_argument("--daytime", action="store_true",
                         help="Run daytime phases (burst window, gpu_guard-gated)")
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help="the same as the dry-run action: plan the cycle, write nothing")
     args = parser.parse_args(argv)
+    if args.dry_run:
+        # The `dry-run` action walks the phases and records the walk; this flag writes nothing at all.
+        import dry_plan
+        names = [p.name for p in PHASES if p.enabled_default and p.nocturnal != bool(args.daytime)]
+        return dry_plan.plan("dream-daytime" if args.daytime else "dreaming", args.db_path,
+                             "run the dream phases: " + ", ".join(names),
+                             {"dream_cycles": "SELECT COUNT(*) FROM dream_log"})
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")

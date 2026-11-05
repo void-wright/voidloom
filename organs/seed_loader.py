@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -298,6 +299,46 @@ def expected_row(conn: sqlite3.Connection, q: Dict[str, Any]) -> Optional[int]:
     return None
 
 
+def _card() -> Optional[Dict[str, Any]]:
+    """The card this process was given, by index, bus id and UUID, read back from nvidia-smi; None when none is pinned."""
+    import subprocess
+    import voidloom_device
+    pick = (os.environ.get("CUDA_VISIBLE_DEVICES") or "").split(",")[0].strip()
+    smi = voidloom_device.nvidia_smi()
+    if not pick or not smi:
+        return None
+    try:
+        rows = subprocess.run([smi, "--query-gpu=index,pci.bus_id,uuid", "--format=csv,noheader"], capture_output=True,
+                              text=True, timeout=30).stdout.splitlines()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for row in rows:
+        index, bus, uuid = [c.strip() for c in row.split(",")][:3]
+        if pick in (index, uuid):
+            return {"index": int(index), "pci_bus_id": bus, "uuid": uuid}
+    return None
+
+
+def _measured_on(conn: sqlite3.Connection, lock: Dict[str, Any]) -> Dict[str, Any]:
+    """Where this self-test really ran: the tier, the device the resident model sits on against the one the resolver
+    asked for, and the vector backend on this connection. A number read without these cannot be compared to another."""
+    import embedding_upgrade
+    import voidloom_device
+    requested = str(voidloom_device.torch_device())
+    held = embedding_upgrade._model_cache.get("model")
+    device = str(getattr(held, "device", None) or requested)
+    tier = lock.get("tier")
+    fell_back = device.split(":")[0] != requested.split(":")[0] or (tier == "gpu" and device.startswith("cpu"))
+    try:
+        native = conn.execute("SELECT vec_version()").fetchone() is not None
+    except sqlite3.Error:
+        native = False
+    return {"tier": tier, "requested_device": requested, "device": device, "fallback": fell_back,
+            "fallback_reason": f"asked for {requested}, ran on {device}" if fell_back else None,
+            "backend": {"name": "sqlite_vec", "native_extension": native},
+            "card": _card() if device.startswith("cuda") else None}
+
+
 def self_test(db: str, *, doctrine: Path = DOCTRINE_DEFAULT, mode: Optional[str] = None,
               top_k: Optional[int] = None) -> Dict[str, Any]:
     """The doctrine set through the shipped recall, N of 25 PER MODE, the real numbers.
@@ -343,6 +384,7 @@ def self_test(db: str, *, doctrine: Path = DOCTRINE_DEFAULT, mode: Optional[str]
                 results.append({"n": q["n"], "pass": rank is not None, "rank": rank,
                                 "expect_anchor": q.get("expect_anchor"), "top_ids": ids})
             by_mode[md] = {"passed": passed, "of": len(ds["queries"]), "results": results}
+        measured = _measured_on(conn, lock)
     finally:
         conn.close()
     total = len(ds["queries"])
@@ -354,4 +396,7 @@ def self_test(db: str, *, doctrine: Path = DOCTRINE_DEFAULT, mode: Optional[str]
             "by_mode": {m: {"passed": v["passed"], "of": v["of"]} for m, v in by_mode.items()},
             "line": f"seed doctrine self-test: {passed} of {total} in top {top_k} ({pmode}, the shipped recall; "
                     f"bar {bar}): {'PASS' if passed >= bar else 'RED'}" + (f" -- also measured: {others}" if others else ""),
-            "results": {m: v["results"] for m, v in by_mode.items()}, "time_ms": int((time.time() - t0) * 1000)}
+            "results": {m: v["results"] for m, v in by_mode.items()}, "time_ms": int((time.time() - t0) * 1000),
+            **measured,
+            "queries_by_mode": {m: [{"id": r["n"], "hit": r["pass"]} for r in v["results"]] for m, v in by_mode.items()},
+            "queries": [{"id": r["n"], "hit": r["pass"]} for r in by_mode.get("vector-only", by_mode[pmode])["results"]]}

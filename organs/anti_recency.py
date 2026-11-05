@@ -1198,6 +1198,8 @@ def main():
     parser.add_argument("--acknowledge-all", action="store_true", help="Acknowledge all pending entries")
     parser.add_argument("--weekly", action="store_true", help="Run full weekly resurfacing job")
     parser.add_argument("--unit-tests", dest="unit_tests", action="store_true", help="Run self-tests")
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help="say what the weekly job would score; write nothing")
     parser.add_argument("--min-score", type=float, default=DEFAULT_MIN_FOUNDATION_SCORE,
                         help=f"Min foundation score for resurfacing (default: {DEFAULT_MIN_FOUNDATION_SCORE})")
     parser.add_argument("--stale-days", type=int, default=DEFAULT_STALE_DAYS,
@@ -1218,6 +1220,11 @@ def main():
     if not Path(db_path).exists():
         print(json.dumps({"status": "error", "message": f"Database not found: {db_path}"}))
         sys.exit(1)
+    if args.dry_run:
+        import dry_plan
+        sys.exit(dry_plan.plan("anti-recency", db_path, "score foundations and log up to "
+                               f"{args.limit} resurfacing candidates",
+                               {"resurfaced_so_far": "SELECT COUNT(*) FROM resurfacing_log"}))
 
     conn = sqlite3.connect(db_path, timeout=60.0)
     conn.execute("PRAGMA foreign_keys=ON")

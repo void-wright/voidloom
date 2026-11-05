@@ -870,7 +870,11 @@ def main() -> int:
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--stale-days", type=int, default=None,
                     help="override EVERY organ's own window (default: each organ's own)")
+    ap.add_argument("--dry-run", dest="dry_run", action="store_true", help="say what a scan would read; write nothing")
     a = ap.parse_args()
+    if a.dry_run:
+        import dry_plan
+        return dry_plan.plan("organ-yield", a.db, "read each organ's output tables and judge its yield")
     rs, meta = scan(a.db, a.stale_days)
 
     # ROUND 2 (l5): with --json, stdout carries the JSON object ONLY (json.load on it works); every human line

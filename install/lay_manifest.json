@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 482,
+    "core": 486,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 437,
+    "all": 441,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 254,
+    "brain": 255,
     "home": 2,
-    "null": 226,
+    "null": 229,
     "skills": 18
    }
   },
-  "derived_at_head": "b5ae0a9",
+  "derived_at_head": "ffc2a5c",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 500,
+  "entries": 504,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 215,
+     "count": 218,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 226
+   "total": 229
   },
   "platforms": [
    "all",
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 30806,
+   "bytes": 33274,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "7e2832877f890509b90a875bbe89aff2b21a3eafdbe6f2e95c721b31111a5e0d",
+   "sha256": "305c6e3d12c2d55855881ccd25108b9d803ddb8f571940984d66dcd99b934db7",
    "src": "CHANGELOG.md"
   },
   {
@@ -227,13 +227,13 @@
    "src": "NOTICE"
   },
   {
-   "bytes": 29346,
+   "bytes": 29769,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "9d4d5b43fb70254e625fb951b596792c43c6f09c7f7accbd80a22347e309d863",
+   "sha256": "1ca8b15223d79f6a8f859542da6cff8bc95b0fd447ac5c4f8d1801f555833f7a",
    "src": "README.md"
   },
   {
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "031e88533c904dab42bcce0864656c37cc04e9c0191cb3db4ee78da92c7c892c",
+   "sha256": "0806d19471438c3a9add2a7643af641416afba3db5c6226047958be541f2cd6a",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -843,7 +843,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "211dfb33c5af17605c0d92e504e921e506abaac7c0e750f2ac66211fdf484c6f",
+   "sha256": "c2c550b03f255cbcc5e32a4ca845d764ac067d781be4508e22095d8f166f2df1",
    "src": "docs/RESTORE_MANIFEST.md"
   },
   {
@@ -907,13 +907,13 @@
    "src": "hooks/voidloom_signoff.py"
   },
   {
-   "bytes": 349985,
+   "bytes": 351864,
    "component": "core",
    "dst": null,
    "exec": true,
    "platform": "posix",
    "root": null,
-   "sha256": "e2388b8972f75b5a5d9ab1b184942ce351813d2b87be9565741a5311a3893847",
+   "sha256": "b774a00dcd45274eafd1c5b9795eede2d532db815acdee5e0867406a70393c8c",
    "src": "install.sh"
   },
   {
@@ -927,13 +927,13 @@
    "src": "install/CLAUDE.md.template"
   },
   {
-   "bytes": 29033,
+   "bytes": 29139,
    "component": "core",
    "dst": "install/accelerator_plan.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "85eda129380b09cd5a65604f8cb94f3b0c6e35205db80e9b341f94df4dff68e1",
+   "sha256": "5aed96c2e335eb035ac10e265c2d193d97eef5dbcfd2d5634ccd7891e6492cf7",
    "src": "install/accelerator_plan.py"
   },
   {
@@ -997,13 +997,13 @@
    "src": "install/golden_vectors.py"
   },
   {
-   "bytes": 63791,
+   "bytes": 63899,
    "component": "core",
    "dst": "install/install.ps1",
    "exec": false,
    "platform": "windows",
    "root": "brain",
-   "sha256": "7114c527a92aeea61a9929f9fec68e318334f48cec60a78ecd5b3a9b0dd0f1c5",
+   "sha256": "62fc4243f06a22ee9e520d5742b5e1d26f4c04774d661094886ee42c70a70e83",
    "src": "install/install.ps1"
   },
   {
@@ -1097,13 +1097,13 @@
    "src": "install/requirements.txt"
   },
   {
-   "bytes": 55666,
+   "bytes": 55808,
    "component": "core",
    "dst": "install/self_check.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "69e6c99e3a7b62b794440470184f636e125dea01f2be76bb43f44530779f4cc3",
+   "sha256": "cef66900e0900511197a2cbebd20fb93d580e872f28d0cc74c3544338dfbae45",
    "src": "install/self_check.py"
   },
   {
@@ -1557,33 +1557,33 @@
    "src": "organs/affect_lighthouse.py"
   },
   {
-   "bytes": 33914,
+   "bytes": 34389,
    "component": "core",
    "dst": "organs/affect_probe_scan.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "b9d164947f29a6b13a1c671ab6e37bb0fe06e7c827d6b96e5c984d2ab653db7a",
+   "sha256": "445156d34066b10cc353f1b4e23112048db66ea6b1e82cd1f2c1110815359b3e",
    "src": "organs/affect_probe_scan.py"
   },
   {
-   "bytes": 52239,
+   "bytes": 52698,
    "component": "core",
    "dst": "organs/anti_recency.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "81014da3760af46cc1b408882abd3d0d6fe2706d2e65ec1300456d6e63214605",
+   "sha256": "fa3f190996c58a3f91df265d15bb2ddeaab9755a8cc415a2a0d9aeb88e575b2f",
    "src": "organs/anti_recency.py"
   },
   {
-   "bytes": 14151,
+   "bytes": 14211,
    "component": "core",
    "dst": "organs/approvals_policy.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a5b2cffccd6877b7130bae4e6da103e772f38f6261bdbad4f67aa0cfee8e2386",
+   "sha256": "0736c3a2e5cfc14a5e4e674aa5bcf01ab8a7afd55a8a1ec3bdcea8350dcdd502",
    "src": "organs/approvals_policy.py"
   },
   {
@@ -1607,13 +1607,13 @@
    "src": "organs/assayer.py"
   },
   {
-   "bytes": 19007,
+   "bytes": 19439,
    "component": "core",
    "dst": "organs/belief_cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "356c2411a17e146e7e458610f1c76a0a17a3dd6620a7fc9b6f94259a818d534f",
+   "sha256": "b9cd462cb7127977cce1587deaf1d4d8bdea96cd873ca15fbf3b65ab65758af2",
    "src": "organs/belief_cli.py"
   },
   {
@@ -1647,23 +1647,23 @@
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 59600,
+   "bytes": 59919,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "4fb693dfc11c30e2f1979d7c5bb5e5b2a5f5ffe6b0cb61bf786e7def877998ab",
+   "sha256": "dbbf36eb5215af4e133a4a471461184cdccd9e32b6df55b01e8f9bcd876eabcd",
    "src": "organs/claude_memory_lite.py"
   },
   {
-   "bytes": 40183,
+   "bytes": 40561,
    "component": "core",
    "dst": "organs/cognitive_map.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "794e44f65a79e4e39359ab44d5dc7a350f4e1dade0de6a177ab458f72c8f70c7",
+   "sha256": "33b52acc76aa6d9fcd9f48f903dfa93e5a5a8a4540389680e15ae47adc10ca26",
    "src": "organs/cognitive_map.py"
   },
   {
@@ -1717,14 +1717,24 @@
    "src": "organs/dream_ledger.py"
   },
   {
-   "bytes": 128715,
+   "bytes": 129378,
    "component": "core",
    "dst": "organs/dream_pipeline.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "fffbb98b6c676551f2f47304084c2f978b1ecc1209efc8f9608811db78679fa8",
+   "sha256": "bc3ec6a7df7e6b7af9eff9f014b36fec1146c83efd484aa3b3bd71fba6038b12",
    "src": "organs/dream_pipeline.py"
+  },
+  {
+   "bytes": 1995,
+   "component": "core",
+   "dst": "organs/dry_plan.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "d6e1274adcc776036e194475bdb369a953885a8434836dffba2c073ce60f0c94",
+   "src": "organs/dry_plan.py"
   },
   {
    "bytes": 20053,
@@ -1747,13 +1757,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 63523,
+   "bytes": 63841,
    "component": "core",
    "dst": "organs/embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "66bb5971864e54d17dd42a5c90007ee0c966dfd32cc53acde42d5fb54f5990af",
+   "sha256": "c0bb2864f0c95a932ff967bfc6ef2cdca63af5e1b79a2e16e8b6ab2474c8ce4f",
    "src": "organs/embedder_lock.py"
   },
   {
@@ -1767,23 +1777,23 @@
    "src": "organs/embedders.lock.json"
   },
   {
-   "bytes": 67657,
+   "bytes": 67559,
    "component": "core",
    "dst": "organs/embedding_upgrade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f840128134765a245e432718e8198fe76911b132d1c1375b017b3ad39d111dbf",
+   "sha256": "127d5ebaa8c8652e2fa5d3e0daefe8f008e0b73091ad77c21984ad339adbd15e",
    "src": "organs/embedding_upgrade.py"
   },
   {
-   "bytes": 107155,
+   "bytes": 107682,
    "component": "core",
    "dst": "organs/gap_mapping.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "9e659adec01af772f8ef0ca60bd9d5a75666334e428262a3ab77123d3a5abcba",
+   "sha256": "b72a0d6bd94c01d879536c3fd5c22b5fa32b9b5394cda463c417a171d6c64a6e",
    "src": "organs/gap_mapping.py"
   },
   {
@@ -1877,33 +1887,33 @@
    "src": "organs/model_garden.py"
   },
   {
-   "bytes": 203955,
+   "bytes": 204378,
    "component": "core",
    "dst": "organs/monthly_self_eval.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ab6970a8dfcd4c5e1895f4e5fa4524dbea132a16db1ee479a4853f521016770f",
+   "sha256": "d6d74ae6eab5781bc4702b76a5492aa61a79ad368ba8ec4a325548e68b6bc9f2",
    "src": "organs/monthly_self_eval.py"
   },
   {
-   "bytes": 26089,
+   "bytes": 26452,
    "component": "core",
    "dst": "organs/organ_run_log.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f2ade08a1c94a1f3e6a8e5564f2b2f1881395f288444e87246725179214005e7",
+   "sha256": "4044594205168d3bc434c4518b6c6b484c541d963bbdebe2f30b42482f74316f",
    "src": "organs/organ_run_log.py"
   },
   {
-   "bytes": 52620,
+   "bytes": 52887,
    "component": "core",
    "dst": "organs/organ_yield_sentinel.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "355540b03d5bad40c748a0999c6b0c24c215bf3c2a994924217399827c603dac",
+   "sha256": "ceb317767bd6d5f414f4a2cc5651d368a945d0125c8535bcc0b841ce36bf73be",
    "src": "organs/organ_yield_sentinel.py"
   },
   {
@@ -1937,13 +1947,13 @@
    "src": "organs/pre_cognitive_recall.py"
   },
   {
-   "bytes": 9601,
+   "bytes": 9977,
    "component": "core",
    "dst": "organs/precognitive_cache_refresh.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e709b0b6e4623afc886bcbe90e88b6b9e74af1d29d6a94dc93e6ad2819a6d489",
+   "sha256": "194e5de402673738852da8686557b7a6064f328e7b95b4ee6dde015823734d5c",
    "src": "organs/precognitive_cache_refresh.py"
   },
   {
@@ -2027,13 +2037,13 @@
    "src": "organs/schema_migrator.py"
   },
   {
-   "bytes": 18932,
+   "bytes": 21280,
    "component": "core",
    "dst": "organs/seed_loader.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "29ce862f822b0373992d9923e60143ee6ac31e9dcb60ff10ac4c4489b403c77c",
+   "sha256": "4c10283eb0dd2765392e03c276f5f2436d27cc35c2b25257044e093f035a8b52",
    "src": "organs/seed_loader.py"
   },
   {
@@ -2107,13 +2117,13 @@
    "src": "organs/thinkers.json"
   },
   {
-   "bytes": 66127,
+   "bytes": 65904,
    "component": "core",
    "dst": "organs/tier_set.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "9cd659a6d41be449e6ebf68ed9c7dac28ce336f2a5785e21e694e3a14f4cca8c",
+   "sha256": "d54ed122d6afda5dedd3f62f4781fedc632c4a613cc0225e3d6338c8f0912cd1",
    "src": "organs/tier_set.py"
   },
   {
@@ -2187,13 +2197,13 @@
    "src": "organs/voidloom_device.py"
   },
   {
-   "bytes": 24469,
+   "bytes": 24582,
    "component": "core",
    "dst": "organs/voidloom_env.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "97f591263ccde5f1d8cef523c489d6c5d7d9fad0340d49971d0c8a8c55aadc77",
+   "sha256": "6fe9129d71ba317cbbe61455d7f5c2964cfa97f1973b45715b8bced779310424",
    "src": "organs/voidloom_env.py"
   },
   {
@@ -2877,23 +2887,23 @@
    "src": "voidloom/_guard.py"
   },
   {
-   "bytes": 6524,
+   "bytes": 6956,
    "component": "core",
    "dst": "voidloom/_paths.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6822733e57600c1a1f6d7df7702cbb830f94b67ffa197e549a37bda6b8b99565",
+   "sha256": "5e32ae0a9515cb3cc065027d1fdb093679fd4eab0f57cc59e5158bf1e69d33b3",
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 174451,
+   "bytes": 175161,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "dced47f62dc7731813847da5382843b05a72df600c6aec398b0500bb21f8e69e",
+   "sha256": "7c6706b03e60ecbe0bda1334693a231187be755731a24578291b051896d485ff",
    "src": "voidloom/cli.py"
   },
   {
@@ -3175,6 +3185,16 @@
    "root": null,
    "sha256": "cda60fd668e17faaeba1c709354d388554b14fe3a2150153abbb597dc1004cb2",
    "src": "voidloom/tests/test_attach_db.py"
+  },
+  {
+   "bytes": 5126,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "2345000760be3a88970ea83efc04aee9ede8eb6fc7b05bc7f42b386f77a1a9ca",
+   "src": "voidloom/tests/test_attached_and_offline_installs.py"
   },
   {
    "bytes": 6842,
@@ -3717,6 +3737,16 @@
    "src": "voidloom/tests/test_env_sidecar_discovery.py"
   },
   {
+   "bytes": 5001,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "e49840549c10e78ef15ad18c1c6024fafb7fc38425db301dc0073d55ea56e3bd",
+   "src": "voidloom/tests/test_every_armed_unit_has_a_dry_run.py"
+  },
+  {
    "bytes": 10458,
    "component": "core",
    "dst": null,
@@ -4115,6 +4145,16 @@
    "root": null,
    "sha256": "7bd5fc023edd020eaca62d2f1be25ae12bfec790486702f9dba6ec245d273b34",
    "src": "voidloom/tests/test_no_test_file_is_gitignored.py"
+  },
+  {
+   "bytes": 2630,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "d327239c96c22cfda9cfde9f30ee6731573e7a2660fa9b02ba6a97effdfa92e6",
+   "src": "voidloom/tests/test_nothing_private_left_open.py"
   },
   {
    "bytes": 7747,

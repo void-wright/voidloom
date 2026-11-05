@@ -440,7 +440,8 @@ def check_seed_loaded(checks: Checks, conn, seeds: list, common_tag: str, of_tot
     checks.add(
         name, tagged >= expected,
         detail=f"{tagged} memories tagged '{common_tag}' (expected >= {expected})",
-        fix=f"Load the seed pack: python3 claude_memory_lite.py load-seed seed_pack.json",
+        fix=f"Load the seed pack: {sys.executable} {Path(__file__).resolve().parent.parent / 'organs' / 'claude_memory_lite.py'} "
+            f"load-seed --file {Path(__file__).resolve().parent.parent / 'seed' / 'seed_pack.json'}",
         means="starter memories this brain should hold are missing: the brain works, but knows less than it should",
     )
     return tagged

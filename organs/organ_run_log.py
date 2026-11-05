@@ -520,7 +520,12 @@ def _main(argv: List[str]) -> int:
     ap.add_argument("--db", default=None)
     ap.add_argument("--unit-dir", default=DEFAULT_UNIT_DIR)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--dry-run", dest="dry_run", action="store_true", help="say what observe would read; write nothing")
     a = ap.parse_args(argv)
+    if a.dry_run:
+        import dry_plan
+        return dry_plan.plan("organ-run-log", a.db, f"read the state of the units in {a.unit_dir} into the ledger",
+                             {"ledger_rows": "SELECT COUNT(*) FROM organ_run_log"})
     if a.verb == "declared":
         us = discover_declared_units(a.unit_dir)
         print(json.dumps([u.__dict__ for u in us], indent=2, default=str) if a.json

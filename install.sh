@@ -1287,6 +1287,7 @@ print("yes" if own == 0 and held == 0 else "no")
 PYEOF
 }
 BRAIN_IS_NEW="$(hd_brain_is_new)"
+T1_MODELS_ABSENT=0
 EMBED_MODEL="$(resolve_embed_model)"
 case "$EMBED_MODEL" in BRAIN_TIER_CONFLICT:*)
     _have="${EMBED_MODEL#BRAIN_TIER_CONFLICT:}"; _want="${_have#*:}"; _have="${_have%%:*}"
@@ -3287,9 +3288,12 @@ resolve_brain_source() {
 # upgrade (R1, amendment C7). The body is the one --attach-db has used since round 1.
 write_verified_preimage() {   # write_verified_preimage SRC DST
     "$PY_SYS" - "$1" "$2" <<'PYEOF'
-import os, sqlite3, sys, urllib.request   # escaped URIs (iteration 4, LOW 2)
+import os, sqlite3, stat, sys, urllib.request   # escaped URIs (iteration 4, LOW 2)
 src, dst = sys.argv[1], sys.argv[2]
 s = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(src)), uri=True, isolation_level=None)
+# a copy of a private brain is as private as the brain: the file exists, owner-only, before a byte goes into it
+os.close(os.open(dst, os.O_CREAT | os.O_WRONLY, 0o600))
+os.chmod(dst, stat.S_IMODE(os.stat(src).st_mode) & 0o600 or 0o600)
 d = sqlite3.connect(dst)
 try:
     # ONE read snapshot for the count AND the copy (iteration 3, item 9): the count used to come from a NEW
@@ -3340,6 +3344,12 @@ else
             note_step "preimage"
         else
             die "could not write a VERIFIED pre-image beside ${DB_PATH} (wanted ${ATTACH_PREIMAGE}). Refusing to migrate an attached brain without one."
+        fi
+        # The engine finds its brain beside its own organs: a link there is what makes every organ and every job act on
+        # the attached file. The lock is read through it, so it lands beside the attached file.
+        if [ "$(readlink -f "${BRAIN_DIR}/claude_memory.db" 2>/dev/null)" != "$(readlink -f "$DB_PATH")" ]; then
+            [ -e "${BRAIN_DIR}/claude_memory.db" ] && die "${BRAIN_DIR}/claude_memory.db already exists and is not the attached brain ${DB_PATH}. Move it aside, then re-run."
+            ln -sf "$DB_PATH" "${BRAIN_DIR}/claude_memory.db" || die "could not link ${BRAIN_DIR}/claude_memory.db to the attached brain."
         fi
     elif [ -f "$DB_PATH" ] && [ ! -s "$DB_PATH" ]; then
         die "the brain DB at ${DB_PATH} is 0 bytes -- an earlier init failed and left it behind. It is not a brain, and this script will not overwrite a file it did not create. Remove it and re-run: rm '${DB_PATH}'"
@@ -3765,7 +3775,7 @@ tier1_upgrade_hint() {
   Tier 0 is ACTIVE — your brain answers keyword recall now.
   The optional SEMANTIC upgrade (Tier 1, ${EMBED_MODEL}-${EMBED_DIM}) was not completed:
     reason: ${1:-unknown}
-  To add semantic recall later, install Python >= 3.10, then re-run:
+  To add semantic recall later, $(case "${1:-}" in *MODELS_ABSENT*) echo "with the network up, re-run:" ;; *) echo "install Python >= 3.10, then re-run:" ;; esac)
     bash $(basename "${BASH_SOURCE[0]}")
   or build the venv by hand:
     ${PY_SYS} -m venv '${VENV_DIR}'
@@ -4295,13 +4305,14 @@ GATE
             # lock names. init is idempotent: on a locked brain it never re-points the
             # lock, and a tier the shipped catalogue does not carry (jina, a personal
             # install) gets no lock -- the pre-cache then keeps its by-name path.
-            if [ ! -f "${BRAIN_DIR}/embedder.lock.json" ]; then
+            LOCK_DIR="$(dirname "$(readlink -f "$DB_PATH" 2>/dev/null || printf '%s' "$DB_PATH")")"
+            if [ ! -f "${LOCK_DIR}/embedder.lock.json" ]; then
                 say "  no install lock beside the brain; running init under the venv to write it..."
                 _init_log="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/tmp.voidloom_init.$$")"
                 if WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$VENV_PY" "${BRAIN_DIR}/organs/claude_memory.py" init >"$_init_log" 2>&1; then
                     rm -f "$_init_log"
-                    if [ -f "${BRAIN_DIR}/embedder.lock.json" ]; then
-                        say "  install lock written: ${BRAIN_DIR}/embedder.lock.json"
+                    if [ -f "${LOCK_DIR}/embedder.lock.json" ]; then
+                        say "  install lock written: ${LOCK_DIR}/embedder.lock.json"
                     else
                         say "  no install lock for the ${EMBED_MODEL} tier (the shipped catalogue does not carry it); the pre-cache fetches it by name."
                     fi
@@ -4336,7 +4347,8 @@ GATE
             WIZARD_LIBRARY_DB="$DB_PATH" BRAIN_DIR="$BRAIN_DIR" \
             RERANKER_REPO="$_pc_rr" RERANKER_FALLBACK_REPO="$RERANKER_FALLBACK_REPO" \
             PRECACHE_FALLBACK="$_pc_fb" \
-            "$VENV_PY" - <<'PYEOF' || warn "model pre-cache hit a snag; recall will lazy-download on first use."
+            T1_MODELS_ABSENT=0
+            "$VENV_PY" - <<'PYEOF' || { T1_MODELS_ABSENT=1; warn "MODELS_ABSENT: the models could not be fetched. Nothing is wrong with this machine. Retry with the network: bash install.sh"; }
 import os
 
 
@@ -4376,12 +4388,13 @@ try:
     # remote-code repository at lock.code.revision -- checksum both against
     # lock.weights_hash, and instantiate nothing. A brain with no lock (a tier the
     # catalogue does not ship) keeps the by-name load.
+    import embedding_upgrade
     try:
-        _lock = embedder_lock.resolve(os.environ["WIZARD_LIBRARY_DB"])
+        _lock = embedding_upgrade.brain_lock(os.environ["WIZARD_LIBRARY_DB"], tier=os.environ.get("WIZARD_EMBED_MODEL", ""))
     except embedder_lock.EmbedderLockError as _e:
-        if _e.code != "LOCK_MISSING":
+        if _e.code != "LOCK_NOT_SHIPPED":
             raise
-        _lock = None
+        _lock = None            # a tier the catalogue does not ship: it has no pin, so it loads by name below
     if _lock is not None:
         if _lock["model_id"] != os.environ["EMBED_REPO"]:
             raise RuntimeError("the install lock names %s but this run selected %s; the lock is the promise"
@@ -4530,12 +4543,15 @@ EOF_DECL
             # reason, the result, the opt-out), the record says proof_label=FAILED-ON-THIS-MACHINE, and the CPU is proven
             # in its place. A CUDA or CPU failure is a Tier-1 failure, said: those are the PROVEN rows.
             T1_DEVICE_OK=1
-            if [ "$T1_DECL_OK" -eq 1 ]; then
+            # Absent models say nothing about this device: proving it now would record a network blip as a hardware fault.
+            if [ "$T1_DECL_OK" -eq 1 ] && [ "$T1_MODELS_ABSENT" -eq 0 ]; then
                 if t1_device_proof; then :; else T1_DEVICE_OK=0; fi
             fi
 
             T1_EMBED_REFUSED=0
-            if [ "$BRAIN_IS_NEW" != "yes" ]; then
+            if [ "$T1_MODELS_ABSENT" -eq 1 ]; then
+                :                   # nothing to embed with; the verdict below says why, and what to run
+            elif [ "$BRAIN_IS_NEW" != "yes" ]; then
                 # An existing brain is never embedded unasked: at 30,000 memories that is hours inside an installer, and
                 # its legacy vectors are searched as they are. It is told what is outstanding and how to do it.
                 say "  this brain already existed, so nothing is embedded here. What is outstanding:"
@@ -4581,7 +4597,10 @@ EOF_DECL
             # through the `voidloom` facade -- what the user will run -- which reports the TIER it
             # answered at; the raw engine never says, so a Tier-0 answer (tier0_only, a failed
             # Tier-1 import) passed this gate as long as it returned rows.
-            if [ "$T1_DECL_OK" -ne 1 ]; then
+            if [ "$T1_MODELS_ABSENT" -eq 1 ]; then
+                tier1_restore_t0
+                tier1_upgrade_hint "the models could not be fetched (MODELS_ABSENT)"
+            elif [ "$T1_DECL_OK" -ne 1 ]; then
                 tier1_restore_t0
                 tier1_upgrade_hint "the brain's embedding tier could not be declared (see the warning above)"
             elif [ "$T1_DEVICE_OK" -ne 1 ]; then

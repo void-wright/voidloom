@@ -76,14 +76,14 @@ CDN. Bytes that do not match refuse, typed. A restored brain with no snapshot sa
 `SNAPSHOT_ABSENT` and the recall carries on without that reranker: restore the cache
 to get it back.
 
-## 3. SQL — zero opened, 27 shipped, one missing
+## 3. SQL — zero opened, 38 shipped, one missing
 
 No `.sql` file is opened during a recall: the migration `Path()` constants are
 built at import (constructing a path is not opening it) and read only on
 `init`, `migrate`, or self-heal. Warden's migration SQL is *embedded in the
 Python*, not on disk.
 
-**But the tree ships 27 `migration_*.sql` and the code names 21, and one of
+**But the tree ships 38 `migration_*.sql` and the code names 21, and one of
 those is absent:**
 
 ```
@@ -151,7 +151,7 @@ Three smaller ones:
 
 1. The 34 modules above, in one flat directory.
 2. `claude_memory.db` — the brain itself.
-3. `schema.sql` + the 27 `migration_*.sql` (accepting that 028 is missing).
+3. `schema.sql` + the 38 `migration_*.sql` (accepting that 028 is missing).
 4. `~/.cache/huggingface/hub/` **and** `.../modules/transformers_modules/`.
 5. The env-dir sidecars — above all the one declaring the GPU device — and the
    thinker's `thinker/` folder, with `THINKER_RECORD` and `embedder.lock.json` beside

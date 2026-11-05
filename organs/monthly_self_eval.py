@@ -4288,6 +4288,8 @@ if __name__ == "__main__":
                         help="Skip LLM proposal generation, use heuristics only")
     parser.add_argument("--unit-tests", action="store_true",
                         help="Run unit tests")
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help="say what a run would evaluate; write nothing, ask no thinker")
 
     args = parser.parse_args()
 
@@ -4301,6 +4303,10 @@ if __name__ == "__main__":
         sys.exit(0 if results['failed'] == 0 else 1)
 
     db_path = args.db_path or str(Path(__file__).parent.parent / "claude_memory.db")
+    if args.dry_run:
+        import dry_plan
+        sys.exit(dry_plan.plan("self-eval", db_path, f"evaluate {args.month or 'the previous month'} and write one report",
+                               {"reports": "SELECT COUNT(*) FROM self_eval_reports"}))
     config = None
     if args.config:
         config = json.loads(Path(args.config).read_text())

@@ -787,9 +787,10 @@ if ($DryRun) {
     # it made the directory. A foreign marker refuses before the write.
     $envDir = Split-Path -Parent $EnvFile
     $envOrgan = Join-Path $PkgRoot "organs\voidloom_env.py"
-    if ((& $PySys -B $envOrgan --owner-state $envDir) -eq "foreign") { throw "ENV_DIR_FOREIGN: $envDir carries .voidloom-owner naming another install, and this run lays $BrainDir. Set WIZARD_ENV_FILE to your own directory, or run that install's uninstall first." }
-    & $PySys -B $envOrgan --claim $envDir $BrainDir | Out-Null
+    if ((Invoke-PyOut $PySys @("-B", $envOrgan, "--owner-state", $envDir)) -eq "foreign") { throw "ENV_DIR_FOREIGN: $envDir carries .voidloom-owner naming another install, and this run lays $BrainDir. Set WIZARD_ENV_FILE to your own directory, or run that install's uninstall first." }
+    Invoke-PyOut $PySys @("-B", $envOrgan, "--claim", $envDir, $BrainDir) | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "could not create the sidecar directory $envDir" }
+    New-Item -ItemType Directory -Force -Path $envDir | Out-Null
     if ($EnvFile -eq $LegacyEnvFile) { Warn "your env file is in the older directory $envDir, which the organs no longer scan for: set WIZARD_ENV_FILE to $EnvFile in your user environment." }
     $embed = if ($Tier1Ok) { $EmbedTier } else { "none" }
     $envHow = Write-VoidloomEnvFile -Path $EnvFile -Py $PySys -Reader (Join-Path $PkgRoot "install\env_file.py") -Comments @(

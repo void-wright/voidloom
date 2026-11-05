@@ -93,7 +93,7 @@ def _connect(readonly: bool = False) -> sqlite3.Connection:
         sys.stderr.write(
             f"ERROR: brain DB not found at {DB_PATH}\n"
             "  Set WIZARD_LIBRARY_DB or run the installer to create it, "
-            "or create it with the full CLI: python3 claude_memory.py init\n"
+            f"or create it with the full CLI: {_organ_command('claude_memory.py', 'init')}\n"
         )
         sys.exit(2)
     uri = f"file:{DB_PATH}?mode={'ro' if readonly else 'rw'}"
@@ -609,6 +609,17 @@ def seed_plan(conn: sqlite3.Connection, mems: list, common_tag: str) -> dict:
     return {"actions": actions, "invalid": invalid, "counts": counts}
 
 
+def _organ_command(rel: str, *args: str) -> str:
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        import embedder_lock
+        return embedder_lock.organ_command(rel, *args)
+    except ImportError:
+        return "bash install.sh"
+
+
 def _embed_resolver():
     """organs/embed_resolver.py (stdlib-only; it imports only embedder_lock): the one lock-first answer to
     "which vector table". Imported lazily from beside this file; None when it is not laid there."""
@@ -1010,7 +1021,7 @@ def cmd_prime(_args: argparse.Namespace) -> int:
         lines.append(f"  #{mid}: {s}")
     lines.append("")
     lines.append("If the full (Tier 1) CLI + venv are installed, prefer "
-                 "`python3 claude_memory.py recall ...` for SEMANTIC recall (match by meaning).")
+                 "`voidloom recall --query ...` for SEMANTIC recall (match by meaning).")
     print("\n".join(lines))
     return 0
 

@@ -541,6 +541,9 @@ def _coverage_refusal(out: Dict[str, Any]) -> Optional[str]:
     code = cov.get("error")
     if out.get("tier0_only") and (out.get("lockless") or not cov.get("vectors")):
         return None
+    # Run under an interpreter without vec0, on a brain with nothing stamped yet: Tier 0, as the installer said.
+    if code == "PROVENANCE_UNREADABLE" and "no such module: vec0" in str(cov.get("message")) and not out.get("has_stamps"):
+        return None
     if out.get("lockless"):
         if code == "NO_ROWS_FOR_MODEL":
             return None if not (cov.get("stamped_foreign") or cov.get("stamped_without_vector")) else code
@@ -711,6 +714,10 @@ def _tier_coherence(db_path: Optional[str]) -> Dict[str, Any]:
                         f"`voidloom tier set` stopped after the lock moved, or a lock was written over another "
                         f"tier's brain; `voidloom tier set` names the tier to finish on")
             cov = out["coverage"]
+            try:
+                out["has_stamps"] = conn.execute(f"SELECT 1 FROM {memory_write.PROVENANCE_TABLE} LIMIT 1").fetchone() is not None
+            except sqlite3.Error:
+                out["has_stamps"] = False
             if out["lockless"] and not table:
                 out["stranded_vectors"] = _stranded_vectors(conn, sorted(_er._DIM_FOR))
             refused_by_reader = _coverage_refusal(out)
@@ -1157,12 +1164,21 @@ def _db_uninitialized_error(db: Optional[str], *, verb: str, exc: Optional[BaseE
     return error(
         "db_uninitialized",
         (f"brain at {db_path!r} has no schema (the file exists but its tables "
-         "are missing). Initialise it with `python3 claude_memory.py init`, or "
+         f"are missing). Initialise it with `{_init_command()}`, or "
          "point CLAUDE_MEMORY_DB / WIZARD_LIBRARY_DB at an already-initialised "
          "brain."),
         data={"db_path": db_path, "remedy": "claude_memory.py init"},
         verb=verb,
     )
+
+
+def _init_command() -> str:
+    try:
+        _organs_importable()
+        import embedder_lock  # type: ignore
+        return embedder_lock.organ_command("claude_memory.py", "init")
+    except ImportError:
+        return "bash install.sh"
 
 
 def _holds_memories(db_path: Optional[str]) -> bool:

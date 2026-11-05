@@ -412,16 +412,15 @@ licences are listed in [`NOTICE`](./NOTICE).
 | What | When | Where it goes |
 |---|---|---|
 | Installing the semantic tier | install | PyPI; for Linux CPU-only, AMD and Intel GPU machines, also PyTorch's own index (`download.pytorch.org`) |
-| Embedding and reranking models | install (downloaded once, at the pinned revisions), or `voidloom tier set` | Hugging Face Hub |
+| Embedding and reranking models | install (downloaded once, at the pinned revisions), `voidloom tier set`, or `re-embed` | Hugging Face Hub |
 | A model vendor's installer | only if you say yes when the thinker's program is missing | that vendor's official install script, shown to you first |
 | Proving the thinker credential | install, or `voidloom thinker set` / `login` | your chosen model's service |
 | Scheduled jobs that think | only once armed, and only with a thinker chosen | your chosen model's service (nothing, for **e** or a model on your own machine) |
 
 Storing, recalling, the CLI and the session hook make no network calls of
-their own, and there is no telemetry. One caveat: when a cached model loads,
-the Hugging Face libraries can still contact the Hub from some code paths. Once
-your models are downloaded, set `HF_HUB_OFFLINE=1` (in your shell, or as a line
-in `~/.voidloom/wizard-library-env` for the scheduled jobs) to rule that out.
+their own, and there is no telemetry. A store or a recall on a machine missing
+its model does not download it: a recall answers by keyword and a store refuses,
+and both name the command that fetches it.
 
 ---
 
@@ -479,6 +478,9 @@ bash install.sh --dry-run     # see what it will do
 bash install.sh               # keeps your brain; applies any new schema changes, which only ever add
 python3 ~/.claude/memory/install/self_check.py
 ```
+
+An upgrade embeds nothing. It prints how many memories have no vector and how many
+are legacy, with the command for each, and leaves the choosing to you.
 
 Answers you gave before (the overnight thinker, approvals, your GPU choice) are
 recorded and reused; the thinker is proven again rather than asked again. What
@@ -556,10 +558,13 @@ tier runs through an interpreter outside the brain (no venv); see
   new model while the old one keeps answering, and switches only when all of them are
   done. Add `--plan` to count the work first. The old vectors are kept:
   `voidloom tier rollback` goes back, and `voidloom tier cleanup --confirm <old table>`
-  deletes them once you are sure.
-  `WIZARD_EMBED_MODEL` chooses the model at install only. After that it may only agree
-  with `embedder.lock.json`: set to another model, it stops the brain with
-  `WEIGHTS_MISMATCH`, so unset it and use `tier set`.
+  deletes them, their bytes included, once you are sure. On a large brain it prints its
+  progress; if it stops on a stalled batch, re-run with `--batch-size 2`: finished rows are kept.
+  `WIZARD_EMBED_MODEL` chooses the model of a new brain only. After that it may only agree
+  with the brain: `tier set` moves the line in the env file's managed block with the lock.
+  Set elsewhere to another model it stops the brain with `WEIGHTS_MISMATCH`, so unset it
+  and use `tier set`. `--force-cpu` never changes an existing brain's model either: on a
+  brain under another model the installer refuses and names `tier set`.
 
 ### Writing your own lines in the env file
 

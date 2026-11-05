@@ -2257,8 +2257,15 @@ def main():
                              "with --apply, archive and tag them (never deleted)")
     parser.add_argument('--apply', action='store_true',
                         help="With --sweep-non-answers: archive + tag instead of listing")
+    parser.add_argument('--dry-run', dest='dry_run', action='store_true',
+                        help="say what --run or --research would work over; write nothing, ask no thinker")
 
     args = parser.parse_args()
+    if args.dry_run:
+        import dry_plan
+        sys.exit(dry_plan.plan("gap-research" if args.research else "gap-mapping", args.db_path,
+                               f"research up to {args.max_gaps} open gaps" if args.research else "take the gap inventory",
+                               {"gaps": "SELECT COUNT(*) FROM gap_inventory"}))
 
     if args.unit_tests:
         success = unit_tests()

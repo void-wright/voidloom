@@ -19,6 +19,23 @@ All notable changes to Voidloom are recorded here. The format follows
   working: they are read against the catalogue entry for the tier they already use, and their
   older stamps read `unresolved` until re-embedded. A tier the catalogue does not ship (jina)
   gets no lock and works as before.
+- **`tier set` owns the whole switch.** The `WIZARD_EMBED_MODEL` line in the env file's managed block
+  moves with the lock, and `tier rollback` puts it back, so a scheduled job keeps working after a
+  switch. A shell that loaded the old line is told to reload. A line you wrote outside the block
+  refuses `LOCK_ENV_PINNED` and names its line number. `doctor` is not healthy while the env and the
+  lock disagree.
+- **Nothing else re-points a brain.** `--force-cpu`, a shell `WIZARD_EMBED_MODEL` or `init --tier` on
+  a brain that holds vectors under another model refuses, lock or no lock, and names `tier set`.
+- **An upgrade embeds nothing unasked.** A plain `bash install.sh` on a brain you have written to
+  prints how many memories have no vector, how many are legacy, and the command for each. Only a new
+  brain has its seed embedded at install. `embed_backfill.py --only-missing` embeds what has no vector
+  and leaves a legacy vector alone.
+- **`tier set` batches by length.** Each call to the encoder holds similar lengths up to a padded
+  character budget, a text past 16,000 characters is embedded from its head on an accelerator, progress
+  prints every 500 rows, and a batch that stalls stops typed and names `--batch-size`.
+- **Every repair command runs where it is printed:** absolute paths under the install's own interpreter.
+- **`doctor` exits 4 on an unhealthy brain.** `status` stays 0.
+- **`--dry-run` on every armed unit:** it reads what the unit would work over, prints it and writes nothing.
 - **`voidloom tier set <nomic|qwen>`** moves a brain to another embedding model by re-embedding
   every memory under it while the old model keeps serving recall. It switches only when every
   memory has a vector under the new model, replacing the lock in one step and writing a
@@ -119,7 +136,9 @@ All notable changes to Voidloom are recorded here. The format follows
   inserted vectors with no provenance stamp, and it imported the engine from the wrong
   directory. It now uses `organs/embed_backfill.py`, the same writer `install.sh` uses.
 - Measuring coverage took 13 to 14 seconds on a brain with 28,063 vectors, because each count
-  looked up the vector table once per row. The same counts now take about 0.1 seconds.
+  looked up the vector table once per row. On a 31,904-memory brain the same counts now take 0.12
+  seconds with no lock; with a lock, 0.29 seconds for `doctor` and `status`, and 0.18 seconds on the
+  recall path, which leaves out the hash of every memory's text.
 - Six more queries looked up the vector table once per memory: the backfill count and its row
   query, `seed-shape`, `tier set`'s pending set and switch coverage, and `tier rollback`'s gap.
   On a 31,904-memory brain they took 4.2 to 12.8 seconds; they now read the same values in
@@ -169,25 +188,32 @@ All notable changes to Voidloom are recorded here. The format follows
   the three rows others hang from (a monthly report, an enacted proposal, a whisper digest) stay with
   the reference cleared. Copies of the text are replaced by `[removed]` wherever a run of 47 characters
   or more, or the whole text from 12 characters up, is found, in any table and in the memories written
-  from this one. The keyword index is merged and freed pages are zeroed, so the words leave the file.
-  The receipt prints counts per table and no content. **What it does not reach:** a separate memory
-  that says the same thing is counted in `other_memories_sharing_text` and left alone; words a model
-  reworded are not a copy it can see; a consolidated memory's vector still averages the deleted one
-  until its next rebuild; the deleted memory's own vector stops being searchable, but sqlite-vec 0.1.6
-  leaves its bytes in the table's storage; and backups are yours to handle. Without the variable nothing changes: a
-  soft archive. `seed delete-one` follows the same rule under the variable, and without it still
-  refuses `HARD_DELETE_REFERENCED`.
+  from this one. The keyword index is merged, the memory's vectors are overwritten with zeros before
+  they are removed, and the file is rebuilt (`VACUUM`), so an older copy an earlier edit left in a
+  page's free space goes too, then the write-ahead log is emptied. The receipt prints counts per table
+  and no content, and says `compacted` and `wal_emptied`: another process on the brain can block
+  either, and it says why. **What it does not reach:** a separate memory that says the same thing is
+  counted in `other_memories_sharing_text` and left alone; words a model reworded are not a copy it can
+  see; a consolidated memory's vector still averages the deleted one until its next rebuild; a vector
+  replaced before this version may have left its old bytes in the table's storage; and copies are yours
+  to handle: the receipt names any beside the brain in `other_copies_not_reached`. A hard delete under
+  an interpreter that cannot reach the vector refuses `HARD_DELETE_VECTOR_UNREACHABLE` before any row
+  goes. Without the variable nothing changes: a soft archive. `claude_memory_lite.py seed-delete-one`
+  follows the same rule under the variable, and without it still refuses `HARD_DELETE_REFERENCED`. A
+  deleted seed memory stays deleted: the next load of the pack leaves it out.
 - **A deleted lock no longer reads healthy.** Every lock write leaves a receipt beside it, so a
   missing lock with such a receipt means the brain was locked: `doctor`, `status` and the reader report
   `LOCK_MISSING`, name the tier and the command that writes the lock again, and nothing searches the
   whole table in its place. No receipt and no lock stays a legal older brain, as does a brain a
   `tier rollback` took back to having none. A lock that exists and cannot be read refuses
   `LOCK_MALFORMED` instead of reading as absent.
-- **A read never reaches the network.** A recall on a machine without the model's files used to
-  download them at the pin. Query encoding now runs with the hub closed, so it refuses `SNAPSHOT_ABSENT`
-  with the command that fetches them, and the front door answers by keyword and says why. Recall no
-  longer fetches a reranker either, and a recall with none says so in `coverage.reranker`. `install`,
-  `tier set`, `re-embed` and a store still fetch.
+- **Only an install, `tier set` and `re-embed` reach the network for a model.** A recall or a store
+  on a machine without the model's files used to download them at the pin. Encoding now runs with the
+  hub closed: a recall refuses `SNAPSHOT_ABSENT` with the command that fetches them, and the front door
+  answers by keyword and says why; a store on a locked brain refuses the same way, and stores nothing
+  it could not find again. An interrupted download counts as absent, not as a changed file, and the
+  same fetch completes it; `doctor` reads it as a fault. Recall no longer fetches a reranker either,
+  and a recall with none says so in `coverage.reranker`.
 - **A recall's side channels read only the search set.** A dream or playbook row whose vector carries
   another model's checksum no longer reaches a channel by similarity.
 - **`voidloom doctor` judges the brain by what the search reads.** Coverage is matched/total by stamp,
@@ -203,7 +229,7 @@ All notable changes to Voidloom are recorded here. The format follows
   cause. The Tier-1 check counts the vectors a search will actually use.
 - **Nightly dedup compares only vectors in the search set.** A refusal skips dedup and is reported in
   `dedup_refused`; the rest of `maintain` still runs.
-- **Keyword recall at Tier 0 carries coverage,** and `recall --bm25-only` needs no embedding model.
+- **Keyword recall at Tier 0 carries coverage,** and `claude_memory.py recall --bm25-only` needs no embedding model.
 - **`update` reports `re_embedded` from the stamp it wrote.**
 - **`stats` reports matched of total, verified and legacy, and the derived layer.** On a brain with no
   lock it now counts active rows only, so its figure can drop by your archived rows.

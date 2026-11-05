@@ -122,7 +122,7 @@ PROGRESS_EVERY = 500
 BATCH_STALL_SECONDS = 600
 DERIVED_LAYER_NOTE = ("not recomputed here: similarity links, communities and summaries were derived in the "
                       "previous model's space; the sleep loop recomputes them on its own schedule")
-USAGE = "voidloom tier set <nomic|qwen> [--plan] [--batch-size N] [--char-budget N]  (or: python3 organs/tier_set.py --db <brain>/claude_memory.db set <nomic|qwen>)"
+USAGE = "voidloom tier set <nomic|qwen> [--plan] [--batch-size N] [--char-budget N]"
 
 
 # This run's limits, set once from the command line.
@@ -385,10 +385,7 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 def _receipt(data_dir: Path, receipt: Dict[str, Any]) -> None:
-    with open(data_dir / embedder_lock.LOCK_HISTORY_NAME, "a", encoding="utf-8") as h:
-        h.write(json.dumps(receipt, sort_keys=True) + "\n")
-        h.flush()
-        os.fsync(h.fileno())
+    embedder_lock.append_receipt(data_dir, receipt)
 
 
 def _ensure_sidecar(conn: sqlite3.Connection) -> None:

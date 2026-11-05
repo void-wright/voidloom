@@ -990,11 +990,17 @@ def main():
                         help="Output HTML path (default: ./cognitive_map.html)")
     parser.add_argument("--trigger", choices=["manual", "cron", "cmd_map"], default="manual",
                         help="Trigger source recorded in map_generation_log (default: manual)")
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help="say what the map would cover; write nothing")
     args = parser.parse_args()
 
     if not Path(args.db_path).exists():
         print(f"Error: Database not found at {args.db_path}", file=sys.stderr)
         sys.exit(1)
+    if args.dry_run:
+        import dry_plan
+        sys.exit(dry_plan.plan("cognitive-map", args.db_path, f"render the map to {args.output_path}",
+                               {"links": "SELECT COUNT(*) FROM memory_links"}))
 
     print(f"Generating cognitive map from: {args.db_path} (trigger={args.trigger})")
     result = generate_map(args.db_path, args.output_path, trigger=args.trigger)
