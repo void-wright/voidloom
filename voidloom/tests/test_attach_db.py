@@ -149,8 +149,8 @@ class TestAttachDb(unittest.TestCase):
         self.assertTrue(env_file.is_file())
         self.assertIn("WIZARD_LIBRARY_DB='%s'" % self.brain, env_file.read_text(encoding="utf-8"))
         # 2. no copy of the brain under the brain directory
-        self.assertFalse((self.home / ".claude" / "memory" / "claude_memory.db").exists(),
-                         "the attach COPIED the brain into the brain directory")
+        here = self.home / ".claude" / "memory" / "claude_memory.db"
+        self.assertTrue(here.is_symlink() or not here.exists(), "the attach COPIED the brain into the brain directory")
         # 3. the pre-image sits beside the brain, opens, and holds the pre-migration state
         pre = sorted(self.brain_dir.glob("claude_memory.db.pre-attach-*.db"))
         self.assertEqual(len(pre), 1, "expected exactly one pre-image beside the brain: %s"

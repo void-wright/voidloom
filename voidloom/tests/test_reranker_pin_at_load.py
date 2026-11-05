@@ -143,8 +143,9 @@ class LoadTimeVerification(_FakeHub):
     def test_saboteur_a_missing_listed_file_refuses_typed_and_nothing_loads(self):
         hub, organs, fakes, _e = self._world(partial=True)
         out = self._load(hub, organs, fakes)
-        self.assertTrue(out["reason"].startswith("WEIGHTS_MISMATCH"), out)
-        self.assertEqual(self._calls(), [])
+        self.assertTrue(out["reason"].startswith("SNAPSHOT_ABSENT"), out)
+        self.assertFalse(out["loaded"], out)
+        self.assertEqual([c for c in self._calls() if c["api"] == "to"], [], "bytes nobody hashed never reach a device")
 
     def test_saboteur_a_cold_host_says_snapshot_absent_online_and_offline(self):
         for offline in (False, True):

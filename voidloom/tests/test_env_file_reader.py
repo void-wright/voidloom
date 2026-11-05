@@ -1590,6 +1590,8 @@ class TestTheWindowsWriterIsTheReadersToo(unittest.TestCase):
                # F.3 names the installer's tier by $EmbedTier (iteration 4 of the tier1-upgrade loop): the ONE line
                # that chooses it, taken from install.ps1 itself, never re-typed here
                *[l for l in lines if l.startswith("$EmbedTier =")],
+               # F.3 calls the launcher-safe wrapper: `py -3` is two words, so it is never run as one program
+               *lines[lines.index("function Invoke-PyOut {"):lines.index("function Invoke-PyOut {") + 4],
                func, "$F3 = {", f3, "}"]
         for c, brain in cases.items():
             drv += ["$BrainDir = " + q(brain), "$DbPath = Join-Path $BrainDir 'claude_memory.db'",

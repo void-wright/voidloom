@@ -32,7 +32,7 @@ Everything else is in a directory named for what it does.
 > **Does the module import its siblings, or is it imported by them?**
 > Yes → `organs/`. No → the directory named for its job.
 
-`organs/` is a single flat namespace **on purpose**. The 75 tracked modules there
+`organs/` is a single flat namespace **on purpose**. The 76 tracked modules there
 import each other by bare name (`import hybrid_retrieval`), and ~25 of them
 self-heal that with `sys.path.insert(0, Path(__file__).parent)`. Splitting them
 into `core/` + `organs/` would break every cross-directory import — and the
@@ -49,7 +49,7 @@ the directory around it is the tidying.**
 ├── install.sh             ← the installer (POSIX). Windows: install/install.ps1
 ├── voidloom_manifest.json ← per-machine hardware/model manifest (installer-written)
 │
-├── organs/                ← ★ THE ORGANISM — 75 modules, one flat namespace
+├── organs/                ← ★ THE ORGANISM — 76 modules, one flat namespace
 │   ├── claude_memory.py        ★ THE ENGINE. store / recall / stats / init
 │   ├── claude_memory_lite.py   ★ Tier-0 engine: keyword-only, stdlib, no model
 │   ├── wizard_paths.py         ★ the tree-root vs module-dir resolver

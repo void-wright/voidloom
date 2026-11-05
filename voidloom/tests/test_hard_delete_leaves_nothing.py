@@ -122,7 +122,7 @@ class HardDelete(unittest.TestCase):
             self.mw.purge_memory(c, 3)
         c.rollback()
         self.assertEqual(cm.exception.code, "HARD_DELETE_VECTOR_UNREACHABLE")
-        self.assertIn("venv/bin/python3", cm.exception.message)
+        self.assertIn(self.el.brain_python(), cm.exception.message)
         self.assertEqual(c.execute("SELECT COUNT(*) FROM memories WHERE id = 3").fetchone()[0], 1)
         c.close()
 

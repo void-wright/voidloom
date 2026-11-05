@@ -140,7 +140,8 @@ class AHalfDownloadedModel(_Room):
     def test_a_fetch_completes_it_rather_than_taking_the_directory_as_present(self):
         calls = []
         import huggingface_hub
-        with mock.patch.dict(os.environ, {"HF_HUB_CACHE": str(self.d / "hub")}), \
+        online = {k: v for k, v in os.environ.items() if k not in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")}
+        with mock.patch.dict(os.environ, {**online, "HF_HUB_CACHE": str(self.d / "hub")}, clear=True), \
                 mock.patch.object(huggingface_hub, "snapshot_download", side_effect=lambda *a, **k: calls.append(k) or None):
             with self.assertRaises(el.EmbedderLockError), el.fetch_allowed():
                 el.verify_snapshot_against_lock(self.lock)

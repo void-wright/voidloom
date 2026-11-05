@@ -719,7 +719,7 @@ class TestEnvelopeAndDispatch(unittest.TestCase):
 
     def test_doctor_is_fail_graceful(self):
         env = cli.verb_doctor(_ns(json=True))
-        self.assertEqual(env["status"], "ok")
+        self.assertEqual(env["status"], "ok" if env["data"]["brain_healthy"] else "incomplete")
         # C5: `healthy` was split into brain_healthy (the machine is sound)
         # and promise_healthy (the promise is kept). There is deliberately no
         # single flag meaning "the database opened".

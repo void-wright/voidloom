@@ -272,6 +272,8 @@ class PreLock(_Brain):
         super().setUp()
         self.h = el.catalogue_tiers()["cpu"]["weights_hash"]
         self.other = el.catalogue_tiers()["gpu"]["weights_hash"]
+        # a brain with no lock carries a shipped checksum only by way of `re-embed`, which leaves this receipt
+        (self.d / el.LOCK_HISTORY_NAME).write_text('{"action": "re-embed"}\n', encoding="utf-8")
 
     def test_control_members_agreeing_on_a_checksum_hand_it_on(self):
         ids = [self.episodic(self.h) for _ in range(3)]

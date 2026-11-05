@@ -560,10 +560,10 @@ tier runs through an interpreter outside the brain (no venv); see
   `voidloom tier rollback` goes back, and `voidloom tier cleanup --confirm <old table>`
   deletes them, their bytes included, once you are sure. On a large brain it prints its
   progress; if it stops on a stalled batch, re-run with `--batch-size 2`: finished rows are kept.
-  `WIZARD_EMBED_MODEL` chooses the model of a new brain only. After that it may only agree
-  with the brain: `tier set` moves the line in the env file's managed block with the lock.
-  Set elsewhere to another model it stops the brain with `WEIGHTS_MISMATCH`, so unset it
-  and use `tier set`. `--force-cpu` never changes an existing brain's model either: on a
+  `WIZARD_EMBED_MODEL` chooses the model at install only. After that it may only agree
+  with `embedder.lock.json`: `tier set` moves the line in the env file's managed block with
+  the lock, and set elsewhere to another model it stops the brain with `WEIGHTS_MISMATCH`,
+  so unset it and use `tier set`. `--force-cpu` never changes an existing brain's model either: on a
   brain under another model the installer refuses and names `tier set`.
 
 ### Writing your own lines in the env file

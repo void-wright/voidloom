@@ -66,7 +66,7 @@ class MidMigration(unittest.TestCase):
 
     def read(self, verb):
         rc, env = _env([verb, "--db", str(self.db), "--json"])
-        self.assertEqual(rc, 0, env)
+        self.assertIn(rc, (0, 4) if verb == "doctor" else (0,), env)     # doctor's 4 is an unhealthy brain, answered
         return env["data"]["checks"]["embedding_coherence"]["derived_layer"] if verb == "doctor" else env["data"]["derived_layer"]
 
     def test_control_doctor_and_status_ship_the_stale_count(self):

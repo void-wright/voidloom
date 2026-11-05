@@ -1202,6 +1202,28 @@ except Exception:
 PYEOF
 }
 
+# hd_brain_is_new -- "yes" for a brain this run may embed whole: no file yet, or one holding only the seed pack and no
+# vector (an install that stopped at Tier 0). Anything an owner has written is an existing brain. Read before anything
+# in this run writes to it.
+hd_brain_is_new() {
+    [ -s "$DB_PATH" ] || { echo yes; return; }
+    "$PY_SYS" - "$DB_PATH" <<'PYEOF' 2>/dev/null || echo no
+import os, sqlite3, sys, urllib.request
+c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(sys.argv[1])), uri=True)
+cols = {r[1] for r in c.execute("PRAGMA table_info(memories)")}
+if not cols:
+    print("yes"); sys.exit(0)
+own = c.execute("SELECT COUNT(*) FROM memories" + (" WHERE COALESCE(seed, 0) = 0" if "seed" in cols else "")).fetchone()[0]
+held = 0
+for t in ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3"):
+    try:
+        held += c.execute("SELECT COUNT(*) FROM %s_rowids" % t).fetchone()[0]
+    except sqlite3.Error:
+        pass
+print("yes" if own == 0 and held == 0 else "no")
+PYEOF
+}
+
 # ----------------------------------------------------------------------------
 # Resolve the embed model from the brain DB (brain-dictated). Reads the
 # active_embedding_table metadata read-only; never loads a model. Falls back to
@@ -1264,27 +1286,6 @@ if not rows:
     sys.exit("EMBED_TIERS in %s is empty" % sys.argv[1])
 print("\n".join(rows))
 ENGINE_REGISTRY_PY
-}
-# hd_brain_is_new -- "yes" for a brain this run may embed whole: no file yet, or one holding only the seed pack and no
-# vector (an install that stopped at Tier 0). Anything an owner has written is an existing brain. Read before anything
-# in this run writes to it.
-hd_brain_is_new() {
-    [ -s "$DB_PATH" ] || { echo yes; return; }
-    "$PY_SYS" - "$DB_PATH" <<'PYEOF' 2>/dev/null || echo no
-import os, sqlite3, sys, urllib.request
-c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(sys.argv[1])), uri=True)
-cols = {r[1] for r in c.execute("PRAGMA table_info(memories)")}
-if not cols:
-    print("yes"); sys.exit(0)
-own = c.execute("SELECT COUNT(*) FROM memories" + (" WHERE COALESCE(seed, 0) = 0" if "seed" in cols else "")).fetchone()[0]
-held = 0
-for t in ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3"):
-    try:
-        held += c.execute("SELECT COUNT(*) FROM %s_rowids" % t).fetchone()[0]
-    except sqlite3.Error:
-        pass
-print("yes" if own == 0 and held == 0 else "no")
-PYEOF
 }
 BRAIN_IS_NEW="$(hd_brain_is_new)"
 T1_MODELS_ABSENT=0

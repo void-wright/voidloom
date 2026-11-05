@@ -54,13 +54,18 @@ class _Case(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
 
-    def cached(self, dirname, revision="abc"):
-        (self.cache / dirname / "snapshots" / revision).mkdir(parents=True)
+    def cached(self, dirname, revision="abc", files=()):
+        snap = self.cache / dirname / "snapshots" / revision
+        snap.mkdir(parents=True)
+        for name in files:
+            (snap / name).parent.mkdir(parents=True, exist_ok=True)
+            (snap / name).write_bytes(b"")
 
     def snapshots(self, lock):
-        self.cached("models--" + lock["model_id"].replace("/", "--"), lock["revision"])
+        self.cached("models--" + lock["model_id"].replace("/", "--"), lock["revision"], lock.get("files") or ())
         if lock.get("code"):
-            self.cached("models--" + lock["code"]["model_id"].replace("/", "--"), lock["code"]["revision"])
+            self.cached("models--" + lock["code"]["model_id"].replace("/", "--"), lock["code"]["revision"],
+                        lock["code"].get("files") or ())
 
 
 class Locked(_Case):
@@ -90,7 +95,7 @@ class Locked(_Case):
     def test_saboteur_remote_code_missing_is_not_present(self):
         if not self.lock.get("code"):
             self.skipTest("this tier pins no remote code")
-        self.cached("models--" + self.lock["model_id"].replace("/", "--"), self.lock["revision"])
+        self.cached("models--" + self.lock["model_id"].replace("/", "--"), self.lock["revision"], self.lock.get("files") or ())
         m = _bootstrap._detect_models(self.db)
         self.assertFalse(m["present"], m)
         self.assertEqual(sorted(m["lock_snapshots"].values()), [False, True])

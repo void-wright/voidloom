@@ -95,8 +95,8 @@ class BackfillCountsStamps(unittest.TestCase):
             env = self.eb.backfill(str(db))
         self.assertEqual((env["status"], env["embedded"], env["failed"]), ("incomplete", 2, 1), env)
         c = _connect(db)
-        self.assertEqual(c.execute("SELECT tag FROM memory_tags WHERE memory_id = 1").fetchall(),
-                         [(self.mw.MISSING_TAG,)])
+        # the tag names a memory with no vector, and this one keeps the one it had
+        self.assertEqual(c.execute("SELECT tag FROM memory_tags WHERE memory_id = 1").fetchall(), [])
         c.close()
         self.assertEqual(dict(snapshot(db, table)[0])[1], dict(before)[1], "the old vector survives")
 
@@ -115,7 +115,7 @@ class BackfillCountsStamps(unittest.TestCase):
             lock = d / "embedder.lock.json"
             if lock.exists():
                 lock.unlink()
-                (d / "embedder.lock.history.jsonl").unlink()
+                (d / "embedder.lock.history.jsonl").write_text('{"action": "re-embed"}\n', encoding="utf-8")
             table = TABLES[tier][0]
             c = _connect(db)
             c.execute("UPDATE embedding_provenance SET weights_hash = 'unresolved' WHERE memory_id = 1")

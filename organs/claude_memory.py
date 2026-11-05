@@ -3576,9 +3576,11 @@ def cmd_sleep(args):
     """Run the sleep loop cycle (manual trigger for testing; cron handles automatic runs)."""
     if sleep_loop is None:
         _error("sleep_loop module not importable. Ensure sleep_loop.py is alongside claude_memory.py.")
-    _conn = _get_conn()
-    _gaps = _schema_gaps(_conn)
-    _conn.close()
+    _gaps = []
+    if DB_PATH.exists():
+        _conn = _get_conn()
+        _gaps = _schema_gaps(_conn)
+        _conn.close()
     if _gaps:
         _output({"status": "error", "error": "SCHEMA_DAMAGED", "action": "sleep", "schema_gaps": _gaps,
                  "message": f"this brain no longer holds {', '.join(_gaps)}: a sleep cycle over it would read as done "
@@ -4288,9 +4290,11 @@ def _schema_gaps(conn: sqlite3.Connection) -> List[str]:
         gaps.append("memories_fts")
     try:
         table = _active_embed_table()
-        if table not in names:
+        promised = _install_lock() is not None or conn.execute(
+            "SELECT 1 FROM embedding_provenance WHERE vec_table = ? LIMIT 1", (table,)).fetchone() is not None
+        if table not in names and promised:
             gaps.append(table)
-    except Exception:  # noqa: BLE001 -- a brain with no tier has no table to be missing
+    except Exception:  # noqa: BLE001 -- a brain with no tier and no stamp has no table to be missing
         pass
     return gaps
 

@@ -266,7 +266,7 @@ class TestB1ATier0BornBrainIsDeclaredAtTier1(_Scratch):
         gate = src[src.index("# C.verify —"):src.index("# STEP D")]
         # four refusal arms (the tier undeclared, the device proof failed -- handoff round 1, L4: P6/P7 --, embedding
         # refused) + the failed verification: each restores before the hint
-        self.assertEqual(gate.count("tier1_restore_t0\n                tier1_upgrade_hint"), 4, gate[-1500:])
+        self.assertEqual(gate.count("tier1_restore_t0\n                tier1_upgrade_hint"), 5, gate[-1500:])
         self.assertIn('elif [ "$T1_DEVICE_OK" -ne 1 ]; then', gate)
         self.assertIn('elif [ "$T1_EMBED_REFUSED" -eq 1 ]; then', gate)
 
