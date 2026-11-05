@@ -1450,6 +1450,36 @@ def declare(data, pairs, begin, end):
     return image, first, last
 
 
+def rewrite_block_key(data, key, value, begin, end):
+    """The env file with `key`'s line INSIDE the managed block set to `value`: the one change a verb other than the
+    installer may make to the block (`tier set`, which owns the switch the line records). Every byte outside that
+    line is kept. Refuses (nothing written) when the file's reading cannot be stated, the block is not one pair, or the
+    block does not assign `key`; a line outside the markers is the owner's and is never touched here. Returns the image."""
+    res = parse(data, begin, end)
+    if res["error"]:
+        raise Refusal("line %d: systemd's EnvironmentFile= rejects this WHOLE file (%s). Fix that line."
+                      % (res["error_line"], res["error"]))
+    if [k for _l, k in res["markers"]] != ["begin", "end"]:
+        raise Refusal(marker_refusal(res))
+    hits = [u for u in res["units"] if u.inside and any(k == key for k, _v in u.sd)]
+    if len(hits) != 1:
+        raise Refusal("the managed block assigns %s on %d lines, not one" % (key, len(hits)))
+    line = _assignment_for(key, value)
+    if line is None:
+        raise Refusal("internal: %r has no spelling systemd and a shell read alike" % (value,))
+    spans = _spans(data)
+    first, last = spans[hits[0].line - 1][0], spans[hits[0].end_line - 1][1]
+    image = data[:first] + line + data[last:]
+    new = parse(image, begin, end)
+    was = {k: v[0] for k, v in res["effective"].items() if k != key}
+    now = {k: v[0] for k, v in new["effective"].items() if k != key}
+    if new["error"] or new["markers"] != res["markers"] or was != now:
+        raise AssertionError("the image failed its read-back: another key moved, or the block did")
+    if key not in res["outside"] and new["effective"].get(key, (None,))[0] != value:
+        raise AssertionError("%s does not read back as %s" % (key, value))
+    return image
+
+
 def provenance(res, key):
     """'chosen at install <date>, <how>' when the line that declares `key` OUTSIDE the managed block sits directly under
     the comment the G1 writer puts above it -- the record says where a declaration came from -- else None."""

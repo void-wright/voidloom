@@ -1185,6 +1185,23 @@ print({"memory_embeddings_v3": "qwen",
 PYEOF
 }
 
+# hd_brain_embedded TIER -- "yes" when this brain holds a promise to that tier: an install lock, or a row in its table
+# (read from vec0's own rowid table, so no extension is needed). A brain with neither has nothing a change could orphan.
+hd_brain_embedded() {
+    "$PY_SYS" - "$DB_PATH" "$1" <<'PYEOF' 2>/dev/null || true
+import os, sqlite3, sys, urllib.request
+db, tier = sys.argv[1], sys.argv[2]
+if os.path.exists(os.path.join(os.path.dirname(os.path.realpath(os.path.abspath(db))), "embedder.lock.json")):
+    print("yes"); sys.exit(0)
+table = {"qwen": "memory_embeddings_v3", "jina": "memory_embeddings_v2", "nomic": "memory_embeddings"}[tier]
+try:
+    c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db)), uri=True)
+    print("yes" if c.execute("SELECT 1 FROM %s_rowids LIMIT 1" % table).fetchone() else "no")
+except Exception:
+    print("no")
+PYEOF
+}
+
 # ----------------------------------------------------------------------------
 # Resolve the embed model from the brain DB (brain-dictated). Reads the
 # active_embedding_table metadata read-only; never loads a model. Falls back to
@@ -1204,13 +1221,18 @@ resolve_embed_model() {
     # --force-cpu (a DEVICE choice, which in this shape must not change the recall tier)
     # and not WIZARD_EMBED_MODEL (a disagreeing value was refused before this line).
     if [ "$SHAPE" = "ambient" ]; then echo "$AMBIENT_TIER"; return; fi
-    if [ -n "${WIZARD_EMBED_MODEL:-}" ]; then echo "$WIZARD_EMBED_MODEL"; return; fi
-    if [ "$FORCE_CPU" -eq 1 ]; then echo "nomic"; return; fi
-    if [ -f "$DB_PATH" ]; then
-        local m
-        m="$(hd_embed_model_from_db)"
-        case "$m" in qwen|jina|nomic|LOCK_MALFORMED) echo "$m"; return ;; esac
-    fi
+    # THE BRAIN IS READ FIRST. A brain that already embeds under a tier keeps it: neither a shell variable nor a device
+    # flag moves it, because moving it means re-embedding every memory, and `voidloom tier set` is the one verb that does.
+    local m="" want=""
+    [ -f "$DB_PATH" ] && m="$(hd_embed_model_from_db)"
+    if [ -n "${WIZARD_EMBED_MODEL:-}" ]; then want="$WIZARD_EMBED_MODEL"; elif [ "$FORCE_CPU" -eq 1 ]; then want="nomic"; fi
+    case "$m" in
+        LOCK_MALFORMED) echo "$m"; return ;;
+        qwen|jina|nomic)
+            if [ -z "$want" ] || [ "$want" = "$m" ]; then echo "$m"; return; fi
+            if [ "$(hd_brain_embedded "$m")" = "yes" ]; then echo "BRAIN_TIER_CONFLICT:${m}:${want}"; return; fi ;;
+    esac
+    if [ -n "$want" ]; then echo "$want"; return; fi
     # Fresh/blank brain: pick by hardware. GPU gets qwen, NOT jina -- jina is
     # non-commercial and must never be selected for someone by default.
     if gpu_present; then echo "qwen"; else echo "nomic"; fi
@@ -1244,6 +1266,12 @@ print("\n".join(rows))
 ENGINE_REGISTRY_PY
 }
 EMBED_MODEL="$(resolve_embed_model)"
+case "$EMBED_MODEL" in BRAIN_TIER_CONFLICT:*)
+    _have="${EMBED_MODEL#BRAIN_TIER_CONFLICT:}"; _want="${_have#*:}"; _have="${_have%%:*}"
+    if [ -n "${WIZARD_EMBED_MODEL:-}" ]; then _asked="WIZARD_EMBED_MODEL=${_want}"; else _asked="--force-cpu"; fi
+    echo "[install] REFUSED: this brain embeds under ${_have}, and ${_asked} does not change a brain's model: that would re-embed every memory. Nothing was touched. To move it: voidloom tier set ${_want}. To keep it: re-run without ${_asked}." >&2
+    exit 2 ;;
+esac
 if ! ENGINE_REGISTRY="$(engine_registry "$PY_SYS" "${PKG_ROOT}/organs/claude_memory.py")" || [ -z "$ENGINE_REGISTRY" ]; then
     echo "[install] REFUSED: the engine's tier registry (EMBED_TIERS in ${PKG_ROOT}/organs/claude_memory.py) could not be read with ${PY_SYS}; the package is incomplete or damaged -- re-download it. Nothing was touched." >&2
     exit 2

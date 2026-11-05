@@ -277,12 +277,70 @@ def _population(conn: sqlite3.Connection) -> Dict[str, int]:
     return {"memories": int(total), "active": int(active), "archived": int(total) - int(active)}
 
 
-def _env_warning(target_engine_tier: str) -> Optional[str]:
-    env = (os.environ.get("WIZARD_EMBED_MODEL") or "").strip().lower()
-    if env and env != target_engine_tier:
+# The installer's spellings of an engine tier, as the engine reads them (claude_memory._EMBED_TIER_ALIASES).
+TIER_ALIASES = {"cpu": "nomic", "gpu": "qwen", "qwen3-0.6b": "qwen"}
+# Every vector table's engine tier, the unshipped one included: a rollback can land on it.
+TABLE_TIER = {"memory_embeddings": "nomic", "memory_embeddings_v2": "jina", "memory_embeddings_v3": "qwen"}
+
+
+def _spelled(value: Optional[str]) -> str:
+    v = (value or "").strip().lower()
+    return TIER_ALIASES.get(v, v)
+
+
+def _env_pin(db: Path) -> Dict[str, Any]:
+    import voidloom_env
+    return voidloom_env.embed_pin(db)
+
+
+def _env_warning(target_engine_tier: str, db: Path) -> Optional[str]:
+    """The refusal a variable or an owner's line earns, or None. The managed block's line is not one: `tier set` owns it
+    and moves it with the switch, so a shell that merely sourced that file is no reason to stop."""
+    pin = _env_pin(db)
+    if pin["belongs"] and pin["owner_line"] and _spelled(pin["value"]) != target_engine_tier:
+        return (f"line {pin['owner_line']} of {pin['path']}, outside the managed block, sets WIZARD_EMBED_MODEL="
+                f"{pin['value']!r}; that line is yours and this verb leaves it alone. Change it to "
+                f"{target_engine_tier!r} or delete it.")
+    env = _spelled(os.environ.get("WIZARD_EMBED_MODEL"))
+    if env and env != target_engine_tier and not (pin["belongs"] and pin["inside"] and _spelled(pin["value"]) == env):
         return (f"WIZARD_EMBED_MODEL={env!r} is set in this environment and names another tier; after the "
                 f"switch the engine refuses it (the lock is the promise). Set it to {target_engine_tier!r} "
                 "or unset it wherever it is exported.")
+    return None
+
+
+def _move_env_pin(db: Path, value: str) -> Optional[Dict[str, Any]]:
+    """Point the managed block's WIZARD_EMBED_MODEL at `value`, when the env file is this brain's and the block assigns
+    it. Returns {"path", "from", "to"} when the line moved, None when nothing had to. A file that cannot be written
+    refuses, because a switch that left its jobs on the old model is the fault this step exists to prevent."""
+    import voidloom_env
+    pin = _env_pin(db)
+    if not (pin["belongs"] and pin["inside"]) or (pin["value"] or "") == value:
+        return None
+    try:
+        voidloom_env.set_embed_pin(pin["path"], value)
+    except Exception as e:                  # noqa: BLE001 -- OSError, or the reader's Refusal: both stop the switch
+        raise TierRefused("ENV_FILE_UNWRITABLE", f"{pin['path']} could not be changed to name {value!r}: {e}. "
+                          "Nothing was switched: fix the file and re-run.", env_file=pin["path"])
+    return {"path": pin["path"], "from": pin["value"], "to": value}
+
+
+def _restore_env_pin(change: Dict[str, Any]) -> None:
+    """Undo _move_env_pin, on a failed flip. Best effort by design: `doctor` reads the disagreement if it fails."""
+    import voidloom_env
+    try:
+        if change.get("from"):
+            voidloom_env.set_embed_pin(change["path"], change["from"])
+    except Exception:                       # noqa: BLE001 -- the original failure is the one being raised
+        pass
+
+
+def _sourced_shell_note(env_change: Optional[Dict[str, Any]], tier: str) -> Optional[str]:
+    """This shell's own variable is the one copy a verb cannot reach."""
+    env = _spelled(os.environ.get("WIZARD_EMBED_MODEL"))
+    if env and env != tier:
+        return (f"this shell still carries WIZARD_EMBED_MODEL={env!r}, loaded before the switch; open a new shell or "
+                "run: unset WIZARD_EMBED_MODEL")
     return None
 
 
@@ -640,8 +698,8 @@ def _refuse_same_table_change(src: Dict[str, Any], lock: Dict[str, Any]) -> None
             vec_table=lock["vec_table"])
 
 
-def _refuse_env_pin(engine_tier: str) -> None:
-    warning = _env_warning(engine_tier)
+def _refuse_env_pin(engine_tier: str, db: Path) -> None:
+    warning = _env_warning(engine_tier, db)
     if warning:
         raise TierRefused("LOCK_ENV_PINNED", warning + " Nothing was changed.", usage=USAGE)
 
@@ -704,7 +762,7 @@ def plan(db: Path, tier: str) -> Dict[str, Any]:
                        "weights_hash": lock["weights_hash"], "vectors_now": int(vectors),
                        "bytes": _verify_only(lock)},
             "population": pop, "pending": len(pend), "reusable": pop["memories"] - len(pend),
-            "env_warning": _env_warning(tier.strip().lower()),
+            "env_warning": _env_warning(tier.strip().lower(), Path(db).resolve()),
             "before_a_real_run": ("stop long-running brain processes (the sleep timer, hooks) first: a process "
                                   "holding the old model refuses its writes after the switch until restarted")}
 
@@ -723,7 +781,7 @@ def set_tier(db: Path, tier: str, *, batch_size: int = BATCH_SIZE) -> Dict[str, 
     data_dir = db.parent
     engine_tier = (tier or "").strip().lower()
     lock = target_lock(tier)                                    # LOCK_NOT_SHIPPED before anything
-    _refuse_env_pin(engine_tier)
+    _refuse_env_pin(engine_tier, db)
     with _Mutex(data_dir):
         return _set_tier_locked(db, data_dir, lock, engine_tier, batch_size)
 
@@ -780,6 +838,7 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
             raise TierRefused("TIER_SET_WRITER_STORM",
                               f"another writer added more than {FLIP_GAP_CAP} memories between each of "
                               f"{FLIP_ATTEMPTS} attempts to switch; stop it and re-run (finished rows are kept)")
+        env_change, lock_moved = None, False
         try:
             gap = _embed_pending(conn, late, lock, batch_size=batch_size, in_txn=True, outcome=outcome) if late else 0
             conn.execute(f"DELETE FROM {t} WHERE memory_id NOT IN (SELECT id FROM memories)")
@@ -798,6 +857,7 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                             "previous_lock_raw": (prev_path.read_text(encoding="utf-8")
                                                   if prev_path.exists() else None),
                             "previous_metadata": src["metadata"], "previous_vec_table": src["vec_table"],
+                            "previous_env_pin": _env_pin(db).get("value"),
                             "target_tier": lock["tier"], "target_vec_table": t}
             already = (not resuming and src["lock_tier"] == lock["tier"]
                        and src["metadata"]["active_embedding_table"] == t)
@@ -810,13 +870,19 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                 conn.execute("UPDATE embedding_upgrade_log SET completed_at = ?, memories_processed = ?, "
                              "status = 'completed' WHERE started_at = ? AND notes = 'tier set'",
                              (_now(), built + gap, started))
+            # The env file the jobs load moves with the lock: it is written before the lock (a refusal here leaves
+            # nothing moved) and put back if the lock could not follow.
+            env_change = _move_env_pin(db, engine_tier)
             if already:
                 written = embedder_lock.resolve(db)     # nothing moves: the lock file is left byte for byte
             else:
                 written = embedder_lock.write_lock(data_dir, lock["tier"], replace=True, locked_by="tier set")
+            lock_moved = True
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
+            if env_change and not lock_moved:
+                _restore_env_pin(env_change)
             raise
         from_meta = preimage["previous_metadata"] if (resuming or not already) else src["metadata"]
         from_table = preimage["previous_vec_table"] if (resuming or not already) else src["vec_table"]
@@ -831,10 +897,12 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                    "coverage": cov, "population": pop, "orphans_pruned": int(orphans),
                    "already_on_target": already, "resumed_after_crash": resuming,
                    "old_vectors": f"kept in {from_table} (rollback path; removed only by tier cleanup)",
-                   "preimage": str(data_dir / PREIMAGE_NAME), "derived_layer": DERIVED_LAYER_NOTE}
+                   "preimage": str(data_dir / PREIMAGE_NAME), "derived_layer": DERIVED_LAYER_NOTE,
+                   "env_file": env_change}
         _receipt(data_dir, receipt)
         return {"status": "ok", "action": "set", "receipt": receipt, "build_s": round(build_s, 2),
                 "total_s": round(time.time() - t0, 2),
+                "this_shell": _sourced_shell_note(env_change, engine_tier),
                 "rollback": "voidloom tier rollback",
                 "cleanup": f"voidloom tier cleanup --confirm {from_table}" if from_table != t else None}
     finally:
@@ -843,7 +911,7 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
 
 def _re_embed_prelock(db: Path, engine_tier: str, batch_size: int) -> Dict[str, Any]:
     lock = target_lock(engine_tier)
-    _refuse_env_pin(engine_tier)
+    _refuse_env_pin(engine_tier, db)
     data_dir = db.parent
     with _Mutex(data_dir):
         conn = _open(db)
@@ -926,6 +994,7 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
                     embedder_lock._fsync_dir(data_dir)
             else:
                 _atomic_write(lock_path, pre["previous_lock_raw"])
+            env_change = _move_env_pin(db, pre.get("previous_env_pin") or TABLE_TIER.get(restored, ""))
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
@@ -940,7 +1009,7 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
             f"python3 organs/embedding_upgrade.py --db-path {db} re-embed")
     receipt = {"at": _now(), "action": "tier-rollback", "by": "tier rollback", "db": str(db),
                "restored_vec_table": restored, "restored_lock": pre["previous_lock_raw"] is not None,
-               "memories_without_a_restored_vector": int(gap)}
+               "memories_without_a_restored_vector": int(gap), "env_file": env_change}
     if restored_tier:
         route = (f"the restored tier ({restored_tier}) is shipped, so `voidloom tier set {restored_tier}` is the "
                  f"route that fills any gap: it reuses every vector already stamped under it and embeds only "

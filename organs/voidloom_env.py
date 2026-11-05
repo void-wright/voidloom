@@ -112,8 +112,11 @@ WHO MARKS, AND WHO THE CHECK SPEAKS FOR
 from __future__ import annotations
 
 import os
+import stat
+import sys
+import tempfile
 from pathlib import Path
-from typing import List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 __all__ = [
     "DEFAULT_DIR_NAME",
@@ -138,6 +141,8 @@ __all__ = [
     "claim_env_dir",
     "release_owner_marker",
     "EnvOwnershipRefused",
+    "embed_pin",
+    "set_embed_pin",
 ]
 
 #: The neutral, vendor-free directory this project uses on a fresh machine.
@@ -150,6 +155,11 @@ ENV_DIR_KEY = "VOIDLOOM_ENV_DIR"
 #: The env file the installer writes and the scheduled jobs load; its directory is limb 2.
 ENV_FILE_KEY = "WIZARD_ENV_FILE"
 ENV_FILE_NAME = "wizard-library-env"
+
+# The env file's managed block, as install.sh writes it, and the one line of it that names the embedder.
+ENV_BLOCK_BEGIN = "# >>> wizard-library managed >>>"
+ENV_BLOCK_END = "# <<< wizard-library managed <<<"
+EMBED_PIN_KEY = "WIZARD_EMBED_MODEL"
 
 #: Discovery of a legacy directory runs only when this is exactly "1".
 LEGACY_DISCOVERY_KEY = "VOIDLOOM_LEGACY_DISCOVERY"
@@ -446,6 +456,78 @@ def env_dir(name: Optional[str] = None) -> Path:
     if name is None:
         return preferred_dir()
     return resolve_verbose(name).parent if False else resolve_verbose(name).path.parent
+
+
+def _engine_reader():
+    """install/env_file.py, the one reader and writer of the env file; None where it is not laid."""
+    try:
+        import voidloom_device
+    except ImportError:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import voidloom_device
+    return voidloom_device._systemd_reader()
+
+
+def embed_pin(db: Any) -> Dict[str, Any]:
+    """What the env file THIS brain's jobs load says about its embedder. Reads only.
+
+    ``belongs`` is whether the file names this database in WIZARD_LIBRARY_DB: an env file written for another brain says
+    nothing about this one, and no verb acting on a copy may change what the installed brain's jobs read. ``value`` is
+    the effective WIZARD_EMBED_MODEL, ``inside`` whether the managed block assigns it, and ``owner_line`` the line number
+    of one assigned outside the markers: that line is the owner's, and it wins by systemd's last-wins."""
+    out: Dict[str, Any] = {"path": None, "belongs": False, "value": None, "inside": False, "owner_line": None,
+                           "unreadable": None}
+    ef = _engine_reader()
+    try:
+        path = env_path(ENV_FILE_NAME)
+    except (EnvOwnershipRefused, ValueError, OSError) as e:
+        out["unreadable"] = str(e)
+        return out
+    out["path"] = str(path)
+    if ef is None or not path.is_file():
+        return out
+    try:
+        res = ef.read_file(str(path), ENV_BLOCK_BEGIN, ENV_BLOCK_END)
+    except OSError as e:
+        out["unreadable"] = str(e)
+        return out
+    if res["error"]:
+        out["unreadable"] = "line %d: %s" % (res["error_line"], res["error"])
+        return out
+    named = res["effective"].get("WIZARD_LIBRARY_DB", (None,))[0]
+    out["belongs"] = bool(named) and os.path.realpath(os.path.expanduser(named)) == os.path.realpath(str(db))
+    got = res["effective"].get(EMBED_PIN_KEY)
+    if got:
+        out["value"] = got[0]
+    out["inside"] = any(u.inside and any(k == EMBED_PIN_KEY for k, _v in u.sd) for u in res["units"])
+    if EMBED_PIN_KEY in res["outside"]:
+        out["owner_line"] = res["outside"][EMBED_PIN_KEY][1]
+    return out
+
+
+def set_embed_pin(path: Any, value: str) -> None:
+    """Rewrite the managed block's WIZARD_EMBED_MODEL line, atomically (temp in the same directory, fsync, rename), with
+    the file's mode kept. Raises the reader's Refusal, or OSError, with the file exactly as it was."""
+    ef = _engine_reader()
+    path = Path(path)
+    data = path.read_bytes()
+    image = ef.rewrite_block_key(data, EMBED_PIN_KEY, value, ENV_BLOCK_BEGIN, ENV_BLOCK_END)
+    if image == data:
+        return
+    fd, tmp = tempfile.mkstemp(prefix="." + path.name + ".", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(image)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, stat.S_IMODE(os.stat(path).st_mode))
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def describe(name: str) -> str:

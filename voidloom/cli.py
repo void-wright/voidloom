@@ -603,6 +603,25 @@ def _coverage_note(out: Dict[str, Any], table: Optional[str]) -> Optional[str]:
     return " ".join(notes) or None
 
 
+def _pin_disagrees(db_path: str, table: str) -> Optional[str]:
+    """What the environment the jobs run under says against the lock, or None. The variable here and the line in the
+    env file are each read: the engine refuses a disagreeing variable, so a brain whose jobs load one cannot be sound."""
+    import voidloom_env  # type: ignore
+    tier = {"memory_embeddings": "nomic", "memory_embeddings_v2": "jina", "memory_embeddings_v3": "qwen"}.get(table)
+    aliases = {"cpu": "nomic", "gpu": "qwen", "qwen3-0.6b": "qwen"}
+    env = (os.environ.get("WIZARD_EMBED_MODEL") or "").strip().lower()
+    if env and aliases.get(env, env) != tier:
+        return (f"WIZARD_EMBED_MODEL={env!r} in this environment disagrees with the lock's {tier!r}: every engine call "
+                "here refuses. Unset it, or open a new shell")
+    pin = voidloom_env.embed_pin(db_path)
+    val = (pin.get("value") or "").strip().lower()
+    if pin.get("belongs") and val and aliases.get(val, val) != tier:
+        where = f"line {pin['owner_line']} of " if pin.get("owner_line") else ""
+        return (f"{where}{pin['path']} sets WIZARD_EMBED_MODEL={val!r} but the lock names {tier!r}: every scheduled job "
+                f"refuses. Re-run `voidloom tier set {tier}` to finish the switch, or edit that line")
+    return None
+
+
 def _tier_coherence(db_path: Optional[str]) -> Dict[str, Any]:
     """Does this brain agree with what it promised? Reported from the provenance reader the search itself runs on.
 
@@ -668,10 +687,16 @@ def _tier_coherence(db_path: Optional[str]) -> Dict[str, Any]:
             if locked:
                 table = locked[0]
                 out["resolved_table"], out["resolved_dim"] = locked
+                pinned = _pin_disagrees(db_path, table)
+                if pinned:
+                    out["refusal"] = {"error": "WEIGHTS_MISMATCH", "message": pinned}
+                    out["reason"] = f"WEIGHTS_MISMATCH: {pinned}"
+                    return out
                 if out["recorded_table"] and out["recorded_table"] != table:
                     out["metadata_disagrees"] = (
                         f"the install lock names {table} but metadata records {out['recorded_table']}: a "
-                        f"`voidloom tier set` was interrupted after the lock moved; run it again to finish")
+                        f"`voidloom tier set` stopped after the lock moved, or a lock was written over another "
+                        f"tier's brain; `voidloom tier set` names the tier to finish on")
             cov = out["coverage"]
             if out["lockless"] and not table:
                 out["stranded_vectors"] = _stranded_vectors(conn, sorted(_er._DIM_FOR))
@@ -739,6 +764,8 @@ def _brain_fault(coherence: Dict[str, Any]) -> Optional[str]:
         return f"embedder lock: {coherence['refusal'].get('error')}"
     if coherence.get("coverage_refusal"):
         return f"provenance reader: {coherence['coverage_refusal']}"
+    if coherence.get("metadata_disagrees"):
+        return coherence["metadata_disagrees"]
     if coherence.get("unreadable") or coherence.get("agrees") is False:
         return coherence.get("reason")
     return None

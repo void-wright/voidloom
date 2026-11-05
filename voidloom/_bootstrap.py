@@ -257,20 +257,26 @@ def _engine_tiers() -> tuple:
 
 
 def _brain_tier(db: Path, tiers: Dict[str, tuple]) -> tuple:
-    """``(tier, how)`` for a brain with no lock, by the read the engine itself makes for one: WIZARD_EMBED_MODEL, then
-    `metadata.active_embedding_table`, then nomic. ``tier`` is None when the brain cannot be read."""
+    """``(tier, how)`` for a brain with no lock, by the read the engine itself makes for one:
+    `metadata.active_embedding_table` when that table holds a vector (a variable never moves such a brain), else
+    WIZARD_EMBED_MODEL, else the recorded table, else nomic. ``tier`` is None when the brain cannot be read."""
     env = os.environ.get("WIZARD_EMBED_MODEL", "").strip().lower()
-    if env in tiers:
-        return env, "WIZARD_EMBED_MODEL"
+    holds = False
     try:
         import sqlite3
         conn = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)
         try:
             row = conn.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
+            try:
+                holds = bool(row) and conn.execute(f"SELECT 1 FROM {row[0]}_rowids LIMIT 1").fetchone() is not None
+            except sqlite3.Error:
+                holds = False
         finally:
             conn.close()
     except Exception:
-        return None, "the brain could not be read"
+        return (env, "WIZARD_EMBED_MODEL") if env in tiers else (None, "the brain could not be read")
+    if env in tiers and not holds:
+        return env, "WIZARD_EMBED_MODEL"
     for tier, (table, _dirname) in tiers.items():
         if row and row[0] == table:
             return tier, "metadata.active_embedding_table"

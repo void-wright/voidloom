@@ -217,6 +217,26 @@ def _install_lock() -> Optional[Dict[str, Any]]:
         raise
 
 
+def _declared_tier_holding_vectors() -> Optional[str]:
+    """The tier this brain's metadata declares, when that tier's table holds a row (read from vec0's rowid table, so no
+    extension is needed); None for a brain that has embedded nothing, which has no model to protect."""
+    conn = None
+    try:
+        if not Path(DB_PATH).exists():
+            return None
+        conn = sqlite3.connect(f"{Path(DB_PATH).resolve().as_uri()}?mode=ro", uri=True, timeout=60.0)
+        row = conn.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
+        tier = _TABLE_TO_TIER.get(row[0]) if row else None
+        if tier and conn.execute(f"SELECT 1 FROM {row[0]}_rowids LIMIT 1").fetchone():
+            return tier
+        return None
+    except sqlite3.Error:
+        return None
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def _active_embed_model() -> str:
     """Resolve the active embedding tier: 'nomic' | 'jina' | 'qwen'.
 
@@ -229,7 +249,8 @@ def _active_embed_model() -> str:
     A brain with NO lock (it predates the lock, or it embeds under a tier the
     package catalogue does not ship, such as jina) keeps the earlier read:
     WIZARD_EMBED_MODEL > metadata.active_embedding_table > 'nomic', cached
-    per-process.
+    per-process; a variable that disagrees with a tier the brain already holds
+    vectors under is refused the same way, since it would search another model's table.
     """
     lock = _install_lock()
     if lock is not None:
@@ -253,6 +274,14 @@ def _active_embed_model() -> str:
         return _active_model_cache["model"]
     env = os.environ.get("WIZARD_EMBED_MODEL", "").strip().lower()
     if env in EMBED_TIERS:
+        declared = _declared_tier_holding_vectors()
+        if declared and declared != env:
+            import embedder_lock
+            raise embedder_lock.EmbedderLockError(
+                "WEIGHTS_MISMATCH",
+                f"WIZARD_EMBED_MODEL asks for {env!r} but this brain embeds under {declared!r}. A variable does not "
+                f"change a brain's model; unset it, or move the brain: voidloom tier set <tier>.",
+                env=env, declared_tier=declared)
         _active_model_cache["model"] = env
         return env
     model = "nomic"
@@ -1024,6 +1053,13 @@ def cmd_init(args):
         _error(f"init_precondition_failed: the sqlite_vec extension is not "
                f"importable ({type(e).__name__}: {e}). NO database was "
                f"created at {DB_PATH}.")
+    if pre_existing:
+        _asked = (getattr(args, "tier", None) or os.environ.get("WIZARD_EMBED_MODEL", "") or "").strip().lower()
+        _asked = _EMBED_TIER_ALIASES.get(_asked, _asked)
+        _held = _declared_tier_holding_vectors()
+        if _held and _asked in EMBED_TIERS and _asked != _held:
+            _error(f"WEIGHTS_MISMATCH: this brain embeds under {_held!r}; `init` does not change a brain's model. "
+                   f"`voidloom tier set <tier>` is the route that re-embeds it. Nothing was changed.")
 
     try:
         return _cmd_init_body(args)
