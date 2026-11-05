@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-05T14:18:43Z from the working tree whose HEAD was `8ef589b`
+> Generated 2026-11-05T14:25:13Z from the working tree whose HEAD was `55394a8`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,12 +14,12 @@
 |---|---|
 | files tracked | 504 |
 | files hashed | 504 |
-| total bytes | 11185795 |
+| total bytes | 11186446 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  78 files, 4791455 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  78 files, 4791799 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -45,7 +45,7 @@
 | `organs/dry_plan.py` | 1995 | `d6e1274adcc77603` |
 | `organs/embed_backfill.py` | 20053 | `8ee2813568026946` |
 | `organs/embed_resolver.py` | 10311 | `204bc446dc443594` |
-| `organs/embedder_lock.py` | 63841 | `c0bb2864f0c95a93` |
+| `organs/embedder_lock.py` | 64185 | `688a054f7cf08d9c` |
 | `organs/embedders.lock.json` | 2557 | `6247a9cbb5988828` |
 | `organs/embedding_upgrade.py` | 67559 | `127d5ebaa8c8652e` |
 | `organs/gap_mapping.py` | 107682 | `b72a0d6bd94c01d8` |
@@ -102,7 +102,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  231 files, 3306751 bytes
+### `voidloom` — The CLI facade  ·  231 files, 3307058 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -330,7 +330,7 @@
 | `voidloom/tests/test_tier1_ambient.py` | 151524 | `7ed8bee5e5ab60d0` |
 | `voidloom/tests/test_tier_set.py` | 30173 | `e4af4b3fa5f1a085` |
 | `voidloom/tests/test_tier_switch_owns_the_env.py` | 8738 | `2e55055fd5db0f9e` |
-| `voidloom/tests/test_tier_verbs_tell_the_whole_story.py` | 7410 | `c3a07a99f20562e4` |
+| `voidloom/tests/test_tier_verbs_tell_the_whole_story.py` | 7717 | `45262c6bd9157d74` |
 | `voidloom/tests/test_upgrade_embeds_nothing_unasked.py` | 5556 | `ea24069dfc46d361` |
 | `voidloom/tests/test_voidloom.py` | 37835 | `7047522d98ca676c` |
 | `voidloom/tests/test_website_store_stamps.py` | 8758 | `177dee58bdbab780` |
@@ -399,7 +399,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 138854 | `f384b29333e9149d` |
+| `install/lay_manifest.json` | 138854 | `6040f99255d0a689` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |

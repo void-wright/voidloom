@@ -579,7 +579,13 @@ def lost_lock(data_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
         if locked is None:
             if action == "tier-rollback" and not rec.get("restored_lock"):
                 return None
-            if action == "tier-rollback" or action in _LOCK_WRITING_RECEIPTS:
+            if action == "tier-rollback":
+                # the rollback, not the switch it undid, is the last word on which tier the lock named
+                back = [t for t, e in catalogue_tiers().items() if e["vec_table"] == rec.get("restored_vec_table")]
+                if back:
+                    return {"tier": back[0]}
+                locked = {"tier": None}
+            elif action in _LOCK_WRITING_RECEIPTS:
                 locked = {"tier": None}
         if locked is not None and action in _LOCK_WRITING_RECEIPTS:
             to = rec.get("to")

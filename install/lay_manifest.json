@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "8ef589b",
+  "derived_at_head": "55394a8",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 504,
   "not_laid": {
@@ -1757,13 +1757,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 63841,
+   "bytes": 64185,
    "component": "core",
    "dst": "organs/embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "c0bb2864f0c95a932ff967bfc6ef2cdca63af5e1b79a2e16e8b6ab2474c8ce4f",
+   "sha256": "688a054f7cf08d9ceb39c8edc1fe1599164d809a8813b9ebda27c299c467e102",
    "src": "organs/embedder_lock.py"
   },
   {
@@ -5037,13 +5037,13 @@
    "src": "voidloom/tests/test_tier_switch_owns_the_env.py"
   },
   {
-   "bytes": 7410,
+   "bytes": 7717,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "c3a07a99f20562e4ca0009704073494889b19f939bcd5ed83f74f1f066810115",
+   "sha256": "45262c6bd9157d749fd020b7c268179befb903117c2f6ddc7775e0444acfa46f",
    "src": "voidloom/tests/test_tier_verbs_tell_the_whole_story.py"
   },
   {

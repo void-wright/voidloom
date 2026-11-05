@@ -47,6 +47,13 @@ class TierVerbs(unittest.TestCase):
         self.assertIn("edited after the switch", out["note"])
         self.assertTrue(out["gap_fill"])
 
+    def test_a_lock_lost_after_a_rollback_names_the_tier_it_rolled_back_to(self):
+        import embedder_lock as el
+        self.ts.set_tier(self.db, "qwen")
+        self.ts.rollback(self.db)
+        (self.d / "embedder.lock.json").unlink()
+        self.assertEqual(el.lost_lock(self.d), {"tier": "cpu"})
+
     def test_control_a_clean_rollback_says_nothing(self):
         self.ts.set_tier(self.db, "qwen")
         out = self.ts.rollback(self.db)
