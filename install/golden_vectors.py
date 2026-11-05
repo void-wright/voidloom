@@ -100,6 +100,12 @@ def encode_all(organs, tier):
         device = str(getattr(m, "device", None)) if m is not None else None
     except Exception:  # noqa: BLE001 - the device is a fact to report, never a reason to fail
         device = None
+    if device is None:
+        try:
+            import voidloom_device
+            device = str(voidloom_device.torch_device())
+        except Exception:  # noqa: BLE001
+            device = None
     return docs, queries, {"device": device, "dim": len(docs[0]) if docs else 0}
 
 

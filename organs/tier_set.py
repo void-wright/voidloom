@@ -36,7 +36,8 @@ THE ORDER, and what each step guarantees:
      between the check and the switch): embed whatever a concurrent writer added,
      require 100% coverage, write the PRE-IMAGE (the previous lock -- or its
      absence -- and the previous metadata rows) to embedder.lock.preimage.json,
-     move the metadata rows, replace the lock atomically (temp, fsync, rename),
+     move the metadata rows, replace the lock atomically (temp, fsync, rename), write
+     the brain's own record that a lock exists (embedder_lock.mark_brain),
      commit; then append the receipt to embedder.lock.history.jsonl.
      The metadata rows move WITH the lock because some readers still read the
      metadata row and not the lock; a brain whose lock and rows disagree would put
@@ -47,9 +48,9 @@ THE ORDER, and what each step guarantees:
      switch, have no vector in the restored table. Only `tier cleanup --confirm
      <table>` removes old vectors, with its own receipt; after it, rollback refuses.
 
-NOT done by this verb, and said in every receipt: the derived layer (similarity
-links, communities, summaries) was computed in the previous model's space and is
-recomputed by the sleep loop on its own schedule, not here.
+NOT done by this verb, and said in every receipt: the derived layer was computed in
+the previous model's space. Communities and summaries refresh on the next sleep; a
+similarity link keeps its old strength until `maintain` compares the pair again.
 
 Stdlib-only at import (the model loader is imported when a build needs it), like
 every organ the CLI passes a verb to.
@@ -120,9 +121,9 @@ PROGRESS_EVERY = 500
 # A batch that has run this long is not going to finish: the run stops, says so and names --batch-size. Finished rows are
 # committed, so re-running resumes. INVENTED, NOT TUNED: well over any batch the budget above admits, measured or not.
 BATCH_STALL_SECONDS = 600
-DERIVED_LAYER_NOTE = ("not recomputed here: similarity links, communities and summaries were derived in the "
-                      "previous model's space; the sleep loop recomputes them on its own schedule")
-USAGE = "voidloom tier set <nomic|qwen> [--plan] [--batch-size N] [--char-budget N]"
+DERIVED_LAYER_NOTE = ("not recomputed here: communities and summaries refresh on the next sleep; a similarity link keeps "
+                      "its old strength until `maintain` compares the pair again, and `voidloom status` counts what is stale")
+USAGE = "voidloom tier set <nomic|qwen> [--plan] [--batch-size N] [--char-budget N] [--stall-seconds S]"
 
 
 # This run's limits, set once from the command line.
@@ -440,7 +441,8 @@ def _encode_alone(mid: int, text: str, lock: Dict[str, Any], outcome: _Outcome) 
     n = len(text)
     while True:
         try:
-            vec = _encode([text[:n]], lock)[0]
+            with _StallGuard(_LIMITS["stall_seconds"], 1, n):
+                vec = _encode([text[:n]], lock)[0]
             if n < len(text):
                 outcome.shortened[mid] = n
             return vec
@@ -473,8 +475,11 @@ class _StallGuard:
     def _fire(self) -> None:
         print(json.dumps({"status": "error", "error": "TIER_SET_STALLED",
                           "message": f"one batch of {self.size} ({self.chars} characters) ran past "
-                                     f"{self.seconds} s. Finished rows are kept. Re-run with --batch-size 2, or a "
-                                     f"smaller --char-budget."}), flush=True)
+                                     f"{self.seconds} s. Finished rows are kept. "
+                                     + (f"Re-run with --batch-size 2, or a smaller --char-budget."
+                                        if self.size > 1 else
+                                        "One memory cannot be split further: re-run with --stall-seconds 0 to let it "
+                                        "finish however long it takes.")}), flush=True)
         os._exit(1)
 
     def __enter__(self):
@@ -502,8 +507,8 @@ class _Pace:
         if self.done >= self.next:
             self.next = self.done - self.done % PROGRESS_EVERY + PROGRESS_EVERY
             rate = self.done / max(time.time() - self.t0, 0.001)
-            left = int((self.total - self.done) / max(rate, 0.001) / 60)
-            print(f"tier: {self.done} of {self.total} embedded ({rate:.1f} a second, about {left} minutes left)",
+            # No time left is promised: the shortest memories go first, so the rate only falls from here.
+            print(f"tier: {self.done} of {self.total} embedded ({rate:.1f} a second so far; the longest come last)",
                   file=sys.stderr, flush=True)
 
 
@@ -988,8 +993,10 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
             env_change = _move_env_pin(db, engine_tier)
             if already:
                 written = embedder_lock.resolve(db)     # nothing moves: the lock file is left byte for byte
+                embedder_lock.mark_brain(conn, lock["tier"])
             else:
-                written = embedder_lock.write_lock(data_dir, lock["tier"], replace=True, locked_by="tier set")
+                written = embedder_lock.write_lock(data_dir, lock["tier"], replace=True, locked_by="tier set",
+                                                   brain=conn)
             lock_moved = True
             conn.execute("COMMIT")
         except BaseException as e:
@@ -1104,10 +1111,12 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
             _set_metadata(conn, pre["previous_metadata"])
             lock_path = embedder_lock.lock_path_for(db)
             if pre["previous_lock_raw"] is None:
+                embedder_lock.mark_brain(conn, None)
                 if lock_path.exists():
                     os.replace(lock_path, data_dir / f"embedder.lock.rolled-back.{stamp}.json")
                     embedder_lock._fsync_dir(data_dir)
             else:
+                embedder_lock.mark_brain(conn, json.loads(pre["previous_lock_raw"]).get("tier"))
                 _atomic_write(lock_path, pre["previous_lock_raw"])
             env_change = _move_env_pin(db, pre.get("previous_env_pin") or TABLE_TIER.get(restored, ""))
             conn.execute("COMMIT")

@@ -171,16 +171,27 @@ _UNRESOLVED_STAMP = "unresolved"
 
 
 def _lock_was_written(data_dir: str) -> bool:
-    """The rule is embedder_lock.lost_lock's. A bare copy of this file cannot ask it, and then any
-    history beside the database counts: reading a locked brain as lock-less is the worse mistake."""
+    """The rule is embedder_lock.lost_lock's. A bare copy of this file cannot ask it, and then the
+    row in the brain or any history beside the database counts: reading a locked brain as lock-less
+    is the worse mistake."""
     here = str(Path(__file__).resolve().parent)
     if here not in sys.path:
         sys.path.insert(0, here)
     try:
         import embedder_lock  # type: ignore
     except Exception:
-        return os.path.exists(os.path.join(data_dir, "embedder.lock.history.jsonl"))
-    return embedder_lock.lost_lock(data_dir) is not None
+        if os.path.exists(os.path.join(data_dir, "embedder.lock.history.jsonl")):
+            return True
+        try:
+            conn = sqlite3.connect(f"{Path(os.path.realpath(str(DB_PATH))).as_uri()}?mode=ro", uri=True)
+            try:
+                row = conn.execute("SELECT value FROM metadata WHERE key = 'embedder_lock_written'").fetchone()
+            finally:
+                conn.close()
+            return bool(row and row[0])
+        except (sqlite3.Error, ValueError):
+            return False
+    return embedder_lock.lost_lock(data_dir, os.path.realpath(str(DB_PATH))) is not None
 
 
 def _read_lock():

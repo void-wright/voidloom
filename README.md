@@ -187,8 +187,10 @@ an answer and is ignored.
 ### Keyword-only, other shapes, and Windows
 
 - `--tier0-only` skips the semantic tier entirely: no Python environment, no
-  model downloads, keyword recall only. You can add the semantic tier later by
-  re-running the installer without it.
+  model downloads, keyword recall only. To add the semantic tier later, re-run the
+  installer without it. A brain holding only the seed pack is embedded by that run;
+  a brain with memories of its own never is unasked: the run prints how many have no
+  vector and the one command that embeds them, and a re-run after that verifies Tier 1.
 - `--force-cpu` keeps everything on the CPU even when a GPU is present.
 - `--with-crons` also arms the scheduled jobs (see
   [Scheduled jobs](#scheduled-jobs)).
@@ -419,8 +421,9 @@ licences are listed in [`NOTICE`](./NOTICE).
 
 Storing, recalling, the CLI and the session hook make no network calls of
 their own, and there is no telemetry. A store or a recall on a machine missing
-its model does not download it: a recall answers by keyword and a store refuses,
-and both name the command that fetches it.
+its model does not download it: a recall answers by keyword and, on a brain with an
+install lock, a store refuses, and both name the command that fetches it. A brain with
+no lock stores by keyword only until the model is back.
 
 ---
 
@@ -433,7 +436,7 @@ previews: it lists everything it would remove and changes nothing.
 |---|---|
 | no options | Preview only. Nothing changes. |
 | `--yes` | Removes the scheduled jobs, the session hooks and instruction blocks, the `voidloom` command and the installed code. **Keeps your memories** (the brain database) and your env file; the env folder's ownership label is removed if it names this install. |
-| `--yes --remove-brain` | Also deletes the brain and `~/.voidloom`, after asking you to type a confirmation phrase. |
+| `--yes --remove-brain` | Also deletes the brain and `~/.voidloom`, after asking you to type a confirmation phrase. An attached brain's file is yours and stays where you put it: only the link goes, and the run names the file. |
 
 It does not delete downloaded model caches, a persona you forged, or the AI
 tools themselves.
@@ -537,7 +540,7 @@ Results on standard memory benchmarks are being prepared and will be published h
 
 | Command | Use it when |
 |---|---|
-| `bash install.sh --attach-db /abs/path/to/brain.db` | You already have a brain and want it used in place. Nothing is copied; a verified backup image is written beside it first. |
+| `bash install.sh --attach-db /abs/path/to/brain.db` | You already have a brain and want it used in place. Nothing is copied; a verified backup image is written beside it first. A plain re-run keeps this brain. Give each brain its own folder: the embedder lock and its history sit beside the file. |
 | `bash install.sh --brain-db /path/to/snapshot.db` | You want a copy of an existing brain installed. |
 | `bash install.sh --accelerator auto` | Override the compute choice (`auto`, `cuda`, `rocm`, `mps`, `xpu`, `cpu`); a value that contradicts the machine is refused. |
 | `bash install.sh --preflight --python /path/to/python3` | Prove a machine (for example a Mac) before installing: it builds a throwaway environment, checks the device, writes `preflight.json`, and installs nothing. |
@@ -559,7 +562,8 @@ tier runs through an interpreter outside the brain (no venv); see
   done. Add `--plan` to count the work first. The old vectors are kept:
   `voidloom tier rollback` goes back, and `voidloom tier cleanup --confirm <old table>`
   deletes them, their bytes included, once you are sure. On a large brain it prints its
-  progress; if it stops on a stalled batch, re-run with `--batch-size 2`: finished rows are kept.
+  progress; if it stops on a stalled batch, re-run with `--batch-size 2`, or with
+  `--stall-seconds 0` for one memory that needs longer: finished rows are kept.
   `WIZARD_EMBED_MODEL` chooses the model at install only. After that it may only agree
   with `embedder.lock.json`: `tier set` moves the line in the env file's managed block with
   the lock, and set elsewhere to another model it stops the brain with `WEIGHTS_MISMATCH`,

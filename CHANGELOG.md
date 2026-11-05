@@ -34,6 +34,25 @@ All notable changes to Voidloom are recorded here. The format follows
   character budget, a text past 16,000 characters is embedded from its head on an accelerator, progress
   prints every 500 rows, and a batch that stalls stops typed and names `--batch-size`.
 - **Every repair command runs where it is printed:** absolute paths under the install's own interpreter.
+- **A lost lock is known only from what the lock left behind:** its receipt in `embedder.lock.history.jsonl`,
+  and the row `embedder_lock_written` it writes into the brain's own `metadata`, so deleting both files is
+  still seen. A rollback to a brain with no lock clears that row. No record means no lock: a shipped checksum
+  in a stamp proves nothing, because a `tier set` build, a website store and a plain store write them with no
+  lock in sight, so a jina brain keeps serving through all three.
+- **A malformed lock prints its way out:** move it aside and write it again, under the tier the records name.
+- **`doctor` reads the brain as recall does:** the lock's model absent from this disk, a lockless brain's own
+  model absent while it holds vectors, a dropped keyword index and a metadata table nothing builds all read
+  unhealthy, each with the fault named.
+- **A plain re-run of an attached install keeps its brain.** Before, it built a blank brain in a new file and
+  pointed everything at it. An attached file that is missing stops the run; nothing is built in its place.
+- **Windows:** a fresh install completes (`Copy-Item` now lays folders), the semantic stack comes from
+  `install\requirements.txt`, the cause of a refused embedding is printed, a failed run keeps its venv, and a
+  machine whose reranker gate is off fetches no reranker.
+- **`maintain` recomputes a similarity link stamped under another model** when it compares the pair. A link it
+  does not revisit keeps its old strength, and `status` counts it.
+- `model_fetch.py` fetches a jina brain's model at the revision the engine pins, and the installers do the same instead
+  of loading it by name, so the printed fix works there and the hub's moving `main` is never what runs. Its remote code
+  asks for its adapters with no revision, so the fetch also leaves a `refs/main` naming the pin when none is there.
 - **`doctor` exits 4 on an unhealthy brain.** `status` stays 0.
 - **`--dry-run` on every armed unit:** it reads what the unit would work over, prints it and writes nothing.
 - **`voidloom tier set <nomic|qwen>`** moves a brain to another embedding model by re-embedding
@@ -186,15 +205,20 @@ All notable changes to Voidloom are recorded here. The format follows
   `VOIDLOOM_ALLOW_HARD_DELETE`, `claude_memory.py delete --hard` removes the memory, every tier's vector and every
   stamp, then settles everything that names it in the same transaction: log and lineage rows go, and
   the three rows others hang from (a monthly report, an enacted proposal, a whisper digest) stay with
-  the reference cleared. Copies of the text are replaced by `[removed]` wherever a run of 47 characters
-  or more, or the whole text from 12 characters up, is found, in any table and in the memories written
-  from this one. The keyword index is merged, the memory's vectors are overwritten with zeros before
+  the reference cleared. Then the text goes, from a declared list of free-text columns and no others:
+  `metadata`, stamps, provenance keys and config tables are never edited, and a text column the list does
+  not know is left alone and named in the receipt. In a row tied to this memory (a memory written from it, a
+  row that names it or one of those, a summary of a community it sat in) the whole text from 8 characters up
+  and any shared run of 47 characters or more become `[removed]`. In any other row only an exact copy of a
+  substantial text does: the memory's whole text of 47 characters or more, or a cell that is itself 47 or more
+  characters cut from it. A template or a phrase a row merely shares stays. The keyword index is merged, the memory's vectors are overwritten with zeros before
   they are removed, and the file is rebuilt (`VACUUM`), so an older copy an earlier edit left in a
   page's free space goes too, then the write-ahead log is emptied. The receipt prints counts per table
   and no content, and says `compacted` and `wal_emptied`: another process on the brain can block
-  either, and it says why. **What it does not reach:** a separate memory that says the same thing is
-  counted in `other_memories_sharing_text` and left alone; words a model reworded are not a copy it can
-  see; a consolidated memory's vector still averages the deleted one until its next rebuild; a vector
+  either, and it says why. **What it does not reach:** a separate memory holding the same text is
+  counted in `other_memories_sharing_text` and left alone, and rows unrelated to the deleted memory then
+  keep their copies too, because the text is not its alone (`unrelated_rows_left_as_shared_text`); a near
+  copy in an unrelated row, one character off, stays; words a model reworded are not a copy it can see; a consolidated memory's vector still averages the deleted one until its next rebuild; a vector
   replaced before this version may have left its old bytes in the table's storage; and copies are yours
   to handle: the receipt names any beside the brain in `other_copies_not_reached`. A hard delete under
   an interpreter that cannot reach the vector refuses `HARD_DELETE_VECTOR_UNREACHABLE` before any row

@@ -309,7 +309,7 @@ def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple
     try:
         if mod is None:
             raise ValueError("organs/embedder_lock.py is not importable")
-        lock = mod.read_lock(lock_path)
+        lock = mod.read_lock(lock_path, brain=db)
         pins = [(lock["model_id"], lock["revision"], lock.get("files"))]
         if isinstance(lock.get("code"), dict):
             pins.append((lock["code"]["model_id"], lock["code"]["revision"], lock["code"].get("files")))

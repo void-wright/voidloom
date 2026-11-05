@@ -159,23 +159,25 @@ class ALostLock(_Room):
         self.assertEqual(c.execute("SELECT COUNT(*) FROM memories").fetchone()[0], 1)
         c.close()
 
-    def test_lock_and_history_both_gone_is_not_healthy_when_a_stamp_names_a_shipped_model(self):
-        whash = el.catalogue_tiers()["cpu"]["weights_hash"]
+    def test_lock_and_history_both_gone_is_seen_from_the_row_the_lock_left(self):
         c = sqlite3.connect(self.db)
-        c.execute("INSERT INTO embedding_provenance (memory_id, vec_table, model_id, model_ref, weights_hash, dim, content_hash, "
-                  "embedded_at, organ, input_kind) VALUES (1, 'memory_embeddings', 'm', 'r', ?, 768, ?, 't', 'o', 'text')", (whash, "c" * 64))
+        el.mark_brain(c, "cpu")
         c.commit(); c.close()
         (self.d / "embedder.lock.json").unlink()
         (self.d / "embedder.lock.history.jsonl").unlink()
-        el._stamped_by_a_shipped_model.clear()
         self.assertEqual(el.lost_lock(self.d), {"tier": "cpu"})
         env, p = self.cli_json("doctor")
         self.assertFalse(env["data"]["brain_healthy"], env["data"]["reason"])
 
-    def test_control_a_brain_with_no_history_and_no_shipped_stamp_is_legal(self):
+    def test_control_a_stamp_under_a_shipped_model_with_no_record_is_a_legal_brain(self):
+        whash = el.catalogue_tiers()["cpu"]["weights_hash"]
+        c = sqlite3.connect(self.db)
+        c.execute("INSERT INTO embedding_provenance (memory_id, vec_table, model_id, model_ref, weights_hash, dim, content_hash, "
+                  "embedded_at, organ, input_kind) VALUES (1, 'memory_embeddings', 'm', 'r', ?, 768, ?, 't', 'o', 'text')", (whash, "c" * 64))
+        c.execute("DELETE FROM metadata WHERE key = ?", (el.BRAIN_LOCK_KEY,))
+        c.commit(); c.close()
         (self.d / "embedder.lock.json").unlink()
         (self.d / "embedder.lock.history.jsonl").unlink()
-        el._stamped_by_a_shipped_model.clear()
         self.assertIsNone(el.lost_lock(self.d))
 
 
@@ -200,6 +202,13 @@ class SchemaDamage(_Room):
         self.assertNotIn("has no schema", p.stdout)
         self.assertNotIn("Traceback", p.stderr, p.stderr[-500:])
 
+    def test_saboteur_the_front_door_refusal_carries_its_coverage(self):
+        self.plant("DROP TABLE memories_fts")
+        from voidloom import cli
+        env = cli._db_uninitialized_error(str(self.db), verb="recall", exc=sqlite3.OperationalError("no such table: memories_fts"))
+        self.assertEqual(env["code"], "SCHEMA_DAMAGED", env)
+        self.assertIn("coverage", env["data"]["detail"], env)
+
     def test_a_dropped_vector_table_is_not_a_successful_sleep(self):
         self.plant("DROP TABLE memory_embeddings")
         out, p = self.engine("sleep")
@@ -211,6 +220,46 @@ class SchemaDamage(_Room):
 
 @unittest.skipUnless(HAVE_VEC, "needs sqlite_vec")
 class RefusalsCarryCoverage(_Room):
+    def assert_keywords_answered(self, out, code, p):
+        self.assertEqual(out.get("status"), "ok", (out, p.stderr[-400:]))
+        self.assertTrue(out["results"], "the words are still there, so keywords answer")
+        cov = out["coverage"]
+        self.assertEqual((cov["vector_arm"], cov["degraded"], cov["refusal"]), ("refused", True, code), cov)
+
+    def test_the_way_out_of_a_malformed_lock_runs_where_it_is_printed(self):
+        (self.d / "embedder.lock.json").write_text("{ not json")
+        out, p = self.engine("init")
+        self.assertEqual(out.get("error"), "LOCK_MALFORMED", (out, p.stderr[-400:]))
+        fix = out["retry"][0]
+        run = subprocess.run(fix, shell=True, cwd="/", capture_output=True, text=True, timeout=120,
+                             env={**self.env(), "WIZARD_LIBRARY_DB": str(self.db)})
+        self.assertEqual(run.returncode, 0, run.stdout[-400:] + run.stderr[-400:])
+        self.assertEqual(json.loads((self.d / "embedder.lock.json").read_text())["tier"], "cpu")
+        self.assertTrue((self.d / "embedder.lock.json.malformed").exists(), "the bad file is kept to read")
+
+    def test_saboteur_every_verb_a_malformed_lock_stops_names_the_way_out(self):
+        (self.d / "embedder.lock.json").write_text("{ not json")
+        env, p = self.cli_json("tier", "set", "qwen")
+        self.assertEqual(env["code"], "LOCK_MALFORMED", env)
+        self.assertIn("mv ", env["message"])
+        env, p = self.cli_json("doctor")
+        self.assertIn("mv ", json.dumps(env["data"]["checks"]["embedding_coherence"]), env["data"]["reason"])
+
+    def test_saboteur_init_leaves_the_row_a_deleted_history_cannot_take(self):
+        (self.d / "embedder.lock.json").unlink()
+        (self.d / "embedder.lock.history.jsonl").unlink()
+        c = sqlite3.connect(self.db); c.execute("DELETE FROM metadata WHERE key = ?", (el.BRAIN_LOCK_KEY,)); c.commit(); c.close()
+        out, p = self.engine("init", "--tier", "cpu")
+        self.assertEqual(out.get("status"), "ok", (out, p.stderr[-400:]))
+        c = sqlite3.connect(self.db)
+        self.assertEqual(c.execute("SELECT value FROM metadata WHERE key = ?", (el.BRAIN_LOCK_KEY,)).fetchone()[0], "cpu")
+        c.close()
+
+    def test_the_front_door_names_a_typed_refusal(self):
+        (self.d / "embedder.lock.json").unlink()
+        env, p = self.cli_json("store", "--content", "after the lock went", "--category", "insight")
+        self.assertEqual(env["code"], "LOCK_MISSING", env)
+
     def test_no_rows_for_lock_wins_over_the_encoder_and_carries_coverage(self):
         c = schema_migrator.connect(str(self.db))
         c.execute("INSERT INTO memory_embeddings (memory_id, embedding) VALUES (1, ?)", (bytes(4 * 768),))
@@ -218,14 +267,12 @@ class RefusalsCarryCoverage(_Room):
                   "embedded_at, organ, input_kind) VALUES (1, 'memory_embeddings', 'm', 'r', ?, 768, ?, 't', 'o', 'text')", ("f" * 64, "c" * 64))
         c.commit(); c.close()
         out, p = self.engine("recall", "--query", "lantern")
-        self.assertEqual(out.get("error"), "NO_ROWS_FOR_LOCK", (out, p.stderr[-400:]))
-        self.assertIn("coverage", out)
+        self.assert_keywords_answered(out, "NO_ROWS_FOR_LOCK", p)
 
     def test_a_malformed_lock_carries_coverage(self):
         (self.d / "embedder.lock.json").write_text("{ not json")
         out, p = self.engine("recall", "--query", "lantern")
-        self.assertEqual(out.get("error"), "LOCK_MALFORMED", (out, p.stderr[-400:]))
-        self.assertIn("coverage", out)
+        self.assert_keywords_answered(out, "LOCK_MALFORMED", p)
 
     def test_an_empty_batch_carries_coverage(self):
         env, p = self.cli_json("batch-recall", "--items", "[]")

@@ -64,8 +64,8 @@ class _Brain(_Engine):
         c.execute("INSERT INTO access_log (memory_id, access_type, query_text) VALUES (?, 'recall', 'gauge')", (self.mid,))
         c.execute("INSERT INTO belief_scan_queue (memory_id) VALUES (?)", (self.mid,))
         # Copies in tables with no foreign key at all: whole, cut short, and escaped inside JSON.
-        c.execute("INSERT INTO lexical_miss_log (query, ts, fts_hits) VALUES (?, '2026-01-01', 0)", (CONTENT[:90],))
         quoted = CONTENT.replace("Opening line", 'Opening "line')
+        c.execute("INSERT INTO lexical_miss_log (query, ts, fts_hits) VALUES (?, '2026-01-01', 0)", (quoted[:90],))
         c.execute("UPDATE memories SET content = ? WHERE id = ?", (quoted, self.mid))
         c.execute("INSERT INTO dream_phase_log (phase_name, status, result_json) VALUES ('p', 'ok', ?)",
                   (json.dumps({"note": quoted}),))

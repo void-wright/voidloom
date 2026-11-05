@@ -103,6 +103,8 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tupl
 CATALOGUE_PATH = Path(__file__).resolve().parent / "embedders.lock.json"
 LOCK_NAME = "embedder.lock.json"
 LOCK_HISTORY_NAME = "embedder.lock.history.jsonl"
+BRAIN_NAME = "claude_memory.db"
+BRAIN_LOCK_KEY = "embedder_lock_written"       # metadata row: see mark_brain
 _LOCK_WRITING_RECEIPTS = ("init", "replace", "tier-set")
 CATALOGUE_SCHEMA = "voidloom.embedder-catalogue/1"
 LOCK_SCHEMA = "voidloom.embedder-lock/1"
@@ -521,49 +523,86 @@ def fetch_command(db: Optional[Union[str, Path]] = None) -> str:
     return organ_command("model_fetch.py", "--db", db or brain_db())
 
 
-_stamped_by_a_shipped_model: Dict[str, Optional[Dict[str, Any]]] = {}
-
-
-def _promised_by_stamps(data_dir: Path) -> Optional[Dict[str, Any]]:
-    """{"tier": ...} when a stamp beside this directory names a checksum the catalogue ships. A stamp under a shipped
-    checksum is only ever written under a lock, or by a `re-embed` that left a receipt, so with no history at all it is
-    the evidence that a lock existed. Remembered per process: a lockless brain's every read comes through here."""
-    key = str(data_dir)
-    if key in _stamped_by_a_shipped_model:
-        return _stamped_by_a_shipped_model[key]
-    found = None
+def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str]) -> None:
+    """Say inside the brain whether a lock was written for it: `metadata.embedder_lock_written` holds the tier, and an
+    empty value says a rollback took the brain back to having none. Deleting the lock and its history leaves this row
+    behind. A connection takes the row in its own transaction; a path writes it now, and a brain too busy or too damaged
+    to take it loses only this second record, never the lock."""
+    value = tier or ""
+    own = not isinstance(brain, sqlite3.Connection)
+    conn: Optional[sqlite3.Connection] = None
     try:
-        hashes = {e["weights_hash"]: t for t, e in catalogue_tiers().items()}
-        marks = ",".join("?" * len(hashes))
-        for db in sorted(data_dir.glob("*.db")):
-            c = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
-            try:
-                row = c.execute(f"SELECT weights_hash FROM embedding_provenance WHERE weights_hash IN ({marks}) LIMIT 1",
-                                list(hashes)).fetchone()
-            except sqlite3.Error:
-                row = None
-            finally:
-                c.close()
-            if row:
-                found = {"tier": hashes[row[0]]}
-                break
-    except (OSError, sqlite3.Error, EmbedderLockError):
-        found = None
-    _stamped_by_a_shipped_model[key] = found
-    return found
+        if own and not Path(brain).is_file():
+            return
+        conn = sqlite3.connect(str(brain), timeout=60.0) if own else brain
+        conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (BRAIN_LOCK_KEY, value))
+        if own:
+            conn.commit()
+    except sqlite3.Error as e:
+        print(f"[embedder_lock] the lock is written, but its row in the brain is not: {e}", file=sys.stderr)
+    finally:
+        if own and conn is not None:
+            conn.close()
 
 
-def lost_lock(data_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
-    """Should a lock be beside this database? The history file answers: every write of a lock
-    leaves a receipt there. {"tier": ...} when the last word on the lock says it exists, None
-    when no receipt ever wrote one, or a rollback took the brain back to having none. Only the
-    receipts that move the lock count: `re-embed` writes one on a brain that never had a lock.
-    A history with nothing readable in it still proves a lock was written. With no history
-    file at all, the stamps answer (_promised_by_stamps)."""
+def _read_brain(brain: Union[None, str, Path, sqlite3.Connection], sql: str, args: Sequence[Any]) -> Optional[Any]:
+    """One value from this brain's own database, read-only; None when it holds none or cannot be read."""
+    own = not isinstance(brain, sqlite3.Connection)
+    conn: Optional[sqlite3.Connection] = None
     try:
-        raw = (Path(data_dir) / LOCK_HISTORY_NAME).read_text(encoding="utf-8", errors="replace")
+        if brain is None or (own and not Path(brain).is_file()):
+            return None
+        conn = sqlite3.connect(f"{Path(brain).resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) if own else brain
+        row = conn.execute(sql, args).fetchone()
+        return None if row is None else row[0]
+    except (sqlite3.Error, OSError, ValueError):
+        return None
+    finally:
+        if own and conn is not None:
+            conn.close()
+
+
+def _brain_beside(data_dir: Path) -> Path:
+    return Path(data_dir) / BRAIN_NAME
+
+
+def _tier_of_brain(brain: Union[None, str, Path, sqlite3.Connection]) -> Optional[str]:
+    """The catalogue tier whose table this brain declares, or None: a tier nothing ships (jina), or nothing declared."""
+    table = _read_brain(brain, "SELECT value FROM metadata WHERE key = 'active_embedding_table'", ())
+    try:
+        return next((t for t, e in catalogue_tiers().items() if e["vec_table"] == table), None)
+    except EmbedderLockError:
+        return None
+
+
+def lost_lock(data_dir: Union[str, Path], brain: Union[None, str, Path, sqlite3.Connection] = None
+              ) -> Optional[Dict[str, Any]]:
+    """Should a lock be beside this database? Only what `write_lock` itself left can say so: a receipt in the history
+    file, and the row it wrote into the brain (`mark_brain`), which survives both files being deleted. {"tier": ...}
+    when the last word on the lock says it exists, None when no receipt and no row says one was written, or a rollback
+    took the brain back to having none. No record, no lock: a brain that predates the lock is a legal brain, and a stamp
+    proves nothing here, because a store, a `tier set` build and a website store all write shipped checksums with no
+    lock in sight. Only the receipts that move the lock count: `re-embed` writes one on a brain that never had a lock.
+    A history with nothing readable in it still proves a lock was written. `brain` is a connection or a path; by
+    default the brain of the usual name beside the history."""
+    d = Path(data_dir)
+    mark = _read_brain(brain if brain is not None else _brain_beside(d),
+                       "SELECT value FROM metadata WHERE key = ?", (BRAIN_LOCK_KEY,))
+    if mark == "":
+        return None                             # the rollback's own word, written with the rollback
+    written = _lock_in_history(d)
+    if written is None and mark:
+        return {"tier": str(mark)}
+    if written is not None and not written.get("tier") and mark:
+        return {"tier": str(mark)}
+    return written
+
+
+def _lock_in_history(data_dir: Path) -> Optional[Dict[str, Any]]:
+    try:
+        raw = (data_dir / LOCK_HISTORY_NAME).read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return _promised_by_stamps(Path(data_dir))
+        return None
     lines = [ln for ln in raw.splitlines() if ln.strip()]
     readable = 0
     locked: Optional[Dict[str, Any]] = None
@@ -606,25 +645,29 @@ def refuse_lost_lock(target: Any) -> None:
             raise
 
 
-def read_lock(path: Union[str, Path]) -> Dict[str, Any]:
+def read_lock(path: Union[str, Path], *, brain: Union[None, str, Path, sqlite3.Connection] = None) -> Dict[str, Any]:
     """Open and shape-check the install lock. LOCK_MISSING / LOCK_MALFORMED only:
     catalogue membership is the reader's and the loader's question, decided
-    AFTER the facts (rows, bytes) -- see the module header."""
+    AFTER the facts (rows, bytes) -- see the module header. `brain` is the database this
+    lock serves, when the caller knows it: an attached brain need not have the usual name."""
     p = Path(path)
     try:
         raw = p.read_bytes()
     except FileNotFoundError:
-        lost = lost_lock(p.parent)
+        lost = lost_lock(p.parent, brain)
         if lost is not None:
-            tier = lost.get("tier") or "<tier>"
-            fix = organ_command("claude_memory.py", "init", "--tier", tier)
-            raise EmbedderLockError(
-                "LOCK_MISSING",
-                f"no embedder lock at {p}, and {LOCK_HISTORY_NAME} beside it records one (tier {tier}): "
-                f"this brain was locked and the file is gone, so nothing says which model its vectors "
-                f"came from. Restore the file from a backup, or run `{fix}` to write it again from the "
-                f"catalogue.",
-                lock=str(p), was_locked=True, tier=lost.get("tier"), retry=[fix])
+            tier = lost.get("tier") or _tier_of_brain(brain if brain is not None else _brain_beside(p.parent))
+            said = f"tier {tier}" if tier else "its tier is not recorded"
+            lead = (f"no embedder lock at {p}, and the record a lock leaves behind says one was written ({said}): "
+                    f"this brain was locked and the file is gone, so nothing says which model its vectors came from. ")
+            if tier:
+                fix = organ_command("claude_memory.py", "init", "--tier", tier)
+                raise EmbedderLockError("LOCK_MISSING", lead + f"Restore the file from a backup, or run `{fix}` to "
+                                        "write it again from the catalogue.",
+                                        lock=str(p), was_locked=True, tier=tier, retry=[fix])
+            raise EmbedderLockError("LOCK_MISSING", lead + "Restore the file from a backup, or run `claude_memory.py "
+                                    "init --tier` naming the tier its vectors came from, cpu or gpu.",
+                                    lock=str(p), was_locked=True, tier=None)
         raise EmbedderLockError(
             "LOCK_MISSING",
             f"no embedder lock at {p}. A clean install writes it beside the database "
@@ -633,24 +676,48 @@ def read_lock(path: Union[str, Path]) -> Dict[str, Any]:
     except OSError as e:
         # It is THERE and cannot be read: never read as absent, which would put a locked
         # brain on the lock-less rule and search its whole table.
-        raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} unreadable: {e}", lock=str(p))
+        raise _with_way_out(EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} unreadable: {e}", lock=str(p)),
+                            p, brain, None)
+    lock: Any = None
     try:
-        lock = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError) as e:
-        raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} is not JSON: {e}", lock=str(p))
-    if not isinstance(lock, dict):
-        raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} is not an object", lock=str(p))
-    missing = [k for k in _LOCK_REQUIRED if k not in lock]
-    if missing:
-        raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} is missing {missing}",
-                                lock=str(p), missing=missing)
-    _check_entry(lock, where=f"lock {p}")
-    if not isinstance(lock.get("tier"), str) or not lock["tier"].strip():
-        raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p}: tier must be a non-empty string",
-                                lock=str(p))
-    _check_lock_table(lock, p)
+        try:
+            lock = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as e:
+            raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} is not JSON: {e}", lock=str(p))
+        if not isinstance(lock, dict):
+            raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} is not an object", lock=str(p))
+        missing = [k for k in _LOCK_REQUIRED if k not in lock]
+        if missing:
+            raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p} is missing {missing}",
+                                    lock=str(p), missing=missing)
+        _check_entry(lock, where=f"lock {p}")
+        if not isinstance(lock.get("tier"), str) or not lock["tier"].strip():
+            raise EmbedderLockError("LOCK_MALFORMED", f"embedder lock at {p}: tier must be a non-empty string",
+                                    lock=str(p))
+        _check_lock_table(lock, p)
+    except EmbedderLockError as e:
+        if e.code != "LOCK_MALFORMED":
+            raise
+        raise _with_way_out(e, p, brain, lock)
     lock["_path"] = str(p)
     return lock
+
+
+def _with_way_out(e: EmbedderLockError, p: Path, brain: Any, lock: Any) -> EmbedderLockError:
+    """A malformed lock stops `init`, `tier set` and the installer alike, so the refusal itself carries the route: move
+    the file aside and write it again, under the tier the records name. What they cannot name, it says it cannot."""
+    tier = (lost_lock(p.parent, brain) or {}).get("tier") or _tier_of_brain(brain if brain is not None
+                                                                            else _brain_beside(p.parent))
+    if not tier and isinstance(lock, dict) and lock.get("tier") in catalogue_tiers():
+        tier = lock["tier"]
+    moved = shlex.quote(str(p.with_name(p.name + ".malformed")))
+    if tier:
+        fix = f"mv {shlex.quote(str(p))} {moved} && {organ_command('claude_memory.py', 'init', '--tier', tier)}"
+        return EmbedderLockError("LOCK_MALFORMED", f"{str(e).split(': ', 1)[1]}. Restore it from a backup, or move it "
+                                 f"aside and write it again: `{fix}`", **{**e.detail, "tier": tier, "retry": [fix]})
+    return EmbedderLockError("LOCK_MALFORMED", f"{str(e).split(': ', 1)[1]}. Restore it from a backup, or move it aside "
+                             f"and run `claude_memory.py init --tier` naming the tier its vectors came from, cpu or gpu "
+                             "(nothing beside this brain records it).", **e.detail)
 
 
 def _check_lock_table(lock: Dict[str, Any], p: Path) -> None:
@@ -700,7 +767,8 @@ def _fsync_dir(d: Path) -> None:
 
 
 def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Union[str, Path]] = None,
-               locked_by: str = "claude_memory.init", replace: bool = False) -> Dict[str, Any]:
+               locked_by: str = "claude_memory.init", replace: bool = False,
+               brain: Union[None, str, Path, sqlite3.Connection] = None) -> Dict[str, Any]:
     """Write `<data-dir>/embedder.lock.json` naming exactly ONE catalogue tier.
 
     temp -> fsync -> rename, so a crash leaves either the old lock or the new one
@@ -708,8 +776,13 @@ def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Uni
     write. An existing lock is NEVER silently replaced (an init re-run must not
     re-point a brain); `replace=True` is used by `tier set` (organs/tier_set.py)
     alone, and only after every memory is embedded under the new tier.
+
+    `brain` is the database the lock serves: it takes the row `lost_lock` reads, so a lock
+    whose file and history are both deleted is still known to have existed. A connection
+    takes it in the caller's transaction. By default, the brain of the usual name beside the lock.
     """
     d = Path(data_dir)
+    home = brain if brain is not None else _brain_beside(d)
     tiers = catalogue_tiers(catalogue)
     if tier not in tiers:
         raise EmbedderLockError(
@@ -729,7 +802,8 @@ def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Uni
                     "Re-pointing an install without re-embedding is the defect this file exists "
                     "to make impossible; `voidloom tier set <tier>` is the path that re-embeds.",
                     lock=str(target), existing_tier=previous["tier"], requested_tier=tier)
-            return previous                     # same tier: idempotent, nothing written
+            mark_brain(home, tier)              # the row, for a brain locked before it existed
+            return previous                     # same tier: idempotent, no file written
     entry = tiers[tier]
     lock: Dict[str, Any] = {
         "schema": LOCK_SCHEMA,
@@ -774,8 +848,19 @@ def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Uni
                      if previous else None),
     }
     append_receipt(d, receipt)
+    mark_brain(home, tier)
     lock["_path"] = str(target)
     return lock
+
+
+def _brain_of(target: Union[None, str, Path, sqlite3.Connection]) -> Union[None, str, Path, sqlite3.Connection]:
+    """The database a `resolve` target names; a data directory names none, and the usual name beside it is read."""
+    if isinstance(target, sqlite3.Connection):
+        return target
+    if target is None:
+        return None
+    p = Path(target)
+    return p if p.is_file() or p.suffix in (".db", ".sqlite", ".sqlite3") else None
 
 
 def resolve(target: Union[None, str, Path, sqlite3.Connection] = None) -> Dict[str, Any]:
@@ -786,7 +871,7 @@ def resolve(target: Union[None, str, Path, sqlite3.Connection] = None) -> Dict[s
     trap and on a clean install the key no longer exists. Catalogue membership is
     deliberately NOT checked here (module header: facts before policy).
     """
-    return read_lock(lock_path_for(target))
+    return read_lock(lock_path_for(target), brain=_brain_of(target))
 
 
 # --------------------------------------------------------------------------
@@ -1242,7 +1327,7 @@ def describe(target: Union[None, str, Path, sqlite3.Connection] = None) -> Dict[
     try:
         path = lock_path_for(target)
         out["lock_path"] = str(path)
-        lock = read_lock(path)
+        lock = read_lock(path, brain=_brain_of(target))
     except EmbedderLockError as e:
         out["refusal"] = e.as_dict()
         return out

@@ -25,7 +25,7 @@ def is_new(db: Path) -> str:
     text = (ROOT / "install.sh").read_text(encoding="utf-8")
     i = text.index("hd_brain_is_new() {")
     func = text[i:text.index("BRAIN_IS_NEW=", i)]
-    script = f'PY_SYS="{sys.executable}"; DB_PATH="{db}"\n{func}\nhd_brain_is_new\n'
+    script = f'PY_SYS="{sys.executable}"; PKG_ROOT="{ROOT}"; DB_PATH="{db}"\n{func}\nhd_brain_is_new\n'
     return subprocess.run(["bash", "-c", script], capture_output=True, text=True).stdout.strip()
 
 
@@ -77,7 +77,7 @@ class TheNightlyJob(unittest.TestCase):
 
     def test_the_windows_installer_keeps_the_same_rule(self):
         text = (ROOT / "install" / "install.ps1").read_text(encoding="utf-8")
-        i = text.index("if ($PriorInstall) {\n                    Say \"  this brain already existed")
+        i = text.index("if (-not $BrainIsNew) {\n                    Say \"  this brain already existed")
         self.assertIn("--outstanding", text[i:i + 300])
 
 

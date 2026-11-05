@@ -118,6 +118,7 @@ class BackfillCountsStamps(unittest.TestCase):
                 (d / "embedder.lock.history.jsonl").write_text('{"action": "re-embed"}\n', encoding="utf-8")
             table = TABLES[tier][0]
             c = _connect(db)
+            c.execute("DELETE FROM metadata WHERE key = 'embedder_lock_written'")     # a brain older than any lock
             c.execute("UPDATE embedding_provenance SET weights_hash = 'unresolved' WHERE memory_id = 1")
             c.execute("UPDATE memories SET content = 'edited' WHERE id = 3")
             c.execute(f"DELETE FROM {table} WHERE memory_id = 4")

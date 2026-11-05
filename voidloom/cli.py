@@ -544,12 +544,22 @@ def _coverage_refusal(out: Dict[str, Any]) -> Optional[str]:
     # Run under an interpreter without vec0, on a brain with nothing stamped yet: Tier 0, as the installer said.
     if code == "PROVENANCE_UNREADABLE" and "no such module: vec0" in str(cov.get("message")) and not out.get("has_stamps"):
         return None
+    if out.get("lockless") and _table_nothing_builds(out):
+        return code or "unreadable"                # what metadata names is not a table: the search has nowhere to go
     if out.get("lockless"):
         if code == "NO_ROWS_FOR_MODEL":
             return None if not (cov.get("stamped_foreign") or cov.get("stamped_without_vector")) else code
         if code == "LOCK_MISSING" and not out.get("stranded_vectors"):
             return None                            # no lock, no tier, no vectors: a keyword brain, as Tier 0 builds one
     return code or "unreadable"
+
+
+def _table_nothing_builds(out: Dict[str, Any]) -> bool:
+    table = out.get("recorded_table")
+    if not table:
+        return False
+    import embed_resolver as _er  # type: ignore
+    return table not in _er._DIM_FOR
 
 
 def _stranded_vectors(conn: sqlite3.Connection, tables: Sequence[str]) -> List[str]:
@@ -798,6 +808,56 @@ def _incomplete_model(models: Dict[str, Any]) -> Optional[str]:
     if not bad:
         return None
     return f"SNAPSHOT_ABSENT: {', '.join(bad)} is incomplete (an interrupted download). Fix: {models.get('lock_incomplete_fix')}"
+
+
+def _absent_model(models: Dict[str, Any], db: Optional[str], coherence: Dict[str, Any]) -> Optional[str]:
+    """The model this brain embeds under is not on this disk, so recall answers by keyword. A locked brain's store then
+    refuses; a brain with no lock stores keyword-only. A keyword-only brain, or one with no vector, needs no model."""
+    if coherence.get("tier0_only"):
+        return None
+    gone = [k for k, ok in (models.get("lock_snapshots") or {}).items() if not ok]
+    locked = bool(gone)
+    if not gone and not models.get("lock") and models.get("brain_tier") and models.get("present") is False \
+            and not models.get("missing_modules") and _holds_vectors(db, coherence):
+        gone = [f"the {models['brain_tier']} model"]
+    if not gone:
+        return None
+    _organs_importable()
+    import embedder_lock  # type: ignore
+    effect = "a store refuses" if locked else "a store is keyword-only"
+    return (f"SNAPSHOT_ABSENT: {', '.join(gone)} is not on this disk: recall answers by keyword and {effect}. "
+            f"Fix: {embedder_lock.fetch_command(db)}")
+
+
+def _holds_vectors(db: Optional[str], coherence: Dict[str, Any]) -> bool:
+    table = coherence.get("recorded_table")
+    if not table or not db:
+        return False
+    try:
+        conn = _open_brain_ro(db)
+        try:
+            return conn.execute(f"SELECT 1 FROM {table}_rowids LIMIT 1").fetchone() is not None
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+
+
+def _schema_gap(db: Optional[str]) -> Optional[str]:
+    """The keyword index is gone: keyword recall and every store fail, whatever the vectors say."""
+    try:
+        conn = _open_brain_ro(db)
+        try:
+            held = conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'memories_fts'").fetchone()
+            has_rows = conn.execute("SELECT 1 FROM memories LIMIT 1").fetchone()
+        finally:
+            conn.close()
+    except (sqlite3.Error, OSError, TypeError):
+        return None
+    if held or not has_rows:
+        return None
+    return ("SCHEMA_DAMAGED: memories_fts is gone: keyword recall and every store fail. Restore it from a backup, or from "
+            "the pre-image the installer kept beside the brain.")
 
 
 def _brain_fault(coherence: Dict[str, Any]) -> Optional[str]:
@@ -1160,7 +1220,7 @@ def _db_uninitialized_error(db: Optional[str], *, verb: str, exc: Optional[BaseE
         return error("SCHEMA_DAMAGED",
                      f"brain at {db_path!r} holds memories and is missing part of its schema ({exc}). Restore it from a "
                      "backup, or from the pre-image the installer kept beside it.",
-                     data={"db_path": db_path}, verb=verb)
+                     data={"db_path": db_path, "coverage": _coverage_of(db_path)}, verb=verb)
     return error(
         "db_uninitialized",
         (f"brain at {db_path!r} has no schema (the file exists but its tables "
@@ -1894,7 +1954,9 @@ def verb_doctor(args) -> Dict[str, Any]:
     elif not engine_health.get("importable"):
         _reason = f"engine not importable: {engine_health.get('error')}"
     else:
-        _reason = _foreign_env_dir() or _incomplete_model(models) or _brain_fault(_coh)
+        _db = brain.get("db_path")
+        _reason = (_foreign_env_dir() or _incomplete_model(models) or _schema_gap(_db) or _brain_fault(_coh)
+                   or _absent_model(models, _db, _coh))
         if not _reason and "peft" in (models.get("missing_modules") or []):
             _reason = (f"this brain's jina model needs peft, which {sys.executable} does not have: recall is answering "
                        f"by keyword. Fix: {sys.executable} -m pip install peft")
@@ -2159,6 +2221,23 @@ def _status_lock(memory_write: Any, conn: sqlite3.Connection) -> Dict[str, Any]:
         return {"present": None, "refusal": code, "message": str(e)}
 
 
+def _status_faults(db: str) -> List[str]:
+    """What `doctor` would refuse this brain for that the figures beside it cannot show: the same two readers."""
+    meta: Dict[str, Any] = {}
+    try:
+        conn = _open_brain_ro(db)
+        try:
+            rows = dict(conn.execute("SELECT key, value FROM metadata WHERE key IN ('active_embedding_table', "
+                                     "'tier0_only')").fetchall())
+        finally:
+            conn.close()
+        meta = {"recorded_table": rows.get("active_embedding_table"), "tier0_only": _keyword_only(rows.get("tier0_only"))}
+    except sqlite3.Error:
+        pass
+    models = _bootstrap._detect_models(Path(db))
+    return [f for f in (_schema_gap(db), _incomplete_model(models), _absent_model(models, db, meta)) if f]
+
+
 def verb_status(args) -> Dict[str, Any]:
     """`voidloom status`: this brain's index on one page, without a model: the lock, coverage as matched/total from
     the provenance reader, the derived layer's stale count, the seed numbers and the counts. Every number is derived
@@ -2192,7 +2271,8 @@ def verb_status(args) -> Dict[str, Any]:
     finally:
         conn.close()
     return ok("status_ok", {"db_path": db, "lock": lock, "coverage": coverage, "derived_layer": derived,
-                            "seed": seed, "counts": counts, "line": derived.get("line")}, verb="status")
+                            "seed": seed, "counts": counts, "line": derived.get("line"), "faults": _status_faults(db)},
+              verb="status")
 
 
 def _visibility(tags: List[str]) -> Tuple[str, str]:
@@ -2817,7 +2897,8 @@ def _wrap_engine_result(res: Dict[str, Any], *, verb: str,
         return ok(ok_code, res, verb=verb)
     # Engine error (printed by _error / a failure path).
     msg = res.get("message") or res.get("error") or "engine reported an error"
-    return error("engine_error", str(msg), data=res, verb=verb)
+    typed = res.get("error")                    # a typed refusal keeps its name: LOCK_MISSING, SCHEMA_DAMAGED, ...
+    return error(typed if isinstance(typed, str) and typed.isupper() else "engine_error", str(msg), data=res, verb=verb)
 
 
 _APPROVAL_WORK_KEYS = ("enacted", "failed", "blocked", "skipped")

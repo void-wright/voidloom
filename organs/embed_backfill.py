@@ -174,7 +174,7 @@ def outstanding(db_path: str) -> Dict[str, Any]:
     _organs_on_path()
     import embed_resolver
     import memory_write
-    py = sys.executable
+    import embedder_lock
     conn = _connect(db_path)
     try:
         table, dim = embed_resolver.resolve(conn)
@@ -184,11 +184,10 @@ def outstanding(db_path: str) -> Dict[str, Any]:
     finally:
         conn.close()
     legacy = cov.get("legacy_unverified") if isinstance(cov.get("legacy_unverified"), dict) else {}
-    here = os.path.dirname(os.path.abspath(__file__))
     return {"status": "ok", "table": table, "dim": dim, "live_memories": live, "without_a_vector": missing,
             "legacy_unverified": legacy.get("legacy", 0), "legacy_of": legacy.get("of", 0),
-            "embed_command": f"{py} {os.path.join(here, 'embed_backfill.py')} {db_path} --only-missing",
-            "verify_command": f"{py} {os.path.join(here, 'embedding_upgrade.py')} --db-path {db_path} re-embed"}
+            "embed_command": embedder_lock.organ_command("embed_backfill.py", db_path, "--only-missing"),
+            "verify_command": embedder_lock.organ_command("embedding_upgrade.py", "--db-path", db_path, "re-embed")}
 
 
 def backfill(db_path: str, limit: Optional[int] = None,

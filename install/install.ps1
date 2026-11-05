@@ -146,6 +146,9 @@ function Invoke-PyOut {
     if ($Exe -eq "py -3") { & py -3 @ArgList } else { & $Exe @ArgList }
 }
 
+# Read BEFORE anything is written, by the reader install.sh uses: a brain with no owner memory and no vector may be embedded
+# whole, as a fresh one is. Anything else is an existing brain, told what is outstanding and how.
+$BrainIsNew = ((Invoke-PyOut $PySys @((Join-Path $PkgRoot "install\brain_is_new.py"), $DbPath) 2>$null | Select-Object -Last 1) -eq "yes")
 # `init` under the venv, its words kept. A typed refusal has nothing to do with the interpreter and a retry cannot repair
 # it, so it stops the install and is shown; anything else is returned, with the engine's last line in $script:InitCause
 # for the caller's message. Stderr is folded in and stringified: a raw error record would not read as the engine's line.
@@ -267,7 +270,11 @@ foreach ($d in @($BrainDir, $SkillsDir, $HooksDir, $LogsDir)) {
 function Copy-IfPresent ($name, $dest) {
     $src = Join-Path $PkgRoot $name
     if (Test-Path $src) {
-        if ($DryRun) { Say "  DRY: copy $name -> $dest" } else { Copy-Item -Force $src $dest }
+        if ($DryRun) { Say "  DRY: copy $name -> $dest" }
+        else {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
+            Copy-Item -Recurse -Force $src (Split-Path -Parent $dest)
+        }
     }
 }
 # Whole memory/ payload if shipped
@@ -481,12 +488,11 @@ function Tier1-Hint ($reason) {
   Tier 0 is ACTIVE — you have a working keyword-recall brain now.
   The optional SEMANTIC upgrade (Tier 1) was not completed:
     reason: $reason
-  To add semantic recall later, ensure Python >= 3.10, then re-run:
-    powershell -ExecutionPolicy Bypass -File install.ps1
+  $(if ($script:EmbedOwed) { "To add semantic recall, run this once, then re-run the installer to verify:`n    $($script:EmbedOwed)" } else { "To add semantic recall later, fix the reason above, then re-run:`n    powershell -ExecutionPolicy Bypass -File install.ps1" })
   or build by hand:
     $PySys -m venv "$VenvDir"
     "$VenvPy" -m pip install --upgrade pip
-    "$VenvPy" -m pip install sentence-transformers sqlite_vec einops
+    "$VenvPy" -m pip install -r "$(Join-Path $BrainDir 'install\requirements.txt')"
     `$env:WIZARD_EMBED_MODEL='$EmbedTier'; "$VenvPy" "$(Join-Path $BrainDir 'organs\claude_memory.py')" init
   ----------------------------------------------------------------
 "@
@@ -503,13 +509,21 @@ if ($Tier0Only) {
 } elseif ($DryRun) {
     Say "  DRY: would build venv at $VenvDir, pip install heavy stack, PRE-DOWNLOAD the embedder + the reranker backend '$RerankerBackend' ($RerankerRepo), init, re-embed"
 } else {
-    Invoke-Py $PySys @("-m","venv",$VenvDir) | Out-Null
+    # A venv a failed attempt left behind keeps pointing at that attempt's interpreter: it is rebuilt, not reused.
+    $venvArgs = @("-m","venv",$VenvDir)
+    if (Test-Path $VenvPy) {
+        & $VenvPy -m pip --version *> $null
+        if ($LASTEXITCODE -ne 0) { $venvArgs = @("-m","venv","--clear",$VenvDir) }
+    }
+    Invoke-Py $PySys $venvArgs | Out-Null
     if (Test-Path $VenvPy) {
         Say "  venv created at $VenvDir"
         & $VenvPy -m pip install --upgrade pip *> $null
-        & $VenvPy -m pip install sentence-transformers sqlite_vec einops *> $null
+        # The pinned stack, as install.sh installs it: an unpinned one resolves whatever is newest on the day, and the
+        # pinned model loads are only known to work under the pins.
+        $pipOut = @(& $VenvPy -m pip install -r (Join-Path $BrainDir "install\requirements.txt") 2>&1 | ForEach-Object { "$_" })
         if ($LASTEXITCODE -eq 0) {
-            Say "  heavy stack installed (sentence-transformers + sqlite_vec)"
+            Say "  heavy stack installed (install\requirements.txt)"
             $env:WIZARD_EMBED_MODEL = $EmbedTier
             $env:WIZARD_LIBRARY_DB = $DbPath
             $env:WIZARD_LIBRARY_HOME = $BrainDir
@@ -533,8 +547,15 @@ if ($Tier0Only) {
             # above) and fetch THAT.
             Say "  pre-downloading required models to ~/.cache/huggingface (one-time):"
             Say "    - embedding model  $EmbedRepo"
-            Say "    - reranker model   $RerankerRepo   (backend '$RerankerBackend' — this host loads this one)"
-            $env:RERANKER_MODEL = $RerankerRepo
+            # A machine whose reranker gate is off never loads a reranker, so it is not fetched (hybrid_retrieval.reranker_gate).
+            $gateOn = (& $VenvPy -c "import sys; sys.path.insert(0, r'$BrainDir\organs'); import hybrid_retrieval; print(bool(hybrid_retrieval.reranker_gate()['enabled']))" 2>$null | Select-Object -Last 1) -ne "False"
+            if ($gateOn) {
+                Say "    - reranker model   $RerankerRepo   (backend '$RerankerBackend' — this host loads this one)"
+                $env:RERANKER_MODEL = $RerankerRepo
+            } else {
+                Say "    - no reranker: this machine's gate is off, so nothing would load it"
+                $env:RERANKER_MODEL = ""
+            }
             $env:EMBED_MODEL_REPO = $EmbedRepo
             $predlPy = @'
 import os, sys
@@ -567,9 +588,9 @@ try:
             snap, computed = embedder_lock.verify_snapshot_against_lock(lock)
         print(f"  cached + verified {lock['model_id']} (weights {computed[:12]} == lock)", flush=True)
     else:
-        from sentence_transformers import SentenceTransformer
-        print(f"  ... fetching embedder {EMBED_MODEL} (no install lock for this tier)", flush=True)
-        SentenceTransformer(EMBED_MODEL, trust_remote_code=True)
+        import embedding_upgrade
+        print(f"  ... fetching embedder {EMBED_MODEL} at the engine's pin (no install lock for this tier)", flush=True)
+        embedding_upgrade.fetch_jina_at_pin()
     # THE RERANKER, BY ITS PIN: only a reranker the catalogue pins is fetched, at that
     # revision, and hashed before it is called cached. A name is not a pin: the unpinned
     # fallback reranker is never pre-fetched.
@@ -583,7 +604,7 @@ try:
 except Exception as e:
     code = getattr(e, "code", None)
     print(f"  ! model pre-download failed: {code + ': ' if code else ''}{e}", file=sys.stderr); sys.exit(4)
-print("  models cached and verified against their pins -- full L4 (semantic + reranked hybrid) recall ready.")
+print("  models cached and verified against their pins" + (" -- semantic + reranked hybrid recall ready." if RERANKER_MODEL else " -- semantic recall ready."))
 sys.exit(0)
 '@
             $tmpPre = Join-Path $env:TEMP "wl_predownload.py"; Set-Content -Path $tmpPre -Value $predlPy -Encoding UTF8
@@ -591,7 +612,7 @@ sys.exit(0)
             $preDlOk = ($LASTEXITCODE -eq 0)
             Remove-Item $tmpPre -ErrorAction SilentlyContinue
             if ($preDlOk) {
-                Say "  models pre-downloaded ($EmbedRepo + $RerankerRepo) — nothing will lazy-download on first recall."
+                Say "  models pre-downloaded — nothing will lazy-download on first recall."
             } else {
                 Warn "could not pre-download one or both models (offline, low disk, or HF unreachable)."
                 Warn "Tier 0 (keyword recall) is unaffected. To fetch the models by hand:"
@@ -611,12 +632,18 @@ import embed_backfill
 res = embed_backfill.backfill(db_path)
 print(f"  re-embedded {res.get('embedded')} memories into {res.get('table')} ({res.get('dim')}-dim): "
       f"{res.get('status')}, {res.get('unembedded_after')} without a vector")
+if res.get("status") != "ok":
+    print(f"  why: {res.get('message')}")
 sys.exit({"ok": 0, "incomplete": 1, "refused": 3}.get(res.get("status"), 1))
 '@
                 # An existing brain is never embedded unasked: it is told what is outstanding, and how.
-                if ($PriorInstall) {
+                if (-not $BrainIsNew) {
                     Say "  this brain already existed, so nothing is embedded here. What is outstanding:"
                     & $VenvPy (Join-Path $BrainDir "organs\embed_backfill.py") $DbPath --outstanding
+                    $owed = (& $VenvPy (Join-Path $BrainDir "organs\embed_backfill.py") $DbPath --outstanding --json 2>$null | Out-String | ConvertFrom-Json)
+                    if ($owed -and [int]$owed.without_a_vector -gt 0) {
+                        $script:EmbedOwed = $owed.embed_command
+                    }
                 } else {
                     $tmp2 = Join-Path $env:TEMP "wl_reembed.py"; Set-Content -Path $tmp2 -Value $reembedPy -Encoding UTF8
                     & $VenvPy $tmp2 $DbPath $BrainDir
@@ -624,18 +651,22 @@ sys.exit({"ok": 0, "incomplete": 1, "refused": 3}.get(res.get("status"), 1))
                     else { Invoke-SeedSelfTest }
                     Remove-Item $tmp2 -ErrorAction SilentlyContinue
                 }
-                & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") recall --query "how do I capture knowledge as I work" --top_k 1 *> $null
-                if ($LASTEXITCODE -eq 0) {
+                $proof = @(& $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") recall --query "how do I capture knowledge as I work" --top_k 1 2>&1 | ForEach-Object { "$_" })
+                if ($LASTEXITCODE -eq 0 -and "$proof" -match '"vector_arm":\s*"ran"') {
                     Say "  Tier 1 VERIFIED — semantic recall is live."
                     $Tier1Ok = $true
-                } else { $Tier1Skip = "semantic recall verification did not succeed" }
+                } elseif ($script:EmbedOwed) {
+                    $Tier1Skip = "$($owed.without_a_vector) of $($owed.live_memories) live memories have no vector, and an upgrade embeds nothing unasked"
+                } else {
+                    $Tier1Skip = "semantic recall verification did not succeed: $(("$proof" -replace '\s+', ' ').Substring(0, [Math]::Min(300, ("$proof" -replace '\s+', ' ').Length)))"
+                }
             } else { $Tier1Skip = "full CLI init failed: $(if ($script:InitCause) { $script:InitCause } else { 'no output' })" }
-        } else { $Tier1Skip = "pip install of the heavy stack failed (network or build tools)" }
+        } else { $Tier1Skip = "pip install of the pinned stack failed: $(($pipOut | Select-Object -Last 3) -join ' ')" }
     } else { $Tier1Skip = "venv creation failed" }
 
     if (-not $Tier1Ok) {
         Warn "Tier 1 not completed: $Tier1Skip"
-        if (Test-Path $VenvDir) { Remove-Item -Recurse -Force $VenvDir -ErrorAction SilentlyContinue }
+        if (Test-Path $VenvDir) { Say "  the venv stays at $VenvDir, so what failed can be read there; the next run reuses it" }
         Tier1-Hint $Tier1Skip
     }
 }
@@ -644,7 +675,7 @@ sys.exit({"ok": 0, "incomplete": 1, "refused": 3}.get(res.get("status"), 1))
 # STEP D — WIRE THE SESSIONSTART HOOK (DEFENSIVE merge via merge_config.py)
 # ---------------------------------------------------------------------------
 Step "STEP D — SessionStart hook: not wired here (STEP P asks; -WireHooks / -NoWireHooks)"
-$Merge = Join-Path $BrainDir "merge_config.py"   # STEP E's merger
+$Merge = Join-Path $BrainDir "install\merge_config.py"   # STEP E's merger
 # This step used to wire the hook UNASKED (--yes). The only wiring path is now STEP P's question (or -WireHooks),
 # exactly as install.sh STEP P does: $Settings is never touched without the owner's answer.
 Say "  $Settings is not touched here; STEP P asks whether to wire the hook (it runs: $HookCmd)."
@@ -653,7 +684,7 @@ Say "  $Settings is not touched here; STEP P asks whether to wire the hook (it r
 # STEP E — CREATE/APPEND CLAUDE.md (DEFENSIVE marker-delimited via merge_config.py)
 # ---------------------------------------------------------------------------
 Step "STEP E — Installing teaching CLAUDE.md at $ClaudeMd (append-safe)"
-$Tmpl = Join-Path $PkgRoot "CLAUDE.md.template"
+$Tmpl = Join-Path $PkgRoot "install\CLAUDE.md.template"
 if (Test-Path $Merge) {
     if ($DryRun) { Say "  DRY: merge_config.py claude-md --file $ClaudeMd --block-file $Tmpl (marker-delimited)" }
     else { Invoke-Py $PySys @($Merge, "claude-md", "--file", $ClaudeMd, "--block-file", $Tmpl, "--begin", $MdBegin, "--end", $MdEnd) }
@@ -830,7 +861,7 @@ if ($DryRun) {
 # STEP G — TOKEN CHECK (+ optional crons behind -WithCrons)
 # ---------------------------------------------------------------------------
 Step "STEP G — Token check + (optional) maintenance crons"
-$TokDoc = Join-Path $BrainDir "token_doctor.py"
+$TokDoc = Join-Path $BrainDir "tools\token_doctor.py"
 if (-not $WithCrons) {
     Say "  Crons are OPTIONAL and OFF by default. Core store/recall needs NO token and NO crons."
     Say "  A token is therefore NOT required for this install."
@@ -1008,7 +1039,8 @@ Step "INSTALL COMPLETE"
 Say ("Tier 0 (always): " + $(if ($Tier0Ok) { "ACTIVE — keyword-recall brain live" } else { "NOT verified (check Step B)" }))
 Say ("Tier 1 (semantic): " + $(if ($Tier1Ok) { "ACTIVE — semantic recall live" } else { "not active" + $(if ($Tier1Skip) { " ($Tier1Skip)" } else { "" }) }))
 if ($Tier1Ok) {
-    Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) + $RerankerRepo (reranker, backend '$RerankerBackend' — the one recall loads) — pre-downloaded, nothing lazy-loads on first recall."
+    if ($env:RERANKER_MODEL) { Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) + $RerankerRepo (reranker, backend '$RerankerBackend' — the one recall loads) — pre-downloaded, nothing lazy-loads on first recall." }
+    else { Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) — pre-downloaded. No reranker: this machine's gate is off." }
 }
 Write-Host ""
 Say "Your Claude Code now has a memory. Confirm your brain is alive:"

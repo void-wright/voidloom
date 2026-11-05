@@ -8,7 +8,8 @@
 #                                             copies, the install records) and your env file
 #   bash uninstall.sh --yes --remove-brain    ALSO delete the brain folder and ~/.voidloom (your memories,
 #                                             your env file and any saved model sign-in), after you type
-#                                             a confirmation phrase
+#                                             a confirmation phrase. An attached brain's file stays where
+#                                             you put it: only the link to it goes, and the run says so
 #
 # What it never touches: downloaded model caches (~/.cache/huggingface), pip caches, a persona you
 # forged (it lives under ~/.claude/skills/<your-persona>), the AI tools themselves (claude, codex,
@@ -171,14 +172,22 @@ if [ "$REMOVE_BRAIN" = 1 ]; then
             answer="${VOIDLOOM_CONFIRM_REMOVE_BRAIN:-}"
         fi
         if [ "$answer" = "$PHRASE" ]; then
+            # An attached brain lives elsewhere: the folder holds a link to it, and removing a link removes no memory.
+            ATTACHED=""; [ -L "${BRAIN_DIR}/claude_memory.db" ] && ATTACHED="$(readlink -f "${BRAIN_DIR}/claude_memory.db")"
             rm -rf "$BRAIN_DIR" && say "  removed  $BRAIN_DIR"
             rm -rf "$ENV_DIR" && say "  removed  $ENV_DIR"
+            [ -n "$ATTACHED" ] && say "  KEPT     ${ATTACHED}  (an attached brain, and its lock beside it: you chose where it lives, so deleting it is yours to do)"
         else
             say "  NOT removed: the confirmation phrase did not match. Your memories are untouched."
             [ -t 0 ] || say "  (no terminal: set VOIDLOOM_CONFIRM_REMOVE_BRAIN=\"$PHRASE\" to confirm)"
         fi
     else
-        say "  would delete  $BRAIN_DIR  (your memories, records and pre-upgrade copies)"
+        if [ -L "${BRAIN_DIR}/claude_memory.db" ]; then
+            say "  would delete  $BRAIN_DIR  (its link to your attached brain, records and pre-upgrade copies)"
+            say "  would keep    $(readlink -f "${BRAIN_DIR}/claude_memory.db")  (the attached brain itself)"
+        else
+            say "  would delete  $BRAIN_DIR  (your memories, records and pre-upgrade copies)"
+        fi
         say "  would delete  $ENV_DIR  (your env file and any saved model sign-in)"
     fi
 else

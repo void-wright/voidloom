@@ -90,8 +90,8 @@
 #   from the cache it just warmed):
 #       nomic-embed-text-v1.5   548,032,350 B   (+ 105,561 B nomic-bert-2048)
 #       Qwen3-Reranker-0.6B   1,207,488,384 B   <- DEFAULT, pre-cached
-#       bge-reranker-v2-m3    2,293,259,377 B   <- fallback, pre-cached only with
-#                                                  VOIDLOOM_PRECACHE_FALLBACK=1
+#       bge-reranker-v2-m3    2,293,259,377 B   <- fallback, never fetched: it carries
+#                                                  no pin, and loads only from a cache you fill
 #   Total one-time download on a successful default Tier-1 install: 1,755,626,295 B
 #   (~1.76 GB). The previous arrangement fetched 2.84 GB and then lazily pulled a
 #   further 1.21 GB on the first recall — 4.05 GB, against a documented "~1.4GB".

@@ -127,6 +127,7 @@ CACHE_DROPPED = ("HF_HOME", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE", "TRANSFORME
 # VOIDLOOM_ENV_DIR moves the overnight thinker's credential home (<VOIDLOOM_ENV_DIR>/thinker), so it is held to the
 # same rule -- an absolute path under --home, or the run is refused naming it.
 OTHER_PATH_VARS = ("VOIDLOOM_ENV_DIR",)
+SUITE_SIDECARS_PREFIX = "vl_suite_sidecars_"
 # WIZARD_* variables whose absolute-path value is READ, never written through: reported, not refused.
 WIZARD_READ_ONLY = {"WIZARD_PYTHON_BIN": "an interpreter: executed, never a write target",
                     "WIZARD_LIBRARY_SEED": "a seed pack: read by self_check.py, never written"}
@@ -134,10 +135,10 @@ WIZARD_READ_ONLY = {"WIZARD_PYTHON_BIN": "an interpreter: executed, never a writ
 # voidloom/tests/test_outside_target_diff.py re-reads every cited line and refuses a citation whose line no longer
 # carries its token (reference-host round, R10a: this line used to read "install.sh:90/114/135-143,
 # install_crons.sh:105-110/129-131" -- numbers that had drifted off the variables they named).
-#   CITE install.sh:178 WIZARD_CLAUDE_HOME
+#   CITE install.sh:177 WIZARD_CLAUDE_HOME
 #   CITE install.sh:201 WIZARD_ENV_FILE
-#   CITE install.sh:219 WIZARD_CONFIG_DIR
-#   CITE install.sh:838 WIZARD_CONFIG_PATH
+#   CITE install.sh:218 WIZARD_CONFIG_DIR
+#   CITE install.sh:860 WIZARD_CONFIG_PATH
 #   CITE cron/_config_dir.sh:9 WIZARD_CONFIG_DIR
 #   CITE install/install_crons.sh:118 WIZARD_LIBRARY_HOME
 #   CITE install/install_crons.sh:123 WIZARD_LIBRARY_HOME
@@ -469,6 +470,10 @@ def pinned_child_env(home: Path, environ=None):
     environ = dict(os.environ if environ is None else environ)
     home_res = Path(home).resolve()
     env = dict(environ)
+    # the suite's own stand-in for a contributor's marked sidecar directory (conftest.py), not a child's path
+    if os.path.basename(env.get("VOIDLOOM_ENV_DIR", "")).startswith(SUITE_SIDECARS_PREFIX):
+        env.pop("VOIDLOOM_ENV_DIR", None)
+        env.pop("WIZARD_ENV_FILE", None)
     env["HOME"] = str(home_res)
     for k, parts in XDG_PINNED.items():
         env[k] = str(home_res.joinpath(*parts))

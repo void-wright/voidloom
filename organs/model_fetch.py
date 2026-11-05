@@ -36,11 +36,11 @@ models absent are ones this machine's reranker gate does not load, the refusal s
 recall already works there.
 
 A brain with no lock is served by the shipped catalogue entry for the tier it embeds
-under; a brain on a tier the catalogue does not ship has no pin to fetch, and says so.
+under. A brain on a tier the catalogue does not ship (jina) is fetched at the revision
+the engine pins in code, and no checksum vouches for those bytes: the output says so.
 
 WHAT IT NEVER DOES: instantiate a model (the fetch is snapshot_download + sha256;
-`model_loads: 0` by construction), guess a tier, or fetch anything the catalogue
-does not pin.
+`model_loads: 0` by construction), guess a tier, or fetch anything nothing pins.
 """
 from __future__ import annotations
 
@@ -70,6 +70,24 @@ def _lock_for(el, db: str) -> dict:
     return embedding_upgrade.brain_lock(db, tier=tier)
 
 
+def _fetch_engine_pin(el, a, emit) -> int:
+    """A tier the catalogue does not ship (jina) has no catalogue pin, and the engine loads it at the revision it pins in
+    code. The bytes nothing hashes here are fetched at that same revision, so the fix a recall prints works on it too."""
+    import embedding_upgrade as eu
+    model, revision = eu.JINA_MODEL_NAME, eu.JINA_REVISION
+    doc = {"status": "ok", "action": "model-fetch", "model": model, "revision": revision,
+           "basis": "the engine's pin: this tier is not in the catalogue, so its bytes are not checksummed",
+           "hf_hub_cache": str(el.hf_hub_cache())}
+    present = el.snapshot_dir_for(model, revision) is not None
+    if a.plan:
+        return emit({**doc, "mode": "plan", "present": present}, 0)
+    if not present and (a.no_fetch or el.hf_offline()):
+        return emit({"status": "error", "error": "MODELS_ABSENT", "action": "model-fetch", "model": model,
+                     "message": f"{model}@{revision[:12]} is not on this disk, and this run may not fetch it"}, 3)
+    eu.fetch_jina_at_pin()
+    return emit({**doc, "mode": "present" if present else "fetched", "present": True}, 0)
+
+
 def _reranker_gate_on() -> bool:
     try:
         import hybrid_retrieval
@@ -96,6 +114,8 @@ def main(argv=None) -> int:
     try:
         lock = _lock_for(el, a.db)
     except el.EmbedderLockError as e:
+        if e.code == "LOCK_NOT_SHIPPED" and "no pin to fetch" in str(e):
+            return _fetch_engine_pin(el, a, emit)
         return emit({**e.as_dict(), "action": "model-fetch"}, 2)
     organs_dir = Path(__file__).resolve().parent
     gate_off = not _reranker_gate_on()

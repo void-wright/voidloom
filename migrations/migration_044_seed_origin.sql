@@ -5,9 +5,9 @@
 --                                        else. A tag-shaped flag would be absent by default on most rows, and a
 --                                        filter over tags would pass vacuously; a column is present on every row.
 --   origin  TEXT                         NULL on every row that is not a seed; on a seed row, the pack record's
---                                        identity `seed_pack:<seed_pack_version>#<content sha256[:16]>`. It is the
---                                        loader's idempotency key: a load that is killed and restarted converges
---                                        with no duplicates, because the key is checked before every insert.
+--                                        identity `seed_pack:<seed_pack_version>#<content sha256[:16]>`. It is
+--                                        provenance, never the key the loader skips on: the loader keys a seed
+--                                        row on its anchor tag (organs/seed_loader.py).
 --
 -- The DEFAULT on `seed` is the honest value for every existing row: rows written before this column existed were
 -- written by the owner's own writers, not by the seed loader.

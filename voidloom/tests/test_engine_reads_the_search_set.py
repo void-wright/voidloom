@@ -201,6 +201,30 @@ class DedupComparesTheSearchSet(_Engine):
         self.assertEqual((rc, out["deduplicated"], out["dedup_refused"]), (0, 0, None), out)
 
 
+class ALinkFromAnotherModel(_Engine):
+    def pair(self, whash):
+        a = self.verified("one note on the tide", self.v((0, 1.0)))
+        b = self.verified("a near note on the tide", self.v((0, 0.8), (1, 0.6)))
+        self.conn.execute("INSERT INTO memory_links (source_id, target_id, link_type, strength, weights_hash) "
+                          "VALUES (?, ?, 'related', 0.5, ?)", (a, b, whash))
+        self.conn.commit()
+
+    def link(self):
+        return self.conn.execute("SELECT strength, weights_hash FROM memory_links").fetchone()
+
+    def test_saboteur_maintain_recomputes_a_strength_from_another_models_space(self):
+        self.pair("f" * 64)
+        rc, out = self.verb("maintain")
+        strength, whash = self.link()
+        self.assertEqual((rc, whash), (0, self.lock["weights_hash"]), out)
+        self.assertAlmostEqual(strength, 0.8, places=4)
+
+    def test_control_a_link_under_this_model_is_left_as_it_is(self):
+        self.pair(self.lock["weights_hash"])
+        rc, out = self.verb("maintain")
+        self.assertEqual((rc, self.link()), (0, (0.5, self.lock["weights_hash"])), out)
+
+
 class DedupOnAJinaBrain(_Jina):
     def test_control_a_link_on_a_brain_with_no_lock_stays_unstamped(self):
         self.bare("near one", self.v((0, 1.0)))

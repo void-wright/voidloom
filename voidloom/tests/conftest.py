@@ -142,6 +142,8 @@ def _isolate_from_a_marked_home() -> None:
     import voidloom_env
     if not os.environ.get("VOIDLOOM_ENV_DIR") and voidloom_env.owner_state(Path.home() / ".voidloom") == "foreign":
         os.environ["VOIDLOOM_ENV_DIR"] = tempfile.mkdtemp(prefix="vl_suite_sidecars_")
+        # the env file of that install is not this suite's either: a child that loads it inherits its GPU pin
+        os.environ.setdefault("WIZARD_ENV_FILE", os.path.join(os.environ["VOIDLOOM_ENV_DIR"], voidloom_env.ENV_FILE_NAME))
 
 
 _isolate_from_a_marked_home()

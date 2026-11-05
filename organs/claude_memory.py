@@ -1073,8 +1073,8 @@ def cmd_init(args):
                 removed = True
             except OSError:
                 pass
-        if isinstance(e, SystemExit):
-            raise
+        if isinstance(e, SystemExit) or isinstance(getattr(e, "code", None), str):
+            raise                               # a typed refusal is printed typed by main(), its way out with it
         # NOTE: the note is built BEFORE the f-string. Python 3.10 forbids a
         # multi-line expression inside f-string braces, and this build has hit
         # the neighbouring rule (no backslashes in f-strings) twice already.
@@ -1146,10 +1146,10 @@ def _cmd_init_body(args):
     if _tier in _TIER_TO_CATALOGUE:
         try:
             _lock = embedder_lock.write_lock(Path(DB_PATH).resolve().parent, _TIER_TO_CATALOGUE[_tier],
-                                             locked_by="claude_memory.init")
-        except embedder_lock.EmbedderLockError as e:
+                                             locked_by="claude_memory.init", brain=conn)
+        except embedder_lock.EmbedderLockError:
             conn.close()
-            _error(f"{e.code}: {e}")
+            raise                               # main() prints it typed, with its way out
         _tab, _dim, _repo = _lock["vec_table"], int(_lock["dim"]), _lock["model_id"]
     else:
         _tab, _dim, _repo = EMBED_TIERS[_tier]
@@ -1805,6 +1805,7 @@ def cmd_recall(args):
     # A keyword-only recall needs no embedder: the search reads no vector, so encoding
     # here would refuse SNAPSHOT_ABSENT on a host with an empty cache and pay the model
     # load on every other host.
+    _keywords_answer = False
     if mode != "bm25-only":
         # The reader before the encoder: a brain whose vectors the lock cannot admit says so, with its coverage,
         # rather than loading a model to find out.
@@ -1815,11 +1816,13 @@ def cmd_recall(args):
         except Exception as _e:  # noqa: BLE001
             # With no vectors at all there is nothing to refuse: the keyword arm answers, as for any unembedded brain.
             _none_held = getattr(_e, "code", None) == "NO_ROWS_FOR_LOCK" and not getattr(getattr(_e, "coverage", None), "vectors", 0)
-            if getattr(_e, "code", None) in ("NO_ROWS_FOR_LOCK", "STAMP_INCONSISTENT", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED") \
-                    and not _none_held:
+            # A lock that cannot be read, or that no row answers to, leaves the words: keywords answer, degraded, with the
+            # code. Nothing can be encoded against a lock nobody can read, so no model is loaded for it.
+            _keywords_answer = getattr(_e, "code", None) in ("NO_ROWS_FOR_LOCK", "LOCK_MALFORMED") and not _none_held
+            if getattr(_e, "code", None) in ("STAMP_INCONSISTENT", "LOCK_NOT_SHIPPED"):
                 conn.close()
                 raise
-    query_vec = _encode(args.query, "search_query") if mode != "bm25-only" else None
+    query_vec = _encode(args.query, "search_query") if mode != "bm25-only" and not _keywords_answer else None
 
     multi_hop_depth = getattr(args, 'multi_hop', 0) or 0
 
@@ -3184,6 +3187,7 @@ def cmd_maintain(args):
     # 2. Deduplication: find near-identical memories in same category
     deduped = 0
     linked = 0
+    relinked = 0
     dedup_refused = None
     if not args.skip_dedup:
         categories = [r[0] for r in conn.execute(
@@ -3247,9 +3251,16 @@ def cmd_maintain(args):
                         deduped += 1
                     elif distance < 0.30:
                         existing = conn.execute(
-                            "SELECT id FROM memory_links WHERE source_id = ? AND target_id = ? AND link_type = 'related'",
+                            "SELECT id, weights_hash FROM memory_links WHERE source_id = ? AND target_id = ? "
+                            "AND link_type = 'related'" if _dh else
+                            "SELECT id, NULL FROM memory_links WHERE source_id = ? AND target_id = ? AND link_type = 'related'",
                             (ids[i], ids[j]),
                         ).fetchone()
+                        if existing and _dh and existing[1] != _dh:
+                            # A strength from another model's space: this comparison is the current one.
+                            conn.execute("UPDATE memory_links SET strength = ?, weights_hash = ? WHERE id = ?",
+                                         (1.0 - distance, _dh, existing[0]))
+                            relinked += 1
                         if not existing:
                             # This strength is a cosine distance between two vectors, so it
                             # carries the checksum it was computed under.
@@ -3269,6 +3280,8 @@ def cmd_maintain(args):
         actions.append(f"Deduplicated {deduped} near-identical memories")
     if linked:
         actions.append(f"Created {linked} similarity links")
+    if relinked:
+        actions.append(f"Recomputed {relinked} similarity links stamped under another model")
 
     conn.commit()
     conn.close()

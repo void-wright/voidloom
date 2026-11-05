@@ -97,7 +97,7 @@ class TestOutsideTargetDiff(unittest.TestCase):
             # brain) would be a path outside the scratch home, which the harness now refuses
             if k in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "HF_HOME", "HF_HUB_CACHE",
                      "HUGGINGFACE_HUB_CACHE", "TRANSFORMERS_CACHE", "PIP_CACHE_DIR", "TORCHINDUCTOR_CACHE_DIR",
-                     "TRITON_CACHE_DIR", "CUDA_CACHE_PATH") or (k.startswith("WIZARD_") and k not in (
+                     "TRITON_CACHE_DIR", "CUDA_CACHE_PATH", "VOIDLOOM_ENV_DIR") or (k.startswith("WIZARD_") and k not in (
                          "WIZARD_CLAUDE_HOME", "WIZARD_ENV_FILE", "WIZARD_EMBED_MODEL")):
                 self.env.pop(k)
 

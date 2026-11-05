@@ -164,6 +164,84 @@ class TestAttachDb(unittest.TestCase):
         self.assertIn("attaching the existing brain", p.stdout)
         self.assertIn("self_check PASSED", p.stdout)
 
+    def _attached(self):
+        p = self._run("--attach-db", str(self.brain), "--tier0-only")
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-4000:])
+        c = sqlite3.connect(str(self.brain))
+        c.execute("INSERT INTO memories (content, summary, category, importance) VALUES ('kept across the upgrade', 's', 'insight', 0.5)")
+        c.commit(); c.close()
+        return _memories(self.brain)
+
+    def assert_still_attached(self, p, held):
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-4000:])
+        named = re.search(r"^WIZARD_LIBRARY_DB='([^']+)'", (self.home / ".voidloom" / "wizard-library-env")
+                          .read_text(encoding="utf-8"), re.M).group(1)
+        self.assertEqual(os.path.realpath(named), os.path.realpath(str(self.brain)), "the env file reaches the attached brain")
+        here = self.home / ".claude" / "memory" / "claude_memory.db"
+        self.assertTrue(here.is_symlink(), "a blank brain was built in its place")
+        self.assertEqual(os.path.realpath(str(here)), os.path.realpath(str(self.brain)))
+        self.assertEqual(_memories(self.brain), held)
+
+    def test_saboteur_a_plain_re_run_keeps_the_attached_brain(self):
+        held = self._attached()
+        self.assert_still_attached(self._run("--tier0-only"), held)
+
+    def test_saboteur_a_record_with_no_link_keeps_the_attached_brain(self):
+        """The shape a v1.0 attached install leaves: the record names the brain, and nothing lies beside the organs."""
+        held = self._attached()
+        (self.home / ".claude" / "memory" / "claude_memory.db").unlink()
+        p = self._run("--tier0-only")
+        self.assertIn("keeping the attached brain", p.stdout + p.stderr)
+        self.assert_still_attached(p, held)
+
+    def test_saboteur_an_attached_brain_that_is_not_there_stops_the_run(self):
+        self._attached()
+        self.brain.rename(self.brain.with_suffix(".moved"))
+        p = self._run("--tier0-only")
+        self.assertEqual(p.returncode, 2, (p.stdout + p.stderr)[-2000:])
+        self.assertIn("is not there", p.stdout + p.stderr)
+        self.assertTrue((self.home / ".claude" / "memory" / "claude_memory.db").is_symlink(), "nothing was built")
+
+    def test_saboteur_a_malformed_lock_stops_the_installer_with_a_way_out_that_works(self):
+        self._attached()
+        lock = self.brain_dir / "embedder.lock.json"
+        lock.write_text("{ not json")
+        p = self._run("--tier0-only")
+        self.assertEqual(p.returncode, 2, (p.stdout + p.stderr)[-2000:])
+        fix = re.search(r"mv '[^']+' '[^']+'", p.stderr)
+        self.assertIsNotNone(fix, p.stderr[-800:])
+        self.assertEqual(subprocess.run(fix.group(0), shell=True, timeout=30).returncode, 0)
+        p = self._run("--tier0-only")
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+
+    def test_control_a_stale_record_beside_a_real_brain_changes_nothing(self):
+        """A home that moved: the record names a path that is gone, and the brain sits where it always did."""
+        p = self._run("--tier0-only", "--init-blank")
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+        rec = self.home / ".claude" / "memory" / "INSTALL_RECORD"
+        if rec.exists():
+            rec.write_text(re.sub(r"^db=.*$", "db=/nonexistent/old/place/claude_memory.db", rec.read_text(encoding="utf-8"), flags=re.M),
+                           encoding="utf-8")
+        p = self._run("--tier0-only")
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+
+    def test_control_init_blank_is_the_way_to_start_again(self):
+        self._attached()
+        self.assertNotIn("keeping the attached brain", self._dry("--init-blank"))
+
+    def _dry(self, *args):
+        p = self._run("--dry-run", "--tier0-only", *args)
+        return p.stdout + p.stderr
+
+    def test_saboteur_uninstall_says_an_attached_brain_stays_and_leaves_it(self):
+        self._attached()
+        p = subprocess.run(["bash", str(ROOT / "uninstall.sh"), "--yes", "--remove-brain"], capture_output=True, text=True,
+                           env={**self.env, "VOIDLOOM_CONFIRM_REMOVE_BRAIN": "delete my memories"}, timeout=300)
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+        self.assertTrue(self.brain.is_file(), "the attached file is the owner's")
+        self.assertIn("KEPT", p.stdout)
+        self.assertIn(str(self.brain), p.stdout)
+
     def test_parent_shape_would_reject_the_flag(self):
         """Documents the red-at-parent: an installer that does not know the flag says so."""
         p = self._run("--attach-db")            # --force-cpu is prepended by _run; --attach-db is last, bare

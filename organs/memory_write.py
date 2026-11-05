@@ -2173,14 +2173,108 @@ _SOFT_REFERENCES = (("belief_scan_queue", "memory_id", True), ("edge_proposals",
                     ("governance_proposals", "target_memory_id", False), ("raptor_clusters", "synthesis_memory_id", False))
 # A shared run this long or longer is found wherever it sits in a cell: a cell is read at
 # every _RUN_GRAM-th character, so any run of 2 * _RUN_GRAM - 1 holds a gram read on the stride.
-# A shorter run is not a copy: measured on a real brain, a memory that mentions a 24-character
-# tag shares that run with every row carrying the tag.
 _RUN_GRAM = 24
 _COPY_RUN = 2 * _RUN_GRAM - 1
-# A tag names something other memories share; it holds no one memory's text.
-_NOT_TEXT_TABLES = {"memory_tags"}
-_SHORT_TEXT_FLOOR = 12
-_LINEAGE_TEXT_FLOOR = 8
+_TIED_TEXT_FLOOR = 8
+# THE COLUMNS THE SWEEP MAY EDIT, and nothing else: free text a memory's words can be copied into. A delete never touches
+# `metadata`, a stamp, a provenance key, or any config or schema-bearing table, whatever those hold. Every text column of
+# the schema is in one of these two maps; voidloom/tests/test_hard_delete_touches_only_copies.py fails on a new one.
+_TEXT_COPY_COLUMNS: Dict[str, Tuple[str, ...]] = {
+    "memories": ("content", "summary", "source_context"),
+    "access_log": ("query_text",),
+    "affect_quarantine_log": ("note", "detail_json"),
+    "approval_audit_log": ("decision_detail", "outcome_json"),
+    "approval_comments": ("item_title", "comment"),
+    "arcane_manifests": ("manifest_content", "sections", "drew_addendum", "data_snapshot"),
+    "belief_quarantine": ("reason", "prior_state", "applied_state", "release_note"),
+    "calibration_log": ("context", "notes"),
+    "community_summaries": ("summary",),
+    "council_sessions": ("topic", "transcript", "synthesis", "drew_input"),
+    "counterfactual_decisions": ("topic", "chosen_path", "alternative_paths", "criteria_for_revisit", "revisit_notes"),
+    "decision_backfill_exceptions": ("reason", "detail_json"),
+    "decision_events": ("detail_json",),
+    "decision_status_divergence": ("evidence",),
+    "decision_units": ("proposal_title", "proposal_json"),
+    "dream_batches": ("error_log",),
+    "dream_log": ("dream_content", "context_difference"),
+    "dream_phase_log": ("detail", "result_json"),
+    "edge_proposals": ("rationale",),
+    "embedding_upgrade_log": ("error_message", "ab_comparison_json"),
+    "gap_inventory": ("entity", "acknowledged_reason"),
+    "gap_inventory_batches": ("error_log",),
+    "gap_research_log": ("dispatch_command", "error_message"),
+    "governance_proposals": ("reason", "intent_json", "decided_reason"),
+    "lexical_miss_log": ("query",),
+    "map_generation_log": ("error_log",),
+    "memory_communities": ("label",),
+    "memory_edges": ("metadata",),
+    "memory_provenance": ("metadata",),
+    "pre_cognitive_recall_log": ("signals_json", "feedback_note"),
+    "quickening_log": ("seed_bias",),
+    "raptor_clusters": ("cluster_label",),
+    "resurfacing_log": ("reason",),
+    "self_eval_enacted_proposals": ("proposal_title", "proposal_json", "error_log"),
+    "self_eval_reports": ("health_scorecard", "proposed_enhancements", "proposed_deprecations", "threshold_assessment",
+                          "persona_evolution"),
+    "skill_graduation_log": ("reason",),
+    "skill_usage_log": ("context", "outcome", "outcome_notes"),
+    "sleep_loop_runs": ("error_log", "stage_log"),
+    "whisper_observations": ("observation", "session_context"),
+}
+# The rest of the schema's text: keys, stamps, hashes, timestamps, labels and settings. "*" is the whole table.
+_NEVER_SWEPT_COLUMNS: Dict[str, Tuple[str, ...]] = {
+    "metadata": ("*",), "schema_migrations": ("*",), "embedding_provenance": ("*",), "memory_tags": ("*",),
+    "memory_links": ("*",), "consolidation_sources": ("*",), "persona_recall_profiles": ("*",), "belief_engine_state": ("*",),
+    "calibration_factors": ("*",), "cross_tier_bridges": ("*",), "whisper_digests": ("*",), "belief_scan_queue": ("*",),
+    "dream_activity_profile": ("*",), "unit_attention": ("*",), "organ_declared_units": ("*",), "organ_run_log": ("*",),
+    "approval_ping_state": ("*",), "assayer_scores": ("*",), "merge_provenance": ("*",), "memory_community_members": ("*",),
+    "memories": ("category", "source_project", "created_at", "updated_at", "last_accessed", "kind", "derived_from",
+                 "consolidated_at", "source_brain", "source_user", "origin"),
+    "access_log": ("access_type", "accessed_at"),
+    "affect_quarantine_log": ("channel", "expires_on", "observed_at"),
+    "approval_audit_log": ("surface", "ref", "action", "confirmed_via", "outcome_status", "reversible_note", "actor",
+                           "created_at"),
+    "approval_comments": ("surface", "ref", "item_ids", "decision", "author", "created_at"),
+    "arcane_manifests": ("quarter", "status", "created_at", "finalized_at"),
+    "belief_quarantine": ("object_kind", "family", "quarantined_at", "released_at"),
+    "calibration_log": ("prediction_unit", "prediction_kind", "domain", "predicted_at", "actual_at", "session_id", "tags",
+                        "created_at", "updated_at"),
+    "community_summaries": ("member_edge_hash", "summary_mode", "generated_at", "weights_hash"),
+    "council_sessions": ("trigger_type", "topic_category", "participants", "created_at", "completed_at", "status"),
+    "counterfactual_decisions": ("last_revisited", "status", "captured_at", "captured_by"),
+    "decision_backfill_exceptions": ("source_table", "ref", "reason_code", "recorded_at"),
+    "decision_events": ("outcome", "decided_at", "actor", "evidence_source", "recorded_at"),
+    "decision_status_divergence": ("stored_status", "derived_status", "open_titles", "divergence_fingerprint",
+                                   "registered_at"),
+    "decision_units": ("unit_key", "surface", "proposal_kind", "piece_affected", "suppression_key", "first_seen_at"),
+    "dream_batches": ("config_snapshot", "created_at"),
+    "dream_log": ("dream_type", "created_at", "seed_bias"),
+    "dream_phase_log": ("phase_name", "status", "created_at"),
+    "edge_proposals": ("proposal_kind", "predicate", "nli_label", "report_batch", "status", "created_at", "decided_at",
+                       "enacted_at", "error_log"),
+    "embedding_upgrade_log": ("started_at", "completed_at", "model_name", "status", "notes", "weights_hash"),
+    "gap_inventory": ("gap_type", "last_mentioned", "inventoried_at", "acknowledged_at"),
+    "gap_inventory_batches": ("started_at", "completed_at", "status", "config_snapshot"),
+    "gap_research_log": ("dispatch_method", "started_at", "completed_at", "status"),
+    "governance_proposals": ("report_batch", "writer_kind", "verdict", "reason_code", "intent_hash", "status", "created_at",
+                             "decided_at"),
+    "lexical_miss_log": ("ts",),
+    "map_generation_log": ("generated_at", "output_path", "trigger", "config_snapshot"),
+    "memory_communities": ("method", "member_edge_hash", "detected_at", "weights_hash"),
+    "memory_edges": ("predicate", "valid_from", "valid_until", "created_at", "extraction_method"),
+    "memory_provenance": ("transformation_type", "agent", "prompt_hash", "created_at"),
+    "pre_cognitive_recall_log": ("session_id", "memory_ids_json", "tier_ids_json", "memories_used_json",
+                                 "memories_irrelevant_json", "created_at", "feedback_at"),
+    "quickening_log": ("scope_kind", "scope_key", "fired_at"),
+    "raptor_clusters": ("cluster_signature", "member_ids_json", "last_summarized_at", "created_at", "updated_at"),
+    "resurfacing_log": ("resurfaced_at",),
+    "self_eval_enacted_proposals": ("enacted_at", "status", "created_at"),
+    "self_eval_reports": ("month", "drew_approved", "created_at", "status"),
+    "skill_graduation_log": ("old_tier", "new_tier", "graduated_at", "graduated_by"),
+    "skill_usage_log": ("used_at", "triggered_by", "session_id"),
+    "sleep_loop_runs": ("started_at", "completed_at", "status", "consolidation_mode", "config_snapshot", "stage_reached"),
+    "whisper_observations": ("observation_type", "created_at"),
+}
 
 
 def hard_delete_allowed() -> bool:
@@ -2252,16 +2346,16 @@ def _clear_references(conn: sqlite3.Connection, memory_id: int, tables: Sequence
 
 
 class _TextMatcher:
-    """Finds the deleted text inside another cell. JSON columns hold it escaped, so the
-    escaped forms are searched as well."""
+    """Finds the deleted text inside another cell, under the rule purge_memory states. JSON columns hold it
+    escaped, so the escaped forms are searched as well."""
 
     def __init__(self, texts: Sequence[str]):
         forms: List[str] = []
         for text in texts:
             forms += [text, json.dumps(text)[1:-1], json.dumps(text, ensure_ascii=False)[1:-1]]
         self.sources = list(dict.fromkeys(f for f in forms if f))
-        self.whole = sorted((t for t in self.sources if len(t) >= _SHORT_TEXT_FLOOR), key=len, reverse=True)
-        self.lineage_whole = sorted((t for t in self.sources if len(t) >= _LINEAGE_TEXT_FLOOR), key=len, reverse=True)
+        self.whole = sorted((t for t in self.sources if len(t) >= _COPY_RUN), key=len, reverse=True)
+        self.tied_whole = sorted((t for t in self.sources if len(t) >= _TIED_TEXT_FLOOR), key=len, reverse=True)
         self.grams: Dict[str, List[Tuple[int, int]]] = {}
         for i, src in enumerate(self.sources):
             for p in range(0, max(len(src) - _RUN_GRAM + 1, 0)):
@@ -2289,15 +2383,22 @@ class _TextMatcher:
             pos = best[1]
         return spans
 
-    def scrub(self, cell: str, *, lineage: bool = False) -> str:
+    def holds_whole(self, cell: str) -> bool:
+        return any(t in cell for t in self.whole)
+
+    def scrub(self, cell: str, *, tied: bool = False) -> str:
         """`cell` with every copy replaced, or `cell` itself when it holds none."""
+        if not tied:
+            body = cell.strip()
+            if len(body) >= _COPY_RUN and any(len(body) <= len(s) and body in s for s in self.sources):
+                return REDACTED                       # the whole cell is cut from this memory
         out = cell
-        for text in (self.lineage_whole if lineage else self.whole):
+        for text in (self.tied_whole if tied else self.whole):
             if text in out:
                 out = out.replace(text, REDACTED)
-        spans = self._runs(out)
-        for a, b in sorted(spans, reverse=True):
-            out = out[:a] + REDACTED + out[b:]
+        if tied:
+            for a, b in sorted(self._runs(out), reverse=True):
+                out = out[:a] + REDACTED + out[b:]
         return out
 
 
@@ -2372,39 +2473,83 @@ def _ordinary_tables(conn: sqlite3.Connection) -> List[str]:
     return [r[0] for r in rows if r[0] not in virtual and not any(r[0].startswith(v + "_") for v in virtual)]
 
 
-def _text_tables(conn: sqlite3.Connection) -> List[Tuple[str, List[str]]]:
-    out = []
-    for name in _ordinary_tables(conn):
-        if name in _NOT_TEXT_TABLES:
-            continue
-        cols = [r[1] for r in conn.execute(f'PRAGMA table_info("{name}")')
+def _copy_columns(conn: sqlite3.Connection) -> Tuple[List[Tuple[str, List[str]]], List[str]]:
+    """The allowlist as this brain has it, `memories` first, and every text column neither map classifies. Those are
+    left alone and named in the receipt: an unknown column is more likely a key than a copy."""
+    swept: List[Tuple[str, List[str]]] = []
+    unknown: List[str] = []
+    for name in sorted(_ordinary_tables(conn), key=lambda t: (t != "memories", t)):
+        text = [r[1] for r in conn.execute(f'PRAGMA table_info("{name}")')
                 if not r[2] or any(k in r[2].upper() for k in ("TEXT", "CHAR", "CLOB", "JSON"))]
+        never = _NEVER_SWEPT_COLUMNS.get(name, ())
+        allowed = _TEXT_COPY_COLUMNS.get(name, ())
+        if "*" in never:
+            continue
+        cols = [c for c in text if c in allowed]
         if cols:
-            out.append((name, cols))
-    return out
+            swept.append((name, cols))
+        unknown += [f"{name}.{c}" for c in text if c not in allowed and c not in never]
+    return swept, unknown
 
 
-def _scrub_copies(conn: sqlite3.Connection, matcher: _TextMatcher, lineage: Set[int], redacted: Dict[str, int],
-                  removed: Dict[str, int]) -> Dict[str, Any]:
+def _tied_rows(conn: sqlite3.Connection, ids: Set[int], tables: Sequence[str]) -> Dict[str, Set[int]]:
+    """Rows a declared reference ties to these memories, read before the references are cleared: a foreign key, a column
+    `_SOFT_REFERENCES` names, an id list, or the summary of a community one of them sits in."""
+    tied: Dict[str, Set[int]] = {}
+    known = sorted(ids)
+    for table in tables:
+        if table not in _TEXT_COPY_COLUMNS or table == "memories":
+            continue
+        have = _columns(conn, table)
+        cols = {fk[3] for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")') if fk[2] == "memories"}
+        cols |= {c for t, c, _go in _SOFT_REFERENCES if t == table}
+        for col in sorted(cols & have):
+            for at in range(0, len(known), 500):
+                part = known[at:at + 500]
+                marks = ", ".join("?" * len(part))
+                tied.setdefault(table, set()).update(
+                    r[0] for r in conn.execute(f'SELECT rowid FROM "{table}" WHERE "{col}" IN ({marks})', part))
+    for table, col in (("pre_cognitive_recall_log", "memory_ids_json"), ("raptor_clusters", "member_ids_json")):
+        if table in tables:
+            tied.setdefault(table, set()).update(
+                r[0] for r in conn.execute(f'SELECT rowid, "{col}" FROM "{table}"') if ids & set(_ids_in(r[1])))
+    if "memory_community_members" in tables and "community_summaries" in tables:
+        for at in range(0, len(known), 500):
+            part = known[at:at + 500]
+            marks = ", ".join("?" * len(part))
+            tied.setdefault("community_summaries", set()).update(r[0] for r in conn.execute(
+                "SELECT s.rowid FROM community_summaries s JOIN memory_community_members m "
+                f"ON m.community_id = s.community_id WHERE m.memory_id IN ({marks})", part))
+    return tied
+
+
+def _scrub_copies(conn: sqlite3.Connection, matcher: _TextMatcher, lineage: Set[int], tied: Dict[str, Set[int]],
+                  redacted: Dict[str, int], removed: Dict[str, int]) -> Dict[str, Any]:
     shared: Set[int] = set()
+    common = False
     unswept: List[str] = []
-    for table, cols in _text_tables(conn):
+    columns, unknown = _copy_columns(conn)
+    for table, cols in columns:
         select = ", ".join(f'"{c}"' for c in cols)
         try:
             rows = conn.execute(f'SELECT rowid, {select} FROM "{table}"')
         except sqlite3.OperationalError:
             unswept.append(table)
             continue
+        ties = lineage if table == "memories" else tied.get(table, set())
         changes: List[Tuple[int, Dict[str, str]]] = []
         for row in rows:
             rid = row[0]
-            own = table == "memories" and rid in lineage
+            own = rid in ties
+            if common and not own:
+                continue
             edits: Dict[str, str] = {}
             for col, cell in zip(cols, row[1:]):
                 if isinstance(cell, str) and len(cell) >= 4:
-                    clean = matcher.scrub(cell, lineage=own)
+                    clean = matcher.scrub(cell, tied=own)
                     if clean != cell:
                         edits[col] = clean
+                        common = common or (table == "memories" and not own and matcher.holds_whole(cell))
             if not edits:
                 continue
             if table == "memories" and not own:
@@ -2418,7 +2563,8 @@ def _scrub_copies(conn: sqlite3.Connection, matcher: _TextMatcher, lineage: Set[
                 _bump(redacted, table, 1)
             except sqlite3.IntegrityError:           # the edited value breaks a constraint: the row goes instead
                 _bump(removed, table, conn.execute(f'DELETE FROM "{table}" WHERE rowid = ?', (rid,)).rowcount)
-    return {"other_memories_sharing_text": len(shared), "tables_not_swept": unswept}
+    return {"other_memories_sharing_text": len(shared), "unrelated_rows_left_as_shared_text": common,
+            "tables_not_swept": unswept, "text_columns_not_classified": unknown}
 
 
 def purge_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, Any]:
@@ -2426,10 +2572,17 @@ def purge_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, Any]:
     commits, or rolls everything back, and then calls `finish_purge`.
 
     A row that names the memory goes, or keeps its place with the reference nulled where other
-    rows hang from it. A copy of its text goes wherever a shared run of 47 characters or more,
-    or the whole text from 12 characters up, is found: in any table, and in the memories written
-    from this one. A different memory that happens to say the same thing is not edited: it is
-    counted in `other_memories_sharing_text`. Words reworded by a model are not a copy this can see."""
+    rows hang from it. Then its text goes, from the free-text columns `_TEXT_COPY_COLUMNS` lists and
+    no others, by this rule:
+      * a row tied to this memory (the memories written from it; a row that names it or one of those;
+        a summary of a community it sits in): its whole text from 8 characters up, and any shared run
+        of 47 characters or more;
+      * any other row: only an exact copy of a substantial text, meaning the memory's whole text of
+        47 characters or more, or a cell that is itself 47 characters or more cut from it. A run the
+        cell merely shares, a template, a table name, a short phrase: none of those are this memory's.
+    A different memory that holds the same whole text is not edited, and is counted in
+    `other_memories_sharing_text`: the text is not this memory's alone, so unrelated rows keep theirs too
+    (`unrelated_rows_left_as_shared_text`). Words reworded by a model are not a copy this can see."""
     # A row that is not valid UTF-8 cannot stop the sweep: it is read with its bad bytes replaced, for this call only.
     factory = conn.text_factory
     conn.text_factory = lambda b: b.decode("utf-8", "replace")
@@ -2445,6 +2598,7 @@ def purge_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, Any]:
         cleared: Dict[str, int] = {}
         redacted: Dict[str, int] = {}
         lineage = _lineage_of(conn, memory_id, present)
+        tied = _tied_rows(conn, lineage | {memory_id}, tables)
         for table, n in clear_vectors_or_refuse(conn, memory_id, present).items():
             _bump(removed, table, n)
         tombstone_seed(conn, memory_id)
@@ -2453,7 +2607,7 @@ def purge_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, Any]:
                   conn.execute(f"DELETE FROM {PROVENANCE_TABLE} WHERE memory_id = ?", (memory_id,)).rowcount)
         _clear_references(conn, memory_id, tables, removed, cleared)
         conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
-        swept = _scrub_copies(conn, _TextMatcher([t for t in row if t]), lineage, redacted, removed)
+        swept = _scrub_copies(conn, _TextMatcher([t for t in row if t]), lineage, tied, redacted, removed)
         if "memories_fts" in present:                 # a deleted row's terms stay in old segments until they are merged
             conn.execute("INSERT INTO memories_fts(memories_fts) VALUES ('optimize')")
     finally:

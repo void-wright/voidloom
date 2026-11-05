@@ -69,14 +69,10 @@ That one command (see `README.md` and `PACKAGE_MANIFEST.md` for the full account
     actually loads** (`organs/hybrid_retrieval.py` resolves the backend; `qwen` is
     the default as of the 2026-06-11 SOAK decision). **1,207,488,384 B** on disk.
 
-  **`BAAI/bge-reranker-v2-m3` is the FALLBACK**, not the default — reranking degrades
-  to it only if Qwen fails to load. It is **2,293,259,377 B**, so fetching it up front
-  would more than double the download for a path most installs never take. It is
-  **not** pre-cached unless you ask: `VOIDLOOM_PRECACHE_FALLBACK=1 ./install.sh`
-  (worth it if the machine is about to go offline). Select it as the *default* with
-  `VOIDLOOM_RERANKER=bge`, and the installer will pre-cache that one instead — the
-  installer resolves the backend exactly the way the runtime does, so it cannot
-  pre-cache a model your recall will not load.
+  **`BAAI/bge-reranker-v2-m3` is the fallback and is never fetched by the installer.** It is
+  **2,293,259,377 B** and carries no pin in the catalogue, so it loads only from a cache you
+  fill yourself; with `VOIDLOOM_RERANKER=bge` and no such cache, recall answers without a
+  reranker.
 
   > **Until 2026-09-16 this bullet was wrong in both directions, which is why the
   > numbers above are the ones the installer measures rather than ones anyone typed.**

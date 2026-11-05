@@ -7,6 +7,7 @@ under a lock is held to what the lock promised. Legacy rows are a declared state
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sqlite3
@@ -110,9 +111,11 @@ class _Brain(unittest.TestCase):
             (mid, table or self.TABLE, model or ident["model_id"], whash, dim or self.DIM, "d" * 64))
         self.conn.commit()
 
-    def doctor(self, host_warning=None):
+    def doctor(self, host_warning=None, *, models_on_disk=True):
+        """`models_on_disk`: these fixtures hold no model, so the check for one is answered here unless a test asks it."""
         plats = {"claude": {"state": "NOT_INSTALLED", "ours": [], "config_warning": host_warning}}
-        with mock.patch.object(cli, "doctor_hook_join", return_value={"platforms": plats}):
+        absent = mock.patch.object(cli, "_absent_model", return_value=None) if models_on_disk else contextlib.nullcontext()
+        with mock.patch.object(cli, "doctor_hook_join", return_value={"platforms": plats}), absent:
             env = cli.verb_doctor(argparse.Namespace(db=str(self.db), cwd=None, platform=None, probe_platform=False))
         # the exit code is half the verdict: `ok` is exit 0, `incomplete` exit 4
         self.assertEqual(env["status"], "ok" if env["data"]["brain_healthy"] else "incomplete", env)
@@ -154,6 +157,7 @@ class TheHostDoesNotDecideTheBrain(_Brain):
                 "if not hasattr(mw, 'derived_layer_report'):\n"
                 "    mw.derived_layer_report = lambda c: {'stale_derived': 0}\n"
                 "from voidloom import cli\n"
+                "cli._absent_model = lambda *a: None\n"
                 f"sys.exit(cli.dispatch(['doctor', '--db', {str(self.db)!r}, '--json']))\n")
         r = subprocess.run([sys.executable, "-c", code], cwd=str(self.d), env=env, capture_output=True, text=True,
                            timeout=120)

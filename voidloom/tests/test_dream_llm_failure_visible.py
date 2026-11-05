@@ -95,7 +95,7 @@ class TestDreamLlmFailureIsVisible(unittest.TestCase):
         fake = F.make_fake(fakebin, "claude")                     # answers the set-time probe ...
         (self.tmp / "driver.py").write_text(DRIVER, encoding="utf-8")
         self.env = {k: v for k, v in os.environ.items()
-                    if k not in ("WIZARD_LIBRARY_DB", "WIZARD_LIBRARY_HOME", "VOIDLOOM_ENV_DIR", "PYTHONPATH",
+                    if k not in ("WIZARD_LIBRARY_DB", "WIZARD_LIBRARY_HOME", "VOIDLOOM_ENV_DIR", "WIZARD_ENV_FILE", "PYTHONPATH",
                                  "CLAUDE_CODE_OAUTH_TOKEN", "TMPDIR")}
         self.env.update({"HOME": str(self.home), "PATH": str(fakebin) + ":/usr/local/bin:/usr/bin:/bin",
                          "PYTHONDONTWRITEBYTECODE": "1", "WIZARD_LIBRARY_DB": str(self.tmp / "claude_memory.db")})

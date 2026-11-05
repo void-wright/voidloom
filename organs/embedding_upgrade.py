@@ -291,20 +291,44 @@ def _get_jina_model():
     # downloads (first call reaches the hub).
     offline = _hf_offline_ok(JINA_MODEL_NAME)
     import contextlib
-    with contextlib.redirect_stdout(sys.stderr):  # remote code print()s; keep stdout clean
-        model = SentenceTransformer(
-            JINA_MODEL_NAME,
-            revision=JINA_REVISION,  # Voidloom #176 RCE: pin code tree (moved tag can't swap it)
-            trust_remote_code=True,
-            device=device,
-            local_files_only=offline,
-            model_kwargs={"default_task": JINA_TASK_RETRIEVAL},
-        )
+    import embedder_lock as _el
+    try:
+        with contextlib.redirect_stdout(sys.stderr):  # remote code print()s; keep stdout clean
+            model = SentenceTransformer(
+                JINA_MODEL_NAME,
+                revision=JINA_REVISION,  # Voidloom #176 RCE: pin code tree (moved tag can't swap it)
+                trust_remote_code=True,
+                device=device,
+                local_files_only=offline,
+                model_kwargs={"default_task": JINA_TASK_RETRIEVAL},
+            )
+    except OSError as e:
+        if not _el.hf_offline():
+            raise
+        fix = _el.fetch_command()
+        raise _el.EmbedderLockError(
+            "SNAPSHOT_ABSENT", f"{JINA_MODEL_NAME}@{JINA_REVISION[:12]} cannot load from {_el.hf_hub_cache()} ({e}). "
+            f"Fetch it, with the network: `{fix}`", retry=[fix], model_id=JINA_MODEL_NAME, revision=JINA_REVISION)
 
     elapsed = time.time() - t0
     logger.info("Jina v5 loaded in %.1fs (device=%s)", elapsed, device)
     _jina_model_cache["model"] = model
     return model
+
+
+def fetch_jina_at_pin() -> str:
+    """The jina snapshot, on this disk at the engine's pin, loadable offline. Its remote code fetches its adapters with
+    no revision, which offline means `refs/main`; a fetch by commit writes no such ref, so one is written, naming the pin.
+    A ref already there is the hub's and is left. Loads nothing: the model's code does not run here."""
+    import embedder_lock as _el
+    if _el.snapshot_dir_for(JINA_MODEL_NAME, JINA_REVISION) is None:
+        from huggingface_hub import snapshot_download
+        snapshot_download(JINA_MODEL_NAME, revision=JINA_REVISION)
+    refs = _el.hf_hub_cache() / ("models--" + JINA_MODEL_NAME.replace("/", "--")) / "refs"
+    if not (refs / "main").exists():
+        refs.mkdir(parents=True, exist_ok=True)
+        (refs / "main").write_text(JINA_REVISION, encoding="utf-8")
+    return JINA_REVISION
 
 
 # ============================================================

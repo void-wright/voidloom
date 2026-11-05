@@ -129,10 +129,45 @@ class TierVerbs(unittest.TestCase):
             pace.add(499)
             self.assertFalse(err.write.called)
             pace.add(2)
-            self.assertIn("501 of 1200 embedded", "".join(c.args[0] for c in err.write.call_args_list))
+            said = "".join(c.args[0] for c in err.write.call_args_list)
+            self.assertIn("501 of 1200 embedded", said)
+            self.assertNotIn("minutes left", said, "shortest first: the rate only falls, so no time left is promised")
+
+    def test_the_note_says_what_happens_to_each_derived_layer(self):
+        self.assertIn("next sleep", self.ts.DERIVED_LAYER_NOTE)
+        self.assertIn("`maintain`", self.ts.DERIVED_LAYER_NOTE)
+        self.assertNotIn("sleep loop recomputes", self.ts.DERIVED_LAYER_NOTE)
+
+    def test_usage_names_every_flag(self):
+        self.assertIn("--stall-seconds", self.ts.USAGE)
+
+    def test_one_memory_alone_is_guarded_too(self):
+        seen = []
+
+        class Guard:
+            def __init__(self, seconds, size, chars):
+                seen.append(size)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+        out = self.ts._Outcome()
+        with mock.patch.object(self.ts, "_StallGuard", Guard), \
+                mock.patch.object(self.ts, "_encode", lambda ts, lock: [b"v"] * len(ts)):
+            self.ts._encode_alone(7, "a memory", {}, out)
+        self.assertEqual(seen, [1])
 
 
 class TheStallGuard(unittest.TestCase):
+    def test_a_stall_on_one_memory_names_the_flag_that_can_help(self):
+        code = ("import sys, time; sys.path.insert(0, sys.argv[1]); import tier_set\n"
+                "with tier_set._StallGuard(0.2, 1, 9000):\n    time.sleep(5)\n")
+        p = subprocess.run([sys.executable, "-c", code, str(ROOT / "organs")], capture_output=True, text=True, timeout=30)
+        self.assertIn("--stall-seconds 0", p.stdout)
+        self.assertNotIn("--batch-size 2", p.stdout, "one memory cannot be split by a smaller batch")
+
     def test_a_batch_past_the_bound_stops_typed_and_names_the_flag(self):
         code = ("import sys, time; sys.path.insert(0, sys.argv[1]); import tier_set\n"
                 "with tier_set._StallGuard(0.2, 16, 9000):\n    time.sleep(5)\nprint('came back')\n")
