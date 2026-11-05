@@ -516,7 +516,15 @@ def organ_command(rel: str, *args: Any) -> str:
     """A command that runs an organ from any directory: absolute paths under the install's own interpreter. Every repair
     command the product prints goes through here, so what is printed is what works."""
     organs = Path(os.path.abspath(__file__)).parent
-    return " ".join(shlex.quote(str(a)) for a in (brain_python(), organs / rel, *args))
+    return shell_command(brain_python(), organs / rel, *args)
+
+
+def shell_command(*argv: Any, platform: Optional[str] = None) -> str:
+    """One command, quoted for the shell it is printed to: PowerShell on Windows, where a quoted first word is only a
+    string until `&` calls it, and a POSIX shell everywhere else."""
+    if (platform or sys.platform) == "win32":
+        return "& " + " ".join('"%s"' % str(a).replace('"', '`"') for a in argv)
+    return " ".join(shlex.quote(str(a)) for a in argv)
 
 
 def fetch_command(db: Optional[Union[str, Path]] = None) -> str:
@@ -710,9 +718,11 @@ def _with_way_out(e: EmbedderLockError, p: Path, brain: Any, lock: Any) -> Embed
                                                                             else _brain_beside(p.parent))
     if not tier and isinstance(lock, dict) and lock.get("tier") in catalogue_tiers():
         tier = lock["tier"]
-    moved = shlex.quote(str(p.with_name(p.name + ".malformed")))
+    aside = p.with_name(p.name + ".malformed")
     if tier:
-        fix = f"mv {shlex.quote(str(p))} {moved} && {organ_command('claude_memory.py', 'init', '--tier', tier)}"
+        init = organ_command("claude_memory.py", "init", "--tier", tier)
+        fix = (f'Move-Item -Force "{p}" "{aside}"; {init}' if sys.platform == "win32"
+               else f"mv {shlex.quote(str(p))} {shlex.quote(str(aside))} && {init}")
         return EmbedderLockError("LOCK_MALFORMED", f"{str(e).split(': ', 1)[1]}. Restore it from a backup, or move it "
                                  f"aside and write it again: `{fix}`", **{**e.detail, "tier": tier, "retry": [fix]})
     return EmbedderLockError("LOCK_MALFORMED", f"{str(e).split(': ', 1)[1]}. Restore it from a backup, or move it aside "
@@ -1018,6 +1028,13 @@ def hf_offline() -> bool:
     return False
 
 
+def fetch_options(platform: Optional[str] = None) -> Dict[str, Any]:
+    """Keyword arguments for every `snapshot_download`. On Windows without Developer Mode a symlink needs a privilege the
+    user lacks, and the library finds that out from one download while parallel ones, told symlinks work, fail with
+    WinError 1314. One file at a time it learns first and copies instead (measured: a fresh install lost its model to it)."""
+    return {"max_workers": 1} if (platform or sys.platform) == "win32" else {}
+
+
 def _fetch_pinned(model_id: str, revision: str, *, allow_fetch: bool, weights_hash: str,
                   what: str, allow_patterns: Optional[Sequence[str]] = None) -> Path:
     """The local snapshot for (model_id, revision), fetched at that revision when
@@ -1049,7 +1066,7 @@ def _fetch_pinned(model_id: str, revision: str, *, allow_fetch: bool, weights_ha
             weights_hash=weights_hash, model_id=model_id, revision=revision, what=what,
             hf_hub_cache=str(hf_hub_cache()), retry=[fix])
     from huggingface_hub import snapshot_download    # only here, only when absent; a partial snapshot is completed
-    kwargs: Dict[str, Any] = {"revision": revision}
+    kwargs: Dict[str, Any] = {"revision": revision, **fetch_options()}
     if allow_patterns:
         kwargs["allow_patterns"] = list(allow_patterns)
     snapshot_download(model_id, **kwargs)

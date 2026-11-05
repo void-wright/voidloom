@@ -4264,7 +4264,7 @@ else
     # A venv a failed attempt left behind keeps pointing at that attempt's interpreter, and `-m venv` over it says
     # "created": it is rebuilt when its own pip does not answer.
     _venv_clear=""
-    if [ -e "$VENV_PY" ] && ! "$VENV_PY" -m pip --version >/dev/null 2>&1; then _venv_clear="--clear"; fi
+    if { [ -e "$VENV_PY" ] || [ -L "$VENV_PY" ]; } && ! "$VENV_PY" -m pip --version >/dev/null 2>&1; then _venv_clear="--clear"; fi
     if "$TIER1_PY" -m venv $_venv_clear "$VENV_DIR" 2>/dev/null && [ -x "$VENV_PY" ]; then
         say "  venv created at ${VENV_DIR}"
         # CRUCIBLE-3 D05-F7: four sites here said "HASH-pinned", and

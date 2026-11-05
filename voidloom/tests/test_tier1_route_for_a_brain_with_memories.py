@@ -95,6 +95,39 @@ class ThePrintedRoute(unittest.TestCase):
             self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
 
 
+class ACommandPrintedOnWindows(unittest.TestCase):
+    def test_saboteur_powershell_calls_it_rather_than_echoing_it(self):
+        import embedder_lock as el
+        got = el.shell_command(r"C:\a b\python.exe", r"C:\x\embed_backfill.py", "--only-missing", platform="win32")
+        self.assertEqual(got, r'& "C:\a b\python.exe" "C:\x\embed_backfill.py" "--only-missing"')
+
+    def test_control_a_posix_shell_gets_posix_quoting(self):
+        import embedder_lock as el
+        self.assertEqual(el.shell_command("/a b/python3", "--x", platform="linux"), "'/a b/python3' --x")
+
+
+class AVenvAFailedAttemptLeft(unittest.TestCase):
+    """The installer's own lines, run: a venv whose interpreter is gone or whose pip does not answer is rebuilt."""
+
+    def clear(self, venv_py: Path) -> str:
+        src = (ROOT / "install.sh").read_text(encoding="utf-8")
+        i = src.index('    _venv_clear=""\n')
+        j = src.index('\n', src.index('_venv_clear="--clear"', i))
+        script = f'VENV_PY="{venv_py}"\n{src[i:j]}\necho "[$_venv_clear]"\n'
+        return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60).stdout.strip()
+
+    def test_saboteur_an_interpreter_that_is_gone_is_rebuilt(self):
+        with tempfile.TemporaryDirectory() as td:
+            py = Path(td) / "python3"
+            py.symlink_to("/nonexistent/python3.14")
+            self.assertEqual(self.clear(py), "[--clear]")
+
+    def test_control_no_venv_yet_and_a_working_one_are_left_alone(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertEqual(self.clear(Path(td) / "python3"), "[]")
+        self.assertEqual(self.clear(Path(sys.executable)), "[]")
+
+
 class TheDocsSayWhatHappens(unittest.TestCase):
     def read(self, rel):
         return (ROOT / rel).read_text(encoding="utf-8")

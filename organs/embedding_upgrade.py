@@ -323,7 +323,7 @@ def fetch_jina_at_pin() -> str:
     import embedder_lock as _el
     if _el.snapshot_dir_for(JINA_MODEL_NAME, JINA_REVISION) is None:
         from huggingface_hub import snapshot_download
-        snapshot_download(JINA_MODEL_NAME, revision=JINA_REVISION)
+        snapshot_download(JINA_MODEL_NAME, revision=JINA_REVISION, **_el.fetch_options())
     refs = _el.hf_hub_cache() / ("models--" + JINA_MODEL_NAME.replace("/", "--")) / "refs"
     if not (refs / "main").exists():
         refs.mkdir(parents=True, exist_ok=True)

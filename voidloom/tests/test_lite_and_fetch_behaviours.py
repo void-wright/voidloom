@@ -61,6 +61,14 @@ class TheKeywordEngineFlagsTheSeed(_Brain):
         self.assertEqual(p.returncode, 0, p.stdout[-400:] + p.stderr[-400:])
 
 
+class TheFetchOnWindows(unittest.TestCase):
+    def test_saboteur_one_file_at_a_time_where_a_symlink_may_need_a_privilege(self):
+        self.assertEqual(el.fetch_options("win32"), {"max_workers": 1})
+
+    def test_control_elsewhere_the_library_keeps_its_own_default(self):
+        self.assertEqual(el.fetch_options("linux"), {})
+
+
 class AFetchThatMayNotFetch(_Brain):
     def test_saboteur_no_fetch_refuses_and_nothing_lands(self):
         el.write_lock(self.d, "cpu", brain=self.db)

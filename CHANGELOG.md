@@ -46,8 +46,9 @@ All notable changes to Voidloom are recorded here. The format follows
 - **A plain re-run of an attached install keeps its brain.** Before, it built a blank brain in a new file and
   pointed everything at it. An attached file that is missing stops the run; nothing is built in its place.
 - **Windows:** a fresh install completes (`Copy-Item` now lays folders), the semantic stack comes from
-  `install\requirements.txt`, the cause of a refused embedding is printed, a failed run keeps its venv, and a
-  machine whose reranker gate is off fetches no reranker.
+  `install\requirements.txt`, the cause of a refused embedding is printed, a failed run keeps its venv, a machine
+  whose reranker gate is off fetches no reranker, models download one file at a time so a missing symlink privilege
+  cannot lose one, and every printed repair command is a PowerShell command.
 - **`maintain` recomputes a similarity link stamped under another model** when it compares the pair. A link it
   does not revisit keeps its old strength, and `status` counts it.
 - `model_fetch.py` fetches a jina brain's model at the revision the engine pins, and the installers do the same instead
