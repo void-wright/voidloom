@@ -159,6 +159,34 @@ def _tier1_unavailable(exc) -> bool:
     return want.lower() not in names
 
 
+def _brain_is_locked(db_path: Optional[str]) -> bool:
+    """A lock is a promise of semantic recall: on such a brain a store with no vector is a memory recall cannot reach, so
+    an absent model is a refusal, not a keyword store. A brain with no lock made no such promise."""
+    try:
+        import embedder_lock  # type: ignore
+        embedder_lock.resolve(db_path)
+        return True
+    except Exception:
+        return False
+
+
+def _foreign_env_refusal() -> Optional[Dict[str, Any]]:
+    """A store under an env directory that belongs to another install would land with no vector and say ok."""
+    import sys
+
+    brain_dir = str(_paths.organ_dir())
+    if brain_dir not in sys.path:
+        sys.path.insert(0, brain_dir)
+    try:
+        import voidloom_env  # type: ignore
+        voidloom_env.env_path(voidloom_env.ENV_FILE_NAME)
+    except ImportError:
+        return None
+    except ValueError as e:
+        return {"status": "error", "error": getattr(e, "code", "ENV_DIR_FOREIGN"), "action": "store", "message": str(e)}
+    return None
+
+
 def _import_tier0():
     """The engine whose whole purpose is that it cannot fail: stdlib FTS5 only.
 
@@ -334,6 +362,10 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
     if db_path is None:
         # Propagate voidloom's own resolution to the env-blind engine.
         db_path = _paths.resolve_db()
+    if cmd_name == "store":
+        foreign = _foreign_env_refusal()
+        if foreign is not None:
+            return foreign
     cmd_fn = getattr(engine, f"cmd_{cmd_name.replace('-', '_')}", None)
     if cmd_fn is None:
         return {"status": "error",
@@ -432,7 +464,7 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
             _code = getattr(te, "code", None)
             if not _code:
                 raise                                       # not ours to rephrase
-            if _code != "SNAPSHOT_ABSENT" or not _tier1_unavailable(OSError(str(te))):
+            if _code != "SNAPSHOT_ABSENT" or (cmd_name == "store" and _brain_is_locked(db_path)):
                 payload = {"status": "error", "error": _code, "action": cmd_name, "message": str(te)}
                 cov = getattr(te, "coverage", None)
                 if cov is not None and hasattr(cov, "as_dict"):

@@ -1265,6 +1265,28 @@ if not rows:
 print("\n".join(rows))
 ENGINE_REGISTRY_PY
 }
+# hd_brain_is_new -- "yes" for a brain this run may embed whole: no file yet, or one holding only the seed pack and no
+# vector (an install that stopped at Tier 0). Anything an owner has written is an existing brain. Read before anything
+# in this run writes to it.
+hd_brain_is_new() {
+    [ -s "$DB_PATH" ] || { echo yes; return; }
+    "$PY_SYS" - "$DB_PATH" <<'PYEOF' 2>/dev/null || echo no
+import os, sqlite3, sys, urllib.request
+c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(sys.argv[1])), uri=True)
+cols = {r[1] for r in c.execute("PRAGMA table_info(memories)")}
+if not cols:
+    print("yes"); sys.exit(0)
+own = c.execute("SELECT COUNT(*) FROM memories" + (" WHERE COALESCE(seed, 0) = 0" if "seed" in cols else "")).fetchone()[0]
+held = 0
+for t in ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3"):
+    try:
+        held += c.execute("SELECT COUNT(*) FROM %s_rowids" % t).fetchone()[0]
+    except sqlite3.Error:
+        pass
+print("yes" if own == 0 and held == 0 else "no")
+PYEOF
+}
+BRAIN_IS_NEW="$(hd_brain_is_new)"
 EMBED_MODEL="$(resolve_embed_model)"
 case "$EMBED_MODEL" in BRAIN_TIER_CONFLICT:*)
     _have="${EMBED_MODEL#BRAIN_TIER_CONFLICT:}"; _want="${_have#*:}"; _have="${_have%%:*}"
@@ -4364,7 +4386,8 @@ try:
         if _lock["model_id"] != os.environ["EMBED_REPO"]:
             raise RuntimeError("the install lock names %s but this run selected %s; the lock is the promise"
                                % (_lock["model_id"], os.environ["EMBED_REPO"]))
-        _snap, _computed = embedder_lock.verify_snapshot_against_lock(_lock)
+        with embedder_lock.fetch_allowed():
+            _snap, _computed = embedder_lock.verify_snapshot_against_lock(_lock)
         print("  cached + verified " + _lock["model_id"] + "@" + _lock["revision"][:12]
               + " (embedder; weights " + _computed[:12] + " == lock; " + format(_bytes_of(str(_snap)), ",") + " bytes)")
     else:
@@ -4511,9 +4534,13 @@ EOF_DECL
                 if t1_device_proof; then :; else T1_DEVICE_OK=0; fi
             fi
 
-            say "  embedding the seed pack (embedding is part of installation)…"
             T1_EMBED_REFUSED=0
-            if "$VENV_PY" "${BRAIN_DIR}/organs/embed_backfill.py" "$DB_PATH"; then
+            if [ "$BRAIN_IS_NEW" != "yes" ]; then
+                # An existing brain is never embedded unasked: at 30,000 memories that is hours inside an installer, and
+                # its legacy vectors are searched as they are. It is told what is outstanding and how to do it.
+                say "  this brain already existed, so nothing is embedded here. What is outstanding:"
+                "$VENV_PY" "${BRAIN_DIR}/organs/embed_backfill.py" "$DB_PATH" --outstanding || true
+            elif say "  embedding the seed pack (embedding is part of installation)…"; "$VENV_PY" "${BRAIN_DIR}/organs/embed_backfill.py" "$DB_PATH"; then
                 say "  seed pack embedded — semantic recall works from the first query."
                 seed_self_test
             else

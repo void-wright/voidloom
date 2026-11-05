@@ -508,6 +508,11 @@ def seed_plan(conn: sqlite3.Connection, mems: list, common_tag: str) -> dict:
     """The delta, computed read-only: which entries are present / adopted / changed / new / left.
 
     Returns {"actions": [(action, entry_index, anchor, row_id_or_None)], "invalid": [...], "counts": {...}}."""
+    deleted = set()                     # entries the owner hard-deleted (memory_write.tombstone_seed)
+    try:
+        deleted = {r[0] for r in conn.execute("SELECT value FROM metadata WHERE key LIKE 'seed\\_tombstone:%' ESCAPE '\\'")}
+    except sqlite3.OperationalError:
+        pass
     # every row that carries the pack's common tag, archived or not, EXCEPT rows this loader superseded
     rows = {}
     for mid, summ, content, archived in conn.execute(
@@ -593,6 +598,9 @@ def seed_plan(conn: sqlite3.Connection, mems: list, common_tag: str) -> dict:
                 or others_anchor.get(anchor))
         if held is not None:
             actions.append(("held-untagged", i, anchor, held))   # R3-06: the brain holds it already, without the tags
+            continue
+        if anchor in deleted:
+            actions.append(("left", i, anchor, None))            # the owner deleted this entry: it stays deleted
             continue
         actions.append(("new", i, anchor, None))
     counts = {}

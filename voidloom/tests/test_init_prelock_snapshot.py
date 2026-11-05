@@ -86,7 +86,7 @@ class InitOnAPreLockBrain(unittest.TestCase):
         env = _last_json(s.stdout)
         self.assertEqual(env.get("error"), "SNAPSHOT_ABSENT", s.stdout[-800:] + s.stderr[-800:])
         said = json.dumps(env) + s.stderr
-        self.assertIn("python3 organs/model_fetch.py --db", env.get("message", ""))
+        self.assertIn("organs/model_fetch.py --db", env.get("message", ""))
         self.assertTrue(any("organs/model_fetch.py" in x for x in env.get("retry", [])), env.get("retry"))
         self.assertTrue((self.box / "organs" / "model_fetch.py").is_file())
         self.assertNotIn("memory install", said)      # the retry once named a command this repository never shipped

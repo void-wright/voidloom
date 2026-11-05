@@ -299,11 +299,12 @@ def _mw():
     return memory_write
 
 
-def _get_memory_embedding(conn: sqlite3.Connection, memory_id: int) -> Optional[bytes]:
+def _get_memory_embedding(conn: sqlite3.Connection, memory_id: int, flt: Any = None) -> Optional[bytes]:
     """Raw embedding bytes for a memory IF IT IS IN THE SEARCH SET (memory_write.read_vector),
-    else None. None too when vec0 is not loaded; the reader's typed refusals propagate."""
+    else None. None too when vec0 is not loaded; the reader's typed refusals propagate.
+    A pass over many memories hands in the filter it derived once."""
     try:
-        return _mw().read_vector(conn, memory_id)
+        return _mw().read_vector(conn, memory_id, flt=flt)
     except sqlite3.OperationalError:
         return None
 
@@ -383,8 +384,9 @@ def extract_edges_heuristic(
     memory_id: int,
     top_k: int = 10,
     tier3_cache: Optional["Tier3Cache"] = None,
+    flt: Any = None,
 ) -> List[dict]:
-    """Heuristic edge extraction for a single memory.
+    """Heuristic edge extraction for a single memory. A pass over many hands in the filter it derived once (`flt`).
 
     Finds candidate edges via:
       - Tag co-occurrence (rare shared tags) -> references (confidence 0.6)
@@ -436,7 +438,7 @@ def extract_edges_heuristic(
 
     my_tags = _get_memory_tags(conn, memory_id)
     my_project = _get_memory_project(conn, memory_id)
-    my_embedding = _get_memory_embedding(conn, memory_id)
+    my_embedding = _get_memory_embedding(conn, memory_id, flt)
 
     # Pre-compute all memory ID references once (used by multiple Tier 1 blocks).
     all_ref_strs = _RE_MEMORY_REF.findall(content)

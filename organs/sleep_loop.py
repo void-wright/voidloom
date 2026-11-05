@@ -1063,15 +1063,21 @@ def extract_new_edges(
                    memories_processed, total, (100.0 * memories_processed / total) if total else 100.0,
                    last_done, edges_created, rate, el, eta, " (stopped at the budget)" if final and stopped else "")
 
+    # The search set is derived once for the pass; a refusal here is met per memory below, as it always was.
+    try:
+        import memory_write as _mw_pass
+        pass_flt = _mw_pass.search_set(conn)
+    except Exception:  # noqa: BLE001
+        pass_flt = None
     for mid in ids:
         if deadline is not None and _clock() >= deadline:
             stopped = True
             break
         try:
             if cache is not None:
-                proposals = te.extract_edges_heuristic(conn, mid, top_k=10, tier3_cache=cache)
+                proposals = te.extract_edges_heuristic(conn, mid, top_k=10, tier3_cache=cache, flt=pass_flt)
             else:
-                proposals = te.extract_edges_heuristic(conn, mid, top_k=10)
+                proposals = te.extract_edges_heuristic(conn, mid, top_k=10, flt=pass_flt)
             edges_proposed += len(proposals)
 
             if not dry_run:

@@ -121,10 +121,10 @@ class WhatIsClosedAndWhatIsNot(unittest.TestCase):
             self.cm._encode("q", "search_query")
         self.assertEqual(self.seen, [True])
 
-    def test_control_a_document_embed_keeps_the_hub_open(self):
+    def test_saboteur_a_document_embed_runs_with_the_hub_closed_too(self):
         with mock.patch.object(self.cm, "_encode_now", self.record):
             self.cm._encode("d", "search_document")
-        self.assertEqual(self.seen, [False])
+        self.assertEqual(self.seen, [True])
 
     def test_control_the_process_is_left_as_it_was_found(self):
         with mock.patch.object(self.cm, "_encode_now", self.record):
@@ -152,12 +152,17 @@ class WhatIsClosedAndWhatIsNot(unittest.TestCase):
     def test_control_the_preflight_warms_by_a_document_embed(self):
         text = (ROOT / "install" / "preflight.py").read_text(encoding="utf-8")
         self.assertIn("cm._encode('warm up', prefix='search_document')%s", text)
+        self.assertIn("el.fetch_allowed()", text)
 
     def test_control_a_fetching_caller_still_reaches_the_download(self):
         with tempfile.TemporaryDirectory() as td, mock.patch.dict(os.environ, {"HF_HUB_CACHE": td}):
             import huggingface_hub
             with mock.patch.object(huggingface_hub, "snapshot_download", side_effect=RuntimeError("fetched")) as dl:
-                with self.assertRaises(RuntimeError):
+                with self.assertRaises(el.EmbedderLockError) as cm:
+                    el.verify_snapshot_against_lock(el.catalogue_tiers()["cpu"])
+                self.assertEqual(cm.exception.code, "SNAPSHOT_ABSENT")
+                self.assertFalse(dl.called, "a caller outside fetch_allowed() reaches no download")
+                with self.assertRaises(RuntimeError), el.fetch_allowed():
                     el.verify_snapshot_against_lock(el.catalogue_tiers()["cpu"])
             self.assertTrue(dl.called)
 

@@ -815,13 +815,12 @@ def _load_model():
 
 def _encode(text: str, prefix: str = "search_document", *,
             lock: Optional[Dict[str, Any]] = None) -> bytes:
-    # A query is a read, and a read does not reach the network: the load below runs with the hub closed, so a model
-    # that is not on this disk refuses SNAPSHOT_ABSENT and the recall degrades. A document embed is a write and keeps
-    # its way to the pinned bytes.
-    if prefix != "search_query":
-        return _encode_now(text, prefix, lock=lock)
+    # Only an install, `tier set` and `re-embed` reach the network. The load below runs with the hub closed, so a model
+    # that is not on this disk refuses SNAPSHOT_ABSENT, naming the fetch: a recall degrades, a store says so.
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import embedder_lock
+    if prefix != "search_query" and lock is None:
+        embedder_lock.refuse_lost_lock(Path(DB_PATH).resolve())
     with embedder_lock.hub_closed():
         return _encode_now(text, prefix, lock=lock)
 
@@ -895,7 +894,9 @@ def _get_conn() -> sqlite3.Connection:
     if not DB_PATH.exists():
         _error(f"Database not found at {DB_PATH}. Run 'init' first.")
     conn = sqlite3.connect(str(DB_PATH), timeout=60.0)
+    conn.text_factory = lambda b: b.decode("utf-8", "replace")      # one damaged row cannot stop a verb that reads it
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA secure_delete=ON")     # a rewritten row's old cell is zeroed, not left in the page's free space
     # H1: recall is a WRITE under WAL (access-stats UPDATE + access_log INSERT +
     # the warden trigger re-assert below), but busy_timeout defaults to 0 — a
     # second concurrent writer (two recalls, or a recall racing the sleep/dream
@@ -1804,6 +1805,20 @@ def cmd_recall(args):
     # A keyword-only recall needs no embedder: the search reads no vector, so encoding
     # here would refuse SNAPSHOT_ABSENT on a host with an empty cache and pay the model
     # load on every other host.
+    if mode != "bm25-only":
+        # The reader before the encoder: a brain whose vectors the lock cannot admit says so, with its coverage,
+        # rather than loading a model to find out.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import memory_write as _mw_gate
+        try:
+            _mw_gate.search_set(conn)
+        except Exception as _e:  # noqa: BLE001
+            # With no vectors at all there is nothing to refuse: the keyword arm answers, as for any unembedded brain.
+            _none_held = getattr(_e, "code", None) == "NO_ROWS_FOR_LOCK" and not getattr(getattr(_e, "coverage", None), "vectors", 0)
+            if getattr(_e, "code", None) in ("NO_ROWS_FOR_LOCK", "STAMP_INCONSISTENT", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED") \
+                    and not _none_held:
+                conn.close()
+                raise
     query_vec = _encode(args.query, "search_query") if mode != "bm25-only" else None
 
     multi_hop_depth = getattr(args, 'multi_hop', 0) or 0
@@ -2377,7 +2392,7 @@ def _cmd_recall_legacy(args, conn, t0):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import embed_resolver
     import memory_write
-    _cov = memory_write.coverage_envelope(conn)
+    _cov = memory_write.coverage_envelope(conn, detail=False)
     try:
         _flt = memory_write.search_set(conn)
         _vec_from, _in_set, _in_set_params = None, "", ()
@@ -2635,7 +2650,9 @@ def cmd_update(args):
         # nothing must not read as a re-embed, the reader would count the row stale.
         embedding = _encode(args.content, "search_document")
         table, _vd = _active_embed_table(), _active_embed_dim()
-        conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (args.id,))
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import memory_write
+        memory_write.clear_vector(conn, table, args.id)
         conn.execute(
             f"INSERT INTO {table} (memory_id, embedding) VALUES (?, ?)",
             (args.id, embedding),
@@ -2753,11 +2770,15 @@ def cmd_delete(args):
         try:
             receipt = memory_write.purge_memory(conn, args.id)
             conn.commit()
+        except memory_write.HardDeleteRefused as e:
+            conn.rollback()
+            conn.close()
+            _error(str(e))
         except Exception:
             conn.rollback()
             conn.close()
             raise
-        receipt["wal_emptied"] = memory_write.finish_purge(conn)
+        receipt.update(memory_write.finish_purge(conn))
         did_hard_delete = True
     else:
         # Default path AND the demoted `forget --hard`: soft-archive only.
@@ -3534,12 +3555,14 @@ def cmd_context(args):
     ).fetchall():
         categories[row[0]] = row[1]
 
+    gaps = _schema_gaps(conn)
     conn.commit()
     conn.close()
 
     _output({
         "status": "ok",
         "action": "context",
+        **({"degraded": True, "schema_gaps": gaps} if gaps else {}),
         "project": args.project,
         "memories_loaded": len(results),
         "total_memories": total,
@@ -3553,6 +3576,14 @@ def cmd_sleep(args):
     """Run the sleep loop cycle (manual trigger for testing; cron handles automatic runs)."""
     if sleep_loop is None:
         _error("sleep_loop module not importable. Ensure sleep_loop.py is alongside claude_memory.py.")
+    _conn = _get_conn()
+    _gaps = _schema_gaps(_conn)
+    _conn.close()
+    if _gaps:
+        _output({"status": "error", "error": "SCHEMA_DAMAGED", "action": "sleep", "schema_gaps": _gaps,
+                 "message": f"this brain no longer holds {', '.join(_gaps)}: a sleep cycle over it would read as done "
+                            "and do nothing. Restore from a backup; nothing was changed.",
+                 "coverage": _coverage_or_none()}, exit_code=1)
 
     config = None
     config_path = getattr(args, 'config', None)
@@ -3736,7 +3767,7 @@ def cmd_anticipate(args):
     # 7. Optionally log the anticipation.
     try:                                # never raises by contract; the guard is for an import failure
         import memory_write as _mw_cov
-        _coverage = _mw_cov.coverage_envelope(conn)
+        _coverage = _mw_cov.coverage_envelope(conn, detail=False)
     except Exception as _e:  # noqa: BLE001
         _coverage = {"ok": False, "error": type(_e).__name__, "message": str(_e)}
     log_id = None
@@ -4229,6 +4260,41 @@ def self_eval_approvals_view(db_path: str) -> dict:
             "degraded": degraded}
 
 
+def _coverage_or_none() -> Optional[Dict[str, Any]]:
+    """The reader's coverage for a refusal to carry: every refusal says what it could still measure. None only when the
+    brain cannot be opened at all."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import memory_write
+        import sqlite_vec
+        conn = sqlite3.connect(f"{Path(DB_PATH).resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
+        try:
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+            return memory_write.coverage_envelope(conn, detail=False)
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 -- this runs on the way out of a refusal, and must not replace it
+        return None
+
+
+def _schema_gaps(conn: sqlite3.Connection) -> List[str]:
+    """Tables this brain's own schema needs and no longer holds: the full-text index its triggers still write to, and
+    the vector table its tier reads."""
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master").fetchall()}
+    gaps = []
+    if "memories_fts" not in names and any(n.startswith("memories_fts_") or n.startswith("memories_ai") for n in names):
+        gaps.append("memories_fts")
+    try:
+        table = _active_embed_table()
+        if table not in names:
+            gaps.append(table)
+    except Exception:  # noqa: BLE001 -- a brain with no tier has no table to be missing
+        pass
+    return gaps
+
+
 def main():
     parser = argparse.ArgumentParser(description="Claude Code Vectorized Memory System")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -4590,6 +4656,11 @@ def main():
 
     try:
         cmd_map[args.command](args)
+    except sqlite3.OperationalError as e:
+        # A table the brain's own schema names is gone, or the file cannot be used: an answer, not a traceback.
+        missing = "no such" in str(e).lower()
+        _output({"status": "error", "error": "SCHEMA_DAMAGED" if missing else "DB_ERROR", "action": args.command,
+                 "message": str(e), "coverage": _coverage_or_none()}, exit_code=1)
     except Exception as e:
         # A typed refusal from the install lock (LOCK_MALFORMED, WEIGHTS_MISMATCH,
         # STAMP_INCONSISTENT, ...) is the verb's answer: one envelope, the code in
@@ -4606,6 +4677,8 @@ def main():
         if isinstance(det, dict):
             for k, v in det.items():
                 payload.setdefault(k, v)
+        if "coverage" not in payload:
+            payload["coverage"] = _coverage_or_none()
         _output(payload, exit_code=1)
 
 

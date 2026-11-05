@@ -298,8 +298,10 @@ def _refuse_if_foreign(d: Path, limb: str) -> None:
         raise EnvOwnershipRefused(
             "%s: the %s sidecar directory %s carries %s naming another install (or one that cannot be read); this "
             "install (root %s) will not read or create its files there. Point VOIDLOOM_ENV_DIR at this install's own "
-            "directory, or for one command act as the install that owns it: %s=<its root> <command>."
-            % (EnvOwnershipRefused.code, limb, d, OWNER_MARKER, acting_root(), INSTALL_ROOT_KEY))
+            "directory, or for one command act as the install that owns it: %s=<its root> <command>. If this brain moved "
+            "here, delete %s or run: python3 %s --mark %s"
+            % (EnvOwnershipRefused.code, limb, d, OWNER_MARKER, acting_root(), INSTALL_ROOT_KEY,
+               d / OWNER_MARKER, os.path.abspath(__file__), d))
 
 
 def write_owner_marker(d: Path, root: Optional[Path] = None) -> Path:

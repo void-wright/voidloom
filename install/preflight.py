@@ -206,8 +206,12 @@ def main(argv=None):
                     # model code lives in nomic-ai/nomic-bert-2048). A bare snapshot_download of the model repo
                     # cached neither, and the loader then went local-only because the repo looked cached: P6
                     # failed offline on every fresh CPU machine (friend-package smoke, 2026-10-16). On the CPU:
-                    # this step only downloads. It embeds a document: a query is a read, and a read never fetches.
+                    # this step only downloads: the one place outside the install's own steps that may, inside fetch_allowed().
                     code = ("import sys; sys.path.insert(0, %r); import claude_memory as cm; "
+                            "import embedder_lock as el, embedding_upgrade as eu; t = cm._active_embed_model(); "
+                            "c = el.fetch_allowed(); c.__enter__(); "
+                            "t in cm._TIER_TO_CATALOGUE and eu.get_locked_embedder(eu.brain_lock(cm.DB_PATH, tier=t)); "
+                            "c.__exit__(None, None, None); "
                             "cm._encode('warm up', prefix='search_document')%s" % (
                                 ORGANS, "; from huggingface_hub import snapshot_download as s; "
                                         "s('Qwen/Qwen3-Reranker-0.6B')"

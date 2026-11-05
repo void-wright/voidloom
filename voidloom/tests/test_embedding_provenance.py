@@ -842,7 +842,8 @@ class L6_InitPinnedOlderBrainKeepsItsLegacyVectors(_LockedCase):
         self.assertGreater(leg["legacy"], 0)
         self.assertIn(f"--db-path {self.db}", leg["hint"])
         self.assertIn("voidloom tier set nomic", leg["hint"])
-        self.assertEqual(leg["retry"], [f"python3 organs/embedding_upgrade.py --db-path {self.db} re-embed"])
+        self.assertEqual(leg["retry"], [self.mw.re_embed_command(str(self.db))])
+        self.assertIn(f"embedding_upgrade.py --db-path {self.db} re-embed", leg["retry"][0])
 
     def test_saboteur_a_vector_stamped_with_a_foreign_checksum_is_never_returned(self):
         foreign = self.write("another model's row", vec=_l_axis(2))

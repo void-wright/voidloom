@@ -30,9 +30,13 @@ WHAT IT DOES (embedder_lock.fetch_models_needed, the one lane):
 WHAT IT REFUSES, TYPED: `MODELS_ABSENT` (rc 3) when any needed model is absent and
 cannot be fetched -- the process is HF-offline, `--no-fetch` was given, or the hub
 could not be reached. The refusal names every absent repository, the files each pin
-names, the bytes on disk, and the retry verb. The install that calls this then
-removes the lock it wrote and reports NO working memory (DESSA, Council 5): a lock
-naming absent weights is not an install.
+names, the bytes on disk, and the retry verb. A caller that gets this refusal reports
+no working memory: a lock naming absent weights is not an install. When the only
+models absent are ones this machine's reranker gate does not load, the refusal says so:
+recall already works there.
+
+A brain with no lock is served by the shipped catalogue entry for the tier it embeds
+under; a brain on a tier the catalogue does not ship has no pin to fetch, and says so.
 
 WHAT IT NEVER DOES: instantiate a model (the fetch is snapshot_download + sha256;
 `model_loads: 0` by construction), guess a tier, or fetch anything the catalogue
@@ -45,6 +49,33 @@ import json
 import os
 import sys
 from pathlib import Path
+
+
+def _lock_for(el, db: str) -> dict:
+    """The brain's lock; for a brain that predates it, the shipped entry for the tier it embeds under."""
+    try:
+        return el.resolve(db)
+    except el.EmbedderLockError as e:
+        if e.code != "LOCK_MISSING" or e.detail.get("was_locked"):
+            raise
+    import embedding_upgrade
+    import tier_set
+    try:
+        tier = tier_set._prelock_engine_tier(Path(db))
+    except tier_set.TierRefused as e:
+        raise el.EmbedderLockError(e.code, e.message)
+    if tier is None:
+        raise el.EmbedderLockError("LOCK_NOT_SHIPPED", "this brain embeds under a tier the package catalogue does not "
+                                   "ship, so there is no pin to fetch at; its model is loaded by name")
+    return embedding_upgrade.brain_lock(db, tier=tier)
+
+
+def _reranker_gate_on() -> bool:
+    try:
+        import hybrid_retrieval
+        return bool(hybrid_retrieval.reranker_gate()["enabled"])
+    except Exception:                       # noqa: BLE001 -- a gate that cannot be read makes no claim
+        return True
 
 
 def main(argv=None) -> int:
@@ -63,18 +94,26 @@ def main(argv=None) -> int:
         return rc
 
     try:
-        lock = el.resolve(a.db)
+        lock = _lock_for(el, a.db)
     except el.EmbedderLockError as e:
         return emit({**e.as_dict(), "action": "model-fetch"}, 2)
     organs_dir = Path(__file__).resolve().parent
+    gate_off = not _reranker_gate_on()
     if a.plan:
         plan = el.models_needed(lock, organs_dir=organs_dir)
+        for m in plan["needed"]:
+            if m["what"] == "reranker" and gate_off:
+                m["gate"] = "off on this machine: fetched for the install, not loaded by recall here"
         return emit({"status": "ok", "action": "model-fetch", "mode": "plan", "hf_hub_cache": str(el.hf_hub_cache()),
                      **plan}, 0)
     try:
         res = el.fetch_models_needed(lock, organs_dir=organs_dir, allow_fetch=not a.no_fetch)
     except el.EmbedderLockError as e:
         doc = {**e.as_dict(), "action": "model-fetch"}
+        missing = [m.get("what") for m in (e.detail.get("models") or []) if m.get("status") == "absent"]
+        if gate_off and missing and set(missing) <= {"reranker"}:
+            doc["recall_unaffected"] = ("only the reranker is absent, and this machine's gate does not load it: "
+                                        "recall works here without it")
         return emit(doc, 3 if e.code == "MODELS_ABSENT" else 1)
     res = {"action": "model-fetch", **res}
     if not a.json:

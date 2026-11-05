@@ -428,8 +428,9 @@ def reranker_status(install_record: Optional[str] = None, confirm: bool = False,
     st["model_cached"] = _reranker_in_cache(gate["model"]) if gate["enabled"] else None
     notes = []
     if gate["enabled"] and st["model_cached"] is False:
+        import embedder_lock
         notes.append("reranker enabled but not cached: recall keeps its fused order until %s is fetched "
-                     "(python3 organs/model_fetch.py --db <brain>/claude_memory.db)" % gate["model"])
+                     "(%s)" % (gate["model"], embedder_lock.fetch_command()))
     if st["stored_agrees"] is False:
         notes.append("the installer recorded the reranker %s; this machine now says %s (the live answer decides)"
                      % ("on" if stored_on else "off", "on" if gate["enabled"] else "off"))
@@ -1082,7 +1083,7 @@ def recall_hybrid_with_coverage(
                    reranker could run, so the fused order stands; `reason` says why).
     Every row also carries it as ``row["coverage"]``. An EMPTY result set can
     carry nothing per row, which is why it is returned beside the list."""
-    coverage = dict(_reader().coverage_envelope(conn))
+    coverage = dict(_reader().coverage_envelope(conn, detail=False))
     refusals: List[str] = []
     _rerank_outcome.clear()
     rows = _recall_hybrid_rows(

@@ -298,6 +298,10 @@ def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple
         tier, how = _brain_tier(db, tiers)
         out["brain_tier"] = tier
         out["present"] = bool(out["by_model"].get(tier))
+        import importlib.util
+        if tier == "jina" and importlib.util.find_spec("peft") is None:
+            out["present"] = False
+            out["missing_modules"] = ["peft"]       # its remote code imports peft at load: bytes on disk are not a model
         out["present_semantics"] = (f"this brain's: the {tier} model, its tier by {how} (the brain has no lock)"
                                     if tier else f"this brain's: unknown, {how}")
         return
@@ -306,10 +310,13 @@ def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple
         if mod is None:
             raise ValueError("organs/embedder_lock.py is not importable")
         lock = mod.read_lock(lock_path)
-        pins = [(lock["model_id"], lock["revision"])]
+        pins = [(lock["model_id"], lock["revision"], lock.get("files"))]
         if isinstance(lock.get("code"), dict):
-            pins.append((lock["code"]["model_id"], lock["code"]["revision"]))
-        snaps = {f"{mid}@{rev[:12]}": mod.snapshot_dir_for(mid, rev) is not None for mid, rev in pins}
+            pins.append((lock["code"]["model_id"], lock["code"]["revision"], lock["code"].get("files")))
+        snaps = {f"{mid}@{rev[:12]}": mod.snapshot_complete(mod.snapshot_dir_for(mid, rev), files)
+                 for mid, rev, files in pins}
+        partial = [f"{mid}@{rev[:12]}" for mid, rev, files in pins if mod.snapshot_dir_for(mid, rev) is not None
+                   and not mod.snapshot_complete(mod.snapshot_dir_for(mid, rev), files)]
     except Exception as e:
         out.update({"lock": str(lock_path), "lock_snapshots": {}, "present": False,
                     "lock_refusal": getattr(e, "code", type(e).__name__),
@@ -318,6 +325,8 @@ def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple
     out.update({"lock": str(lock_path), "lock_snapshots": snaps, "present": all(snaps.values()),
                 "present_semantics": "the lock's: every snapshot the install lock names (model + remote code) "
                                      "is under the one cache the loader reads"})
+    if partial:
+        out.update({"lock_incomplete": partial, "lock_incomplete_fix": mod.fetch_command(db)})
 
 
 def _detect_models(db: Optional[Path] = None) -> Dict[str, Any]:

@@ -50,6 +50,7 @@ CONTRACT
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 from typing import Any, Dict, List, Optional
@@ -79,6 +80,7 @@ def _connect(db_path: str) -> sqlite3.Connection:
     has no semantic tier, and the caller's own refusal path says so honestly.
     """
     conn = sqlite3.connect(db_path, timeout=60.0)
+    conn.text_factory = lambda b: b.decode("utf-8", "replace")      # one damaged row cannot stop the batch
     conn.execute("PRAGMA busy_timeout=60000")
     try:
         conn.execute("SELECT vec_version()")
@@ -104,13 +106,14 @@ def _locked_filter(conn: sqlite3.Connection):
     return flt if flt.locked else None
 
 
-def count_unembedded(conn: sqlite3.Connection, table: str) -> int:
+def count_unembedded(conn: sqlite3.Connection, table: str, only_missing: bool = False) -> int:
     """The work left, counted now. On a locked brain, memory_write's predicate, so this
     and `re-embed` give one answer about one brain; a sidecar too old to name a checksum
-    leaves every live memory as work. With no lock: live memories with no vector in `table`."""
+    leaves every live memory as work. With no lock, or with `only_missing`: live memories with no
+    vector in `table`, so a legacy vector that is searched today is not called work."""
     import memory_write
     flt = _locked_filter(conn)
-    if flt is not None:
+    if flt is not None and not only_missing:
         if not _sidecar_ready(conn):
             return conn.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
         return len(_pending_rows(conn, table, None))
@@ -124,12 +127,13 @@ def count_unembedded(conn: sqlite3.Connection, table: str) -> int:
     ).fetchone()[0]
 
 
-def _pending_rows(conn: sqlite3.Connection, table: str, limit: Optional[int]) -> List[Dict[str, Any]]:
+def _pending_rows(conn: sqlite3.Connection, table: str, limit: Optional[int],
+                  only_missing: bool = False) -> List[Dict[str, Any]]:
     """[{id, content}] for the work count_unembedded counts, in id order."""
     import memory_write
     flt = _locked_filter(conn)
     cap = f" LIMIT {int(limit)}" if limit else ""
-    if flt is not None and _sidecar_ready(conn):
+    if flt is not None and _sidecar_ready(conn) and not only_missing:
         # A consolidated memory stamped as a centroid under the lock is done: its vector is the
         # average of its members, on purpose, and a text vector would bury it.
         done = {r[0] for r in conn.execute(
@@ -139,7 +143,7 @@ def _pending_rows(conn: sqlite3.Connection, table: str, limit: Optional[int]) ->
         rows = [{"id": mid, "content": content}
                 for mid, content in memory_write.pending_embeddings(conn, flt=flt) if mid not in done]
         return rows[:limit] if limit else rows
-    where = "" if flt is not None else f"  AND m.id NOT IN (SELECT memory_id FROM {table}) "
+    where = "" if flt is not None and not only_missing else f"  AND m.id NOT IN (SELECT memory_id FROM {table}) "
     return [dict(r) for r in conn.execute(
         f"SELECT m.id, m.content FROM memories m WHERE COALESCE(m.is_archived, 0) = 0 {where}"
         f"ORDER BY m.id{cap}").fetchall()]
@@ -152,19 +156,45 @@ def _replace_under_lock(conn: sqlite3.Connection, memory_id: int, text: str,
     import memory_write
     try:
         vec = memory_write.default_encoder(text, conn)
-        memory_write.attach_under_lock(conn, memory_id, text, vec, lock=lock, organ="embed_backfill")
+        memory_write.attach_under_lock(conn, memory_id, memory_write.stamp_source(conn, memory_id, text), vec,
+                                       lock=lock, organ="embed_backfill")
         conn.execute("DELETE FROM memory_tags WHERE memory_id = ? AND tag = ?",
                      (memory_id, memory_write.MISSING_TAG))
         return {"embedded": True, "error": None}
     except Exception as e:
-        conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
-                     (memory_id, memory_write.MISSING_TAG))
+        if conn.execute(f"SELECT 1 FROM {lock['vec_table']}_rowids WHERE rowid = ?", (memory_id,)).fetchone() is None:
+            conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
+                         (memory_id, memory_write.MISSING_TAG))
         return {"embedded": False, "error": f"{type(e).__name__}: {e}"}
 
 
+def outstanding(db_path: str) -> Dict[str, Any]:
+    """What an existing brain still owes, read only: live memories with no vector, and on a locked brain the legacy ones
+    (searched, not yet checked against the lock), with the command for each. An upgrade prints this and embeds nothing."""
+    _organs_on_path()
+    import embed_resolver
+    import memory_write
+    py = sys.executable
+    conn = _connect(db_path)
+    try:
+        table, dim = embed_resolver.resolve(conn)
+        live = conn.execute("SELECT COUNT(*) FROM memories WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
+        missing = count_unembedded(conn, table, only_missing=True)
+        cov = memory_write.coverage_envelope(conn, detail=False)
+    finally:
+        conn.close()
+    legacy = cov.get("legacy_unverified") if isinstance(cov.get("legacy_unverified"), dict) else {}
+    here = os.path.dirname(os.path.abspath(__file__))
+    return {"status": "ok", "table": table, "dim": dim, "live_memories": live, "without_a_vector": missing,
+            "legacy_unverified": legacy.get("legacy", 0), "legacy_of": legacy.get("of", 0),
+            "embed_command": f"{py} {os.path.join(here, 'embed_backfill.py')} {db_path} --only-missing",
+            "verify_command": f"{py} {os.path.join(here, 'embedding_upgrade.py')} --db-path {db_path} re-embed"}
+
+
 def backfill(db_path: str, limit: Optional[int] = None,
-             dry_run: bool = False) -> Dict[str, Any]:
-    """Embed every live memory that is work (see CONTRACT) in the active tier.
+             dry_run: bool = False, only_missing: bool = False) -> Dict[str, Any]:
+    """Embed every live memory that is work (see CONTRACT) in the active tier; with `only_missing`, only those with no
+    vector at all.
 
     Returns an envelope. Never raises for an absent encoder or an unresolved
     tier -- both are REFUSALS with a named code, because both describe a brain
@@ -206,7 +236,7 @@ def backfill(db_path: str, limit: Optional[int] = None,
         ).fetchone()[0]
 
         try:
-            missing = count_unembedded(conn, table)
+            missing = count_unembedded(conn, table, only_missing)
         except sqlite3.Error as e:
             out.update({"status": "refused", "code": "tier_table_absent",
                         "message": (f"the active tier's table {table!r} is not "
@@ -223,7 +253,7 @@ def backfill(db_path: str, limit: Optional[int] = None,
                               + ". Nothing to do, and that is a measurement, not a default.")
             return out
 
-        rows = _pending_rows(conn, table, limit)
+        rows = _pending_rows(conn, table, limit, only_missing)
 
         if dry_run:
             out["code"] = "backfill_plan"
@@ -282,7 +312,7 @@ def backfill(db_path: str, limit: Optional[int] = None,
                     out["errors"].append({"memory_id": r["id"],
                                           "error": res.get("error")})
         conn.commit()
-        out["unembedded_after"] = count_unembedded(conn, table)
+        out["unembedded_after"] = count_unembedded(conn, table, only_missing)
         if out["failed"]:
             out["status"] = "incomplete"
             out["code"] = "backfill_incomplete"
@@ -308,16 +338,39 @@ def main(argv=None) -> int:
                     help="embed at most N (the rest stay queued for the next run)")
     ap.add_argument("--dry-run", action="store_true",
                     help="count and report; write nothing")
+    ap.add_argument("--only-missing", action="store_true",
+                    help="only memories with no vector; a legacy vector is left for `re-embed`")
+    ap.add_argument("--outstanding", action="store_true",
+                    help="say what is owed and the commands, and write nothing")
     ap.add_argument("--json", action="store_true", help="envelope only")
     args = ap.parse_args(argv)
 
-    res = backfill(args.db_path, limit=args.limit, dry_run=args.dry_run)
+    if args.outstanding:
+        try:
+            due = outstanding(args.db_path)
+        except Exception as e:  # noqa: BLE001 -- said, never raised: this runs inside an install
+            print(f"  could not read what is outstanding: {type(e).__name__}: {e}")
+            return 3
+        if args.json:
+            print(json.dumps(due, indent=2, default=str))
+            return 0
+        print(f"  {due['without_a_vector']} of {due['live_memories']} live memories have no vector in {due['table']}; "
+              "they are found by keyword until embedded.")
+        if due["without_a_vector"]:
+            print(f"    to embed them: {due['embed_command']}")
+        if due["legacy_unverified"]:
+            print(f"  legacy_unverified: {due['legacy_unverified']} of {due['legacy_of']}: searched today, not yet "
+                  "checked against the lock.")
+            print(f"    to verify them: {due['verify_command']}")
+        return 0
+
+    res = backfill(args.db_path, limit=args.limit, dry_run=args.dry_run, only_missing=args.only_missing)
     if args.json:
         print(json.dumps(res, indent=2, default=str))
     else:
         print(f"  tier        : {res.get('table')} ({res.get('dim')}-wide)")
         print(f"  live memories: {res.get('live_memories')}")
-        print(f"  unembedded  : {res.get('unembedded_before')} before, "
+        print(f"  to embed    : {res.get('unembedded_before')} before, "
               f"{res.get('unembedded_after')} after")
         if not args.dry_run:
             print(f"  embedded    : {res.get('embedded')}   failed: {res.get('failed')}")

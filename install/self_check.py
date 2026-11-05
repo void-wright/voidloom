@@ -602,11 +602,20 @@ def check_tier(checks: Checks, db_path: Path):
         "tier detection", True, required=False,
         detail=detail,
     )
-    checks.note(
-        "Semantic (Tier 1) recall is ACTIVE." if semantic
-        else "Running on Tier 0 (keyword recall). To add semantic recall later, "
-             "run the Tier-1 upgrade in install.sh (optional)."
-    )
+    checks.semantic_tables = semantic
+
+
+def note_tier(checks: Checks):
+    """The sentence a reader acts on, said only after the model check: tables on disk are not recall by meaning, and a
+    brain whose model will not load answers by keyword whatever its tables hold."""
+    if getattr(checks, "semantic_tables", False) and getattr(checks, "models_loaded", None) is True:
+        checks.note("Semantic (Tier 1) recall is ACTIVE.")
+    elif getattr(checks, "semantic_tables", False) and getattr(checks, "models_loaded", None) is False:
+        checks.note("Semantic recall is NOT active: this brain's model did not load (see the check above), so recall "
+                    "answers by keyword.")
+    else:
+        checks.note("Running on Tier 0 (keyword recall). To add semantic recall later, "
+                    "run the Tier-1 upgrade in install.sh (optional).")
 
 
 def check_models(checks: Checks, db_path: Path):
@@ -807,8 +816,9 @@ def check_models(checks: Checks, db_path: Path):
             "one or both required models could not be verified from the local cache "
             f"(~/.cache/huggingface): {e}"
         )
-        fix = ("Fetch them at the install lock's pins: python3 organs/model_fetch.py --db <brain>/claude_memory.db "
-               "(from the installed brain directory), or re-run install.sh. Keyword recall is unaffected.")
+        run = _el.fetch_command(db_path) if _el is not None else "bash install.sh"
+        fix = (f"Fetch them at the install lock's pins: {run}, or re-run install.sh. Keyword recall is unaffected.")
+    checks.models_loaded = ok
     checks.add(
         "full L4 models load (embedder + reranker)", ok, required=False,
         detail=detail, fix=fix,
@@ -938,6 +948,7 @@ def run_self_check(seed_optional: bool = False) -> Checks:
         check_classify(checks, seeds)
     check_tier(checks, db_path)
     check_models(checks, db_path)
+    note_tier(checks)
     return checks
 
 

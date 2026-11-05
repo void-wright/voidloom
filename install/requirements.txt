@@ -150,3 +150,5 @@ sqlite-vec==0.1.6
 
 # --- required by the nomic/jina model implementations (pure-python) ---
 einops==0.8.2
+# The jina tier's remote code imports peft when the model loads; without it a jina brain falls to keyword recall.
+peft==0.19.1

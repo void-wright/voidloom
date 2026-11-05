@@ -530,7 +530,9 @@ def cmd_delete(args):
         _error(f"Memory {args.id} not found")
 
     if args.hard:
-        conn.execute("DELETE FROM memory_embeddings WHERE memory_id = ?", (args.id,))
+        import memory_write
+        conn.execute("PRAGMA secure_delete=ON")
+        memory_write.clear_vector(conn, "memory_embeddings", args.id)
         conn.execute("DELETE FROM embedding_provenance WHERE memory_id = ?", (args.id,))
         conn.execute("DELETE FROM memory_tags WHERE memory_id = ?", (args.id,))
         conn.execute("DELETE FROM memory_links WHERE source_id = ? OR target_id = ?", (args.id, args.id))
@@ -540,6 +542,7 @@ def cmd_delete(args):
         conn.execute("UPDATE memories SET is_archived = 1, updated_at = datetime('now') WHERE id = ?", (args.id,))
 
     conn.commit()
+    receipt = memory_write.finish_purge(conn) if args.hard else None
     conn.close()
 
     _output({
@@ -547,6 +550,7 @@ def cmd_delete(args):
         "action": "delete",
         "memory_id": args.id,
         "hard_delete": args.hard,
+        **({"receipt": receipt} if receipt else {}),
         "time_ms": int((time.time() - t0) * 1000),
     })
 

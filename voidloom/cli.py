@@ -575,8 +575,21 @@ def _provenance_defects(conn: Optional[sqlite3.Connection], out: Dict[str, Any],
         unstamped = _unstamped_since_lock(conn, cov["vec_table"], memory_write.PROVENANCE_TABLE,
                                           (out.get("lock") or {}).get("locked_at"))
     return {"vectors_without_stamp": unstamped, "stamped_without_vector": orphans,
+            "vectors_without_memory": _vectors_without_memory(conn, cov.get("vec_table")),
             "stamped_foreign": int(cov.get("stamped_foreign_hash") or 0),
             "inconsistent": len(cov.get("inconsistent") or [])}
+
+
+def _vectors_without_memory(conn: Optional[sqlite3.Connection], table: Optional[str]) -> int:
+    """Vectors whose memory is gone: nothing joins them to a row, so every other count here passes over them. Read from
+    vec0's own rowid table, which needs no extension. `tier set` or `re-embed` prunes them."""
+    if conn is None or not table:
+        return 0
+    try:
+        return int(conn.execute(f"SELECT COUNT(*) FROM {table}_rowids WHERE rowid NOT IN "
+                                f"(SELECT id FROM memories)").fetchone()[0])
+    except sqlite3.Error:
+        return 0
 
 
 def _coverage_note(out: Dict[str, Any], table: Optional[str]) -> Optional[str]:
@@ -755,6 +768,29 @@ def _tier_coherence(db_path: Optional[str]) -> Dict[str, Any]:
                          f"{defects.get('stamped_foreign', 0)} under another model, "
                          f"{defects.get('inconsistent', 0)} inconsistent shape(s)")
     return out
+
+
+def _foreign_env_dir() -> Optional[str]:
+    """The env directory this install reads belongs to another install: every organ that resolves it refuses, so stores
+    lose their vectors while everything else reads fine."""
+    try:
+        _organs_importable()
+        import voidloom_env  # type: ignore
+        voidloom_env.env_path(voidloom_env.ENV_FILE_NAME)
+        return None
+    except ImportError:
+        return None
+    except ValueError as e:
+        return f"{getattr(e, 'code', 'ENV_DIR_FOREIGN')}: {e}"
+
+
+def _incomplete_model(models: Dict[str, Any]) -> Optional[str]:
+    """A snapshot directory missing a file the pin names: what an interrupted download leaves. Recall answers by keyword
+    until it is fetched, and the fix is the command in `lock_incomplete_fix`."""
+    bad = models.get("lock_incomplete") or []
+    if not bad:
+        return None
+    return f"SNAPSHOT_ABSENT: {', '.join(bad)} is incomplete (an interrupted download). Fix: {models.get('lock_incomplete_fix')}"
 
 
 def _brain_fault(coherence: Dict[str, Any]) -> Optional[str]:
@@ -981,7 +1017,7 @@ def verb_recall(args) -> Dict[str, Any]:
         if ro is not None:
             return ro
         if _is_uninitialized_error(exc):
-            return _db_uninitialized_error(db, verb="recall")
+            return _db_uninitialized_error(db, verb="recall", exc=exc)
         raise
     env = _wrap_engine_result(res, verb="recall", ok_code="recall_ok")
     # BIND THE FLAG. A degrade nobody can see is a silent drop, which is the
@@ -1101,15 +1137,23 @@ def _is_uninitialized_error(exc: BaseException) -> bool:
     return any(sig in msg for sig in _UNINITIALIZED_ERR_SIGNATURES)
 
 
-def _db_uninitialized_error(db: Optional[str], *, verb: str) -> Dict[str, Any]:
+def _db_uninitialized_error(db: Optional[str], *, verb: str, exc: Optional[BaseException] = None) -> Dict[str, Any]:
     """The typed ``db_uninitialized`` envelope for a brain with no schema. Mirrors
     the read-only typed-degrade philosophy: a cold agent handed an empty sandbox
     gets a recovery path, not a cryptic ``unhandled``. Best-effort path recovery
-    via the same resolver the rest of the CLI uses."""
+    via the same resolver the rest of the CLI uses.
+
+    A brain that holds memories and has lost a table is not uninitialized, and `init` is not its remedy: that is
+    SCHEMA_DAMAGED, the code the engine gives the same fault."""
     try:
         db_path = _paths.resolve_db(db)
     except Exception:
         db_path = db
+    if _holds_memories(db_path):
+        return error("SCHEMA_DAMAGED",
+                     f"brain at {db_path!r} holds memories and is missing part of its schema ({exc}). Restore it from a "
+                     "backup, or from the pre-image the installer kept beside it.",
+                     data={"db_path": db_path}, verb=verb)
     return error(
         "db_uninitialized",
         (f"brain at {db_path!r} has no schema (the file exists but its tables "
@@ -1119,6 +1163,17 @@ def _db_uninitialized_error(db: Optional[str], *, verb: str) -> Dict[str, Any]:
         data={"db_path": db_path, "remedy": "claude_memory.py init"},
         verb=verb,
     )
+
+
+def _holds_memories(db_path: Optional[str]) -> bool:
+    try:
+        conn = _open_brain_ro(str(db_path))
+        try:
+            return conn.execute("SELECT 1 FROM memories LIMIT 1").fetchone() is not None
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
 
 
 def _readonly_refusal_from_exc(db: Optional[str], exc: BaseException, *,
@@ -1195,7 +1250,7 @@ def verb_store(args) -> Dict[str, Any]:
         # memories` mid-store; emit the typed db_uninitialized envelope rather
         # than let it escape as an untyped top-level `unhandled` crash.
         if _is_uninitialized_error(exc):
-            return _db_uninitialized_error(db, verb="store")
+            return _db_uninitialized_error(db, verb="store", exc=exc)
         raise
     return _wrap_engine_result(res, verb="store", ok_code="store_ok")
 
@@ -1215,7 +1270,7 @@ def verb_context(args) -> Dict[str, Any]:
         # M6: an uninitialized brain (no `memories` table) raises mid-context;
         # emit the typed db_uninitialized envelope, not an untyped crash.
         if _is_uninitialized_error(exc):
-            return _db_uninitialized_error(db, verb="context")
+            return _db_uninitialized_error(db, verb="context", exc=exc)
         raise
     return _wrap_engine_result(res, verb="context", ok_code="context_ok")
 
@@ -1256,6 +1311,19 @@ def _load_json_array(raw: str) -> Any:
         return json.loads(text)
     except (ValueError, TypeError) as e:
         raise ValueError(f"batch input is not valid JSON: {e}")
+
+
+def _coverage_of(db: Optional[str]) -> Optional[Dict[str, Any]]:
+    try:
+        _organs_importable()
+        import memory_write
+        conn = _open_brain_ro(_paths.resolve_db(db))
+        try:
+            return memory_write.coverage_envelope(conn, detail=False)
+        finally:
+            conn.close()
+    except Exception:
+        return None
 
 
 def verb_batch_recall(args) -> Dict[str, Any]:
@@ -1316,6 +1384,8 @@ def verb_batch_recall(args) -> Dict[str, Any]:
         raise
     summary = _batch.summarize(results)
     _payload = {**summary, "results": results}
+    if not results:
+        _payload["coverage"] = _coverage_of(db)        # no record carries it, so the batch does
     if _ro_degraded:
         _payload["degraded"] = "readonly_db"
         _payload["degraded_detail"] = (
@@ -1808,7 +1878,10 @@ def verb_doctor(args) -> Dict[str, Any]:
     elif not engine_health.get("importable"):
         _reason = f"engine not importable: {engine_health.get('error')}"
     else:
-        _reason = _brain_fault(_coh)
+        _reason = _foreign_env_dir() or _incomplete_model(models) or _brain_fault(_coh)
+        if not _reason and "peft" in (models.get("missing_modules") or []):
+            _reason = (f"this brain's jina model needs peft, which {sys.executable} does not have: recall is answering "
+                       f"by keyword. Fix: {sys.executable} -m pip install peft")
     if _reason:
         brain_healthy = False
     # The ladder, read rather than printed. A platform that is NOT_INSTALLED is
@@ -1862,7 +1935,8 @@ def verb_doctor(args) -> Dict[str, Any]:
         # brain_healthy (a brain with no persona is the shipped default, not a broken machine)
         "persona": _doctor_persona(_explicit_db),
     }
-    return ok("doctor_ok", report, verb="doctor")
+    # The exit code is half the answer: a script reads it, and an unhealthy brain must not read as success there.
+    return ok("doctor_ok", report, verb="doctor") if brain_healthy else incomplete("doctor_unhealthy", report, verb="doctor")
 
 
 def _preflight_script() -> str:
@@ -2276,7 +2350,13 @@ def verb_persona(args) -> Dict[str, Any]:
 
 
 def verb_tier(args) -> Dict[str, Any]:
-    return _run_organ("tier", args)
+    """The organ's flat envelope, with the `code` and `data` the human surface reads, so a person sees what `--json` sees."""
+    env = _run_organ("tier", args)
+    if "data" not in env:
+        flat = dict(env)
+        env["code"] = f"tier_{env.get('action')}" if env.get("status") == STATUS_OK else env.get("error") or "tier_refused"
+        env["data"] = flat
+    return env
 
 
 def verb_thinker(args) -> Dict[str, Any]:

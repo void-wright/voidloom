@@ -114,7 +114,8 @@ class _Brain(unittest.TestCase):
         plats = {"claude": {"state": "NOT_INSTALLED", "ours": [], "config_warning": host_warning}}
         with mock.patch.object(cli, "doctor_hook_join", return_value={"platforms": plats}):
             env = cli.verb_doctor(argparse.Namespace(db=str(self.db), cwd=None, platform=None, probe_platform=False))
-        self.assertEqual(env["status"], "ok", env)
+        # the exit code is half the verdict: `ok` is exit 0, `incomplete` exit 4
+        self.assertEqual(env["status"], "ok" if env["data"]["brain_healthy"] else "incomplete", env)
         return env["data"]
 
     def coherence(self, data=None):

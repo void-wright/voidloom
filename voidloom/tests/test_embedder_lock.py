@@ -469,7 +469,7 @@ class L4_VerifyBeforeInstantiate(_Tmp):
         self.assertEqual(cm.exception.code, "LOCK_NOT_SHIPPED")
         self.assertIn("refusing to fetch", str(cm.exception))
 
-    def test_saboteur_a_missing_hashed_file_is_WEIGHTS_MISMATCH(self):
+    def test_saboteur_a_missing_hashed_file_is_SNAPSHOT_ABSENT(self):
         snap, _ = _snapshot("cpu")
         if snap is None:
             self.skipTest("cpu snapshot absent on this host")
@@ -477,7 +477,8 @@ class L4_VerifyBeforeInstantiate(_Tmp):
         lock["files"] = lock["files"] + ["not_in_snapshot.bin"]
         with self.assertRaises(el.EmbedderLockError) as cm:
             el.verify_snapshot_against_lock(lock)
-        self.assertEqual(cm.exception.code, "WEIGHTS_MISMATCH")
+        self.assertEqual(cm.exception.code, "SNAPSHOT_ABSENT")
+        self.assertIn("interrupted", str(cm.exception))
 
     def test_control_the_loader_passes_code_revision_for_a_pinned_code_repository(self):
         src = (ROOT / "organs" / "embedding_upgrade.py").read_text(encoding="utf-8")

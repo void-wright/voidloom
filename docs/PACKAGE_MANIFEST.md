@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-05T01:17:50Z from the working tree whose HEAD was `80d269e`
+> Generated 2026-11-05T01:41:37Z from the working tree whose HEAD was `b5ae0a9`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,14 +12,14 @@
 
 | | |
 |---|---|
-| files tracked | 493 |
-| files hashed | 493 |
-| total bytes | 11062226 |
+| files tracked | 500 |
+| files hashed | 500 |
+| total bytes | 11151154 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4751632 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  77 files, 4782007 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -33,29 +33,29 @@
 | `organs/belief_cli.py` | 19007 | `356c2411a17e146e` |
 | `organs/belief_engine.py` | 74066 | `b312c857d174f333` |
 | `organs/calibration_memory.py` | 47193 | `00fea3a3d28f1ded` |
-| `organs/claude_memory.py` | 215393 | `82d71fc02125c8cf` |
-| `organs/claude_memory_lite.py` | 59148 | `a7e322465868c1d8` |
+| `organs/claude_memory.py` | 219286 | `09c3a8a0e7607a0e` |
+| `organs/claude_memory_lite.py` | 59600 | `4fb693dfc11c30e2` |
 | `organs/cognitive_map.py` | 40183 | `794e44f65a79e4e3` |
 | `organs/communities.py` | 46994 | `331522b97b374104` |
 | `organs/council.py` | 50065 | `570feac66706d322` |
 | `organs/counterfactual_memory.py` | 73874 | `a1a149e9049ffe07` |
 | `organs/decision_units.py` | 120605 | `50d50e784f065112` |
-| `organs/dream_ledger.py` | 60620 | `665c5d6158d7c184` |
+| `organs/dream_ledger.py` | 60619 | `62bed2b10564a586` |
 | `organs/dream_pipeline.py` | 128715 | `fffbb98b6c676551` |
-| `organs/embed_backfill.py` | 16765 | `865cefaf525ba635` |
+| `organs/embed_backfill.py` | 20053 | `8ee2813568026946` |
 | `organs/embed_resolver.py` | 10311 | `204bc446dc443594` |
-| `organs/embedder_lock.py` | 59180 | `0a885c8d932ec368` |
+| `organs/embedder_lock.py` | 63523 | `66bb5971864e54d1` |
 | `organs/embedders.lock.json` | 2557 | `6247a9cbb5988828` |
 | `organs/embedding_upgrade.py` | 67657 | `f840128134765a24` |
 | `organs/gap_mapping.py` | 107155 | `9e659adec01af772` |
 | `organs/governance.py` | 46295 | `ea70b57a2ff92acf` |
 | `organs/gpu_guard.py` | 57313 | `412bd1d077eab846` |
-| `organs/hybrid_retrieval.py` | 86577 | `180f6ec363de84a0` |
+| `organs/hybrid_retrieval.py` | 86596 | `aa6264bad262f945` |
 | `organs/kind_taxonomy.py` | 30780 | `042ae8556f4600df` |
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
 | `organs/memory_dreaming.py` | 107507 | `fa52e4a89424b500` |
-| `organs/memory_write.py` | 119944 | `177c7f014df3e245` |
-| `organs/model_fetch.py` | 4644 | `d16b05711b1b49aa` |
+| `organs/memory_write.py` | 127509 | `cc55b8f76f135730` |
+| `organs/model_fetch.py` | 6560 | `0ad5693ed2a13b0b` |
 | `organs/model_garden.py` | 41486 | `376ef38450d4cd22` |
 | `organs/monthly_self_eval.py` | 203955 | `ab6970a8dfcd4c5e` |
 | `organs/organ_run_log.py` | 26089 | `f2ade08a1c94a1f3` |
@@ -72,15 +72,15 @@
 | `organs/recall_diversity.py` | 46495 | `7d6f66a0e6733285` |
 | `organs/recall_explain.py` | 24994 | `7e470866c6f0c802` |
 | `organs/schema_migrator.py` | 25230 | `fea20209240e0e9d` |
-| `organs/seed_loader.py` | 18549 | `0f5dff02d3beb198` |
+| `organs/seed_loader.py` | 18932 | `29ce862f822b0373` |
 | `organs/skill_graduation.py` | 55320 | `39acab23e3f999ef` |
-| `organs/sleep_loop.py` | 115556 | `0c0bbf7754541434` |
-| `organs/temporal_edges.py` | 107763 | `687969cdbe28f451` |
+| `organs/sleep_loop.py` | 115849 | `dead122ddbac1656` |
+| `organs/temporal_edges.py` | 107944 | `b946bcb472bc3dee` |
 | `organs/temporal_rerank.py` | 22495 | `46da7426f9965325` |
 | `organs/thinker.py` | 297015 | `2a024ad4fe640c9d` |
 | `organs/thinker_get.py` | 13627 | `861dd7ea05bcbd8e` |
 | `organs/thinkers.json` | 29573 | `9e7667bcc743ab87` |
-| `organs/tier_set.py` | 58409 | `b4f8aa17b9a9f078` |
+| `organs/tier_set.py` | 66127 | `9cd659a6d41be449` |
 | `organs/trust_tier.py` | 29857 | `63e5ceb90896745f` |
 | `organs/trust_tier_cli.py` | 10084 | `dc33064ca979f61f` |
 | `organs/void_render.py` | 37317 | `09187627e039a1e7` |
@@ -88,7 +88,7 @@
 | `organs/voidloom_banner.py` | 104239 | `c7d9b35fc7ec1d0d` |
 | `organs/voidloom_canary.py` | 114403 | `0f8a8005428a5c74` |
 | `organs/voidloom_device.py` | 74175 | `e6534dd0f1ade94b` |
-| `organs/voidloom_env.py` | 24326 | `772b7fbeee6e18c0` |
+| `organs/voidloom_env.py` | 24469 | `97f591263ccde5f1` |
 | `organs/voidloom_heartbeat.py` | 37464 | `7142ec7ccf30467b` |
 | `organs/voidloom_hooks_status.py` | 421184 | `04933b0f28e7304c` |
 | `organs/voidloom_instructions.py` | 71527 | `ffca380e1c52f4c3` |
@@ -96,12 +96,12 @@
 | `organs/voidloom_persona.py` | 31042 | `4edd49d4e5a4da86` |
 | `organs/voidloom_preamble.py` | 163373 | `ce97d0f48c40d99b` |
 | `organs/warden.py` | 17331 | `c6647d919efc8204` |
-| `organs/website_memory.py` | 38225 | `0a637a73494af69d` |
+| `organs/website_memory.py` | 38407 | `606e55386a9ac3cb` |
 | `organs/whisper_network.py` | 45507 | `1b4b9245dd294d52` |
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  221 files, 3235532 bytes
+### `voidloom` — The CLI facade  ·  228 files, 3288788 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -111,11 +111,11 @@
 | `voidloom/_agent_context.py` | 21428 | `3d6017af017f8d67` |
 | `voidloom/_approvals_faces.py` | 42385 | `ece04bc6d7c96606` |
 | `voidloom/_batch.py` | 14186 | `e01b2df0460834f0` |
-| `voidloom/_bootstrap.py` | 19531 | `b506bfb017a4a068` |
-| `voidloom/_facade.py` | 40890 | `cfb28968397f863c` |
+| `voidloom/_bootstrap.py` | 20191 | `8276f1957927cd30` |
+| `voidloom/_facade.py` | 42081 | `7ef0f9ef39ae829e` |
 | `voidloom/_guard.py` | 11713 | `11461a1e7bd1ef77` |
 | `voidloom/_paths.py` | 6524 | `6822733e57600c1a` |
-| `voidloom/cli.py` | 170573 | `e1d13007e94dd898` |
+| `voidloom/cli.py` | 174451 | `dced47f62dc77318` |
 | `voidloom/tests/__init__.py` | 29 | `c00b7e2467584fad` |
 | `voidloom/tests/_owned_brain.py` | 4509 | `e550d2b14985ecb6` |
 | `voidloom/tests/_thinker_fakes.py` | 15135 | `d63b82c100143add` |
@@ -136,6 +136,7 @@
 | `voidloom/tests/harness/property_battery_16_install.py` | 31627 | `1067b6c358dc43d9` |
 | `voidloom/tests/harness/run_all.py` | 5792 | `ecc5b27cfa5dc5e6` |
 | `voidloom/tests/test_a_centroid_is_not_embedding_work.py` | 3458 | `6b755695078e137d` |
+| `voidloom/tests/test_a_damaged_row_stops_nothing.py` | 2884 | `012ee5647ea4b895` |
 | `voidloom/tests/test_accelerator_table.py` | 49518 | `e0d1594d990b4ec3` |
 | `voidloom/tests/test_affect_lighthouse_ddl_names_r2.py` | 1029 | `24af95d79420d7eb` |
 | `voidloom/tests/test_approvals_faces.py` | 7516 | `c8c58ca5f1bf872a` |
@@ -171,8 +172,8 @@
 | `voidloom/tests/test_device_ambient_empty.py` | 6594 | `74362adaa3787108` |
 | `voidloom/tests/test_digest_has_one_encoder.py` | 2211 | `a5a3e06dc7cc8f7d` |
 | `voidloom/tests/test_docs_name_real_paths.py` | 13642 | `e0aafc370c98f39d` |
-| `voidloom/tests/test_docs_state_the_lock_rules.py` | 2959 | `c06fa9f45076fbe3` |
-| `voidloom/tests/test_doctor_brain_verdict.py` | 21279 | `ec98fa44920ea873` |
+| `voidloom/tests/test_docs_state_the_lock_rules.py` | 6577 | `b90d1a79a4dbf4e2` |
+| `voidloom/tests/test_doctor_brain_verdict.py` | 21410 | `5f1d889dc3c7f2b9` |
 | `voidloom/tests/test_doctor_cpu_only_truth_r2.py` | 1789 | `3e963d8c1954d319` |
 | `voidloom/tests/test_dream_lane_r3.py` | 10718 | `f8ca59901150588f` |
 | `voidloom/tests/test_dream_llm_failure_visible.py` | 15775 | `7a8a2e916a1b7277` |
@@ -187,8 +188,8 @@
 | `voidloom/tests/test_edge_decay_repair_r2d.py` | 12087 | `7bba65e209c0263e` |
 | `voidloom/tests/test_edge_decay_retires_r2d.py` | 8536 | `e02347b289a12a4c` |
 | `voidloom/tests/test_edge_retire_readers_writers_r2d.py` | 12353 | `d6752d4b2e2d7720` |
-| `voidloom/tests/test_embedder_lock.py` | 41106 | `888fc2dd29c3f594` |
-| `voidloom/tests/test_embedding_provenance.py` | 47885 | `059cd25a5f69b2bb` |
+| `voidloom/tests/test_embedder_lock.py` | 41160 | `ad6e499277de4122` |
+| `voidloom/tests/test_embedding_provenance.py` | 47949 | `bafb18b3076b0f44` |
 | `voidloom/tests/test_embedding_upgrade_verbs.py` | 10268 | `baccf770ef398023` |
 | `voidloom/tests/test_encoder_follows_the_connection.py` | 4626 | `d0c37c2aa8f347dc` |
 | `voidloom/tests/test_encoder_tier_is_bijective.py` | 9285 | `e08d4e89b254ee18` |
@@ -206,12 +207,13 @@
 | `voidloom/tests/test_generic_personas.py` | 9644 | `441cc0f36796410d` |
 | `voidloom/tests/test_gpu_display_declared.py` | 6998 | `4788f84581ed97bf` |
 | `voidloom/tests/test_hard_delete_finishes.py` | 14869 | `0e53faa9b249285c` |
+| `voidloom/tests/test_hard_delete_leaves_nothing.py` | 8244 | `2edcf6fc9e3f387e` |
 | `voidloom/tests/test_heartbeat_headless_d26.py` | 7546 | `b4301eda25d08068` |
 | `voidloom/tests/test_help_is_lazy.py` | 2965 | `43a182c8d0f64b29` |
 | `voidloom/tests/test_hf_cache_one_resolver.py` | 5613 | `e539204c11016996` |
 | `voidloom/tests/test_hidden_cuda_probe_r1.py` | 3921 | `c2a70343a42ff847` |
 | `voidloom/tests/test_init_applies_skill_graduation.py` | 3693 | `67fe70dd8f43b0f3` |
-| `voidloom/tests/test_init_prelock_snapshot.py` | 5345 | `cbe5c00b70334b24` |
+| `voidloom/tests/test_init_prelock_snapshot.py` | 5337 | `a9f05439e115fc3c` |
 | `voidloom/tests/test_install_stops_and_says_why.py` | 23227 | `474ccf96583a5fbf` |
 | `voidloom/tests/test_installer_accelerator.py` | 40526 | `9a64dfb7b1d3d16b` |
 | `voidloom/tests/test_installer_literals.py` | 14090 | `f194e6828c26fb57` |
@@ -228,6 +230,7 @@
 | `voidloom/tests/test_leak_gate.py` | 9858 | `85558a868799daee` |
 | `voidloom/tests/test_lock_refusals_name_the_fault.py` | 3013 | `c728636f6e615b0a` |
 | `voidloom/tests/test_lock_table_checked_once.py` | 7210 | `49e62fa66d81eb92` |
+| `voidloom/tests/test_locked_reads_stay_cheap.py` | 3991 | `d40cddc8b2ee26ef` |
 | `voidloom/tests/test_lockless_coverage_counts_reach.py` | 3522 | `f09973179c0334df` |
 | `voidloom/tests/test_lost_lock.py` | 7250 | `1e18703bdc47e06f` |
 | `voidloom/tests/test_manifest_lays_no_tests.py` | 5030 | `9ab8c613bb1645a3` |
@@ -251,11 +254,12 @@
 | `voidloom/tests/test_ps1_stops_and_says_why.py` | 7293 | `08f5320cfc981322` |
 | `voidloom/tests/test_qwen_revision_pinned.py` | 3887 | `ad2c57e0c5c3551a` |
 | `voidloom/tests/test_re_embed_prelock.py` | 15805 | `1a06253ff45b4738` |
-| `voidloom/tests/test_read_never_fetches.py` | 6832 | `fe57de3de1cc6e21` |
+| `voidloom/tests/test_read_never_fetches.py` | 7232 | `74534555cb0f5a40` |
 | `voidloom/tests/test_readers_count_the_brains_table.py` | 7747 | `1bec17ce2bc31b16` |
 | `voidloom/tests/test_readers_lock_first.py` | 8699 | `2c622570e4347fd4` |
 | `voidloom/tests/test_recall_carries_coverage.py` | 11053 | `24d4f4ba01deb761` |
 | `voidloom/tests/test_recall_topk_after_placement.py` | 3824 | `b697d7b65e0fd52a` |
+| `voidloom/tests/test_refusals_name_the_way_out.py` | 13507 | `7ebfeb3d690df71a` |
 | `voidloom/tests/test_release_check_reads_its_own_row.py` | 2414 | `8586fe740f8700fa` |
 | `voidloom/tests/test_release_gates_execute.py` | 3803 | `e8ae84f6b38ab25e` |
 | `voidloom/tests/test_reranker_gate.py` | 27921 | `77c41f4d1b428239` |
@@ -264,6 +268,7 @@
 | `voidloom/tests/test_schema_migrator.py` | 8188 | `6aa0410c65f897ea` |
 | `voidloom/tests/test_seed_anchor_delta.py` | 19453 | `6b97c55bff94c3ad` |
 | `voidloom/tests/test_seed_delete_and_lock_read.py` | 4790 | `ff332b527c29a64e` |
+| `voidloom/tests/test_seed_delete_stays_deleted.py` | 2406 | `2b4d6431006cae5d` |
 | `voidloom/tests/test_seed_doctrine_and_denylist.py` | 12191 | `3da7084a2a2757ce` |
 | `voidloom/tests/test_self_check_models_lock.py` | 3539 | `870921cfe7efb839` |
 | `voidloom/tests/test_self_check_scale.py` | 7970 | `1f90a2e72b949c63` |
@@ -321,6 +326,8 @@
 | `voidloom/tests/test_tier1_ambient.py` | 151524 | `7ed8bee5e5ab60d0` |
 | `voidloom/tests/test_tier_set.py` | 30173 | `e4af4b3fa5f1a085` |
 | `voidloom/tests/test_tier_switch_owns_the_env.py` | 8738 | `2e55055fd5db0f9e` |
+| `voidloom/tests/test_tier_verbs_tell_the_whole_story.py` | 7410 | `c3a07a99f20562e4` |
+| `voidloom/tests/test_upgrade_embeds_nothing_unasked.py` | 4826 | `6df74695738067bf` |
 | `voidloom/tests/test_voidloom.py` | 37785 | `61a17601055b5173` |
 | `voidloom/tests/test_website_store_stamps.py` | 8758 | `177dee58bdbab780` |
 | `voidloom/tests/test_windows_scripts_encoding.py` | 3585 | `7407c0787dd07272` |
@@ -371,7 +378,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 963536 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 966636 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -383,17 +390,17 @@
 | `install/fixtures/golden_vectors_nomic.json` | 144295 | `7ca287b27b7b7b91` |
 | `install/fixtures/golden_vectors_qwen.json` | 191567 | `4e9f3a72527ad86f` |
 | `install/golden_vectors.py` | 10872 | `fc268ca66da450f9` |
-| `install/install.ps1` | 63743 | `17bebbe1ef476390` |
+| `install/install.ps1` | 63791 | `7114c527a92aeea6` |
 | `install/install_council.sh` | 9233 | `7efe5c588226bf00` |
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 135917 | `fd9a3d65f7a93b98` |
+| `install/lay_manifest.json` | 137792 | `67f7b5fda2445562` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
-| `install/preflight.py` | 15509 | `fb55c1f6b74f2ed1` |
+| `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
-| `install/requirements.txt` | 9702 | `0c8f9ba7aa26531a` |
-| `install/self_check.py` | 54995 | `8fb30e4f7d25226b` |
+| `install/requirements.txt` | 9829 | `8cb54c48e5445af9` |
+| `install/self_check.py` | 55666 | `69e6c99e3a7b62b7` |
 | `install/tier1_probe.py` | 44519 | `736c07ad2386ef39` |
 | `install/wire_persona.ps1` | 8385 | `6c760a0105833234` |
 | `install/wire_persona.sh` | 10855 | `0896d140f773a1bc` |
@@ -530,7 +537,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 223026 bytes
+### `docs` — Documentation  ·  12 files, 223620 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -538,16 +545,16 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19476 | `6f7f15fb93c9cacf` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `dfe4753480ad70bc` |
+| `docs/LAYOUT.md` | 8372 | `031e88533c904dab` |
 | `docs/ONBOARDING_GUIDE.md` | 57844 | `c57b1155f68322e4` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 37803 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 38397 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9582 | `211dfb33c5af1760` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 453185 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 454788 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -560,7 +567,7 @@
 | `NOTICE` | 4391 | `6608b4df230ab445` |
 | `README.md` | 29346 | `9d4d5b43fb70254e` |
 | `SECURITY.md` | 1930 | `384e3060f9d1866a` |
-| `install.sh` | 348382 | `39b4194e3cc1526d` |
+| `install.sh` | 349985 | `e2388b8972f75b5a` |
 | `uninstall.sh` | 9542 | `3d3c603984e7d92f` |
 
 ### `.github` —   ·  9 files, 20980 bytes

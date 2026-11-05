@@ -228,18 +228,27 @@ def delete_one(db: str, origin: str) -> Dict[str, Any]:
         mid = rows[0][0]
         import memory_write
         receipt = None
+        try:
+            enable_vec(conn)                     # a brain with vectors needs the extension to reach them
+        except SeedLoadError:
+            pass
         if memory_write.hard_delete_allowed():
-            receipt = memory_write.purge_memory(conn, mid)
+            try:
+                receipt = memory_write.purge_memory(conn, mid)
+            except memory_write.HardDeleteRefused as e:
+                conn.rollback()
+                raise SeedLoadError(e.code, e.message, origin=origin, memory_id=mid)
         else:
             conn.execute("PRAGMA foreign_keys=ON")   # a row something still names is refused below, not left dangling
+            conn.execute("PRAGMA secure_delete=ON")
             # Every tier's table: after `tier set` the old tier still holds this row's vector.
             present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-            for table in VECTOR_TABLES:
-                if table in present:
-                    try:
-                        conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (mid,))
-                    except sqlite3.OperationalError:
-                        pass                         # no vec0 on this connection: a Tier-0 brain
+            try:
+                memory_write.clear_vectors_or_refuse(conn, mid, present)
+            except memory_write.HardDeleteRefused as e:
+                conn.rollback()
+                raise SeedLoadError(e.code, e.message, origin=origin, memory_id=mid)
+            memory_write.tombstone_seed(conn, mid)
             for sql in ("DELETE FROM embedding_provenance WHERE memory_id = ?",
                         "DELETE FROM memory_tags WHERE memory_id = ?",
                         "DELETE FROM memory_links WHERE source_id = ?1 OR target_id = ?1"):
@@ -257,15 +266,17 @@ def delete_one(db: str, origin: str) -> Dict[str, Any]:
                                     f"rule; nothing was removed. Set {memory_write.HARD_DELETE_ENV}=1 to remove those rows with it",
                                     origin=origin, memory_id=mid)
         conn.commit()
-        if receipt is not None:
-            receipt["wal_emptied"] = memory_write.finish_purge(conn)
+        finished = memory_write.finish_purge(conn)
+        if receipt is None:
+            receipt = {}
+        receipt.update(finished)
         after = conn.execute("SELECT COUNT(*) FROM memories WHERE seed = 1").fetchone()[0]
         gone = conn.execute("SELECT COUNT(*) FROM memories WHERE id = ?", (mid,)).fetchone()[0] == 0
     finally:
         conn.close()
     return {"status": "ok", "action": "seed-delete-one", "origin": origin, "memory_id": mid,
             "seed_rows_before": before, "seed_rows_after": after, "dropped_by": before - after, "row_gone": gone,
-            **({"receipt": receipt} if receipt is not None else {})}
+            "receipt": receipt}
 
 
 def expected_row(conn: sqlite3.Connection, q: Dict[str, Any]) -> Optional[int]:

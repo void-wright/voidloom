@@ -877,7 +877,8 @@ def rollback(conn: sqlite3.Connection, preimage: Dict[str, Any]) -> Dict[str, An
         # R1-M7: the derived index rows THIS verb wrote are removed, so a rolled-back brain exposes no more
         # unlabelled dreams than before the apply (no memory row is deleted: archive-never-delete holds)
         if it.get("has_vector") is False and table and re.fullmatch(r"[a-z0-9_]+", table):
-            n_vec += conn.execute(f"DELETE FROM {table} WHERE memory_id=?", (it["id"],)).rowcount or 0
+            import memory_write
+            n_vec += memory_write.clear_vector(conn, table, it["id"])
             conn.execute("DELETE FROM embedding_provenance WHERE memory_id=? AND vec_table=?", (it["id"], table))
         if it.get("has_provenance") is False:
             n_prov += conn.execute("DELETE FROM memory_provenance WHERE derived_memory_id=? "

@@ -563,7 +563,8 @@ try:
             raise RuntimeError("the install lock names %s but this run selected %s; the lock is the promise"
                                % (lock["model_id"], EMBED_MODEL))
         print(f"  ... fetching embedder {lock['model_id']}@{lock['revision'][:12]} (the install lock's pins)", flush=True)
-        snap, computed = embedder_lock.verify_snapshot_against_lock(lock)
+        with embedder_lock.fetch_allowed():
+            snap, computed = embedder_lock.verify_snapshot_against_lock(lock)
         print(f"  cached + verified {lock['model_id']} (weights {computed[:12]} == lock)", flush=True)
     else:
         from sentence_transformers import SentenceTransformer

@@ -186,6 +186,7 @@ def default_encoder(text: str, conn: Optional[sqlite3.Connection] = None) -> byt
     import claude_memory                       # lazy: circular at module scope
     if conn is None:
         return claude_memory._encode(text, "search_document")
+    _embedder_lock().refuse_lost_lock(conn)
     table, dim = _resolve_tier(conn)
     tier = getattr(claude_memory, "_TABLE_TO_TIER", {}).get(table)
     if tier is None:
@@ -196,7 +197,8 @@ def default_encoder(text: str, conn: Optional[sqlite3.Connection] = None) -> byt
             "to guess a model: same dimension is not the same space.")
     import embedding_upgrade                   # lazy: it imports this module's callers
     if tier == "jina":
-        return embedding_upgrade.encode_jina_document(text)
+        with _embedder_lock().hub_closed():
+            return embedding_upgrade.encode_jina_document(text)
     return claude_memory._encode(text, "search_document",
                                  lock=embedding_upgrade.brain_lock(conn, tier=tier))
 
@@ -748,9 +750,21 @@ def ensure_provenance_table(conn: sqlite3.Connection) -> None:
             "it is left exactly as found. Run `schema_migrator apply` and read its report.") from e
 
 
-def content_hash(text: str) -> str:
-    """sha256 hex of the embedded text, exactly as it was handed to the encoder."""
-    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+def content_hash(text: Any) -> str:
+    """sha256 hex of the embedded text, exactly as it was handed to the encoder. Bytes are hashed as they are, so a row
+    whose stored text is not valid UTF-8 has a checksum too: SQL reads it with CAST(content AS BLOB), and one damaged row
+    never stops the query it sits in."""
+    raw = text if isinstance(text, (bytes, bytearray, memoryview)) else (text or "").encode("utf-8", "surrogateescape")
+    return hashlib.sha256(bytes(raw)).hexdigest()
+
+
+def stamp_source(conn: sqlite3.Connection, memory_id: int, text: str) -> Any:
+    """What a stamp hashes for this memory. `text` itself, unless it was read with a replacement character: then the
+    stored bytes, so the checksum of a row that is not valid UTF-8 is the one the SQL predicates compute."""
+    if "\ufffd" not in (text or ""):
+        return text
+    row = conn.execute("SELECT CAST(content AS BLOB) FROM memories WHERE id = ?", (int(memory_id),)).fetchone()
+    return row[0] if row else text
 
 
 def _model_ref_for(tier: str, model_id: str) -> Tuple[str, str]:
@@ -1089,7 +1103,7 @@ def attach_under_lock(conn: sqlite3.Connection, memory_id: int, text: str, vec: 
     sp = "vec_under_lock"
     conn.execute(f"SAVEPOINT {sp}")
     try:
-        conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (int(memory_id),))
+        clear_vector(conn, table, int(memory_id))
         conn.execute(f"INSERT INTO {table} (memory_id, embedding) VALUES (?, ?)",
                      (int(memory_id), vec))
         conn.execute(
@@ -1372,6 +1386,11 @@ class ProvenanceCoverage:
 
 
 def provenance_coverage(conn: sqlite3.Connection):
+    """Measure the sidecar, in full. See _measure_coverage."""
+    return _measure_coverage(conn, True)
+
+
+def _measure_coverage(conn: sqlite3.Connection, detail: bool):
     """Measure the sidecar. ALWAYS returns coverage, on every call; RAISES,
     carrying the same coverage, when the search set would be empty or lying.
     There is no fallback path and no flag.
@@ -1395,7 +1414,7 @@ def provenance_coverage(conn: sqlite3.Connection):
             **e.detail, coverage={**_three_numbers(0, total), "coverage": _three_numbers(0, total),
                                   "total_basis": "active memories; matched 0 by construction: no filter"}) from e
     if flt.locked:
-        return _lock_coverage(conn, flt)
+        return _lock_coverage(conn, flt, detail=detail)
     table, model_id, dim = flt.vec_table, flt.model_id, flt.dim
     model_ref_expected = flt.revision
 
@@ -1453,7 +1472,7 @@ def provenance_coverage(conn: sqlite3.Connection):
         f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p JOIN memories m ON m.id = p.memory_id "
         f"WHERE p.vec_table = ? AND p.model_id = ? {text_rows}"
         f"  AND p.memory_id IN (SELECT memory_id FROM {table}) "
-        f"  AND p.content_hash <> vl_sha256(m.content)",
+        f"  AND p.content_hash <> vl_sha256(CAST(m.content AS BLOB))",
         (table, model_id)).fetchone()[0]
 
     cov = ProvenanceCoverage(
@@ -1494,8 +1513,8 @@ def re_embed_command(db_path: Optional[str]) -> str:
     """The shipped command that embeds a locked brain's work under its own lock.
     It always names the database: without `--db-path` the command acts on its
     default test database, not on this brain."""
-    return (f"python3 organs/embedding_upgrade.py --db-path {db_path or '<brain>/claude_memory.db'} "
-            f"re-embed")
+    return _embedder_lock().organ_command("embedding_upgrade.py", "--db-path", db_path or _embedder_lock().brain_db(),
+                                          "re-embed")
 
 
 def re_embed_hint(n: int, db_path: Optional[str], lock_tier: Optional[str]) -> str:
@@ -1542,7 +1561,7 @@ class LockCoverage:
     stamped_other_hash: int
     stamped_without_vector: int
     vectors_without_stamp: int
-    stale_content_hash: int
+    stale_content_hash: Optional[int]
     histogram: Dict[str, int] = field(default_factory=dict)
     inconsistent: List[Dict[str, Any]] = field(default_factory=list)
     verified: int = 0
@@ -1648,9 +1667,10 @@ def _active_memory_count(conn: sqlite3.Connection) -> int:
         return 0
 
 
-def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCoverage:
-    """Measure a LOCKED brain's sidecar under the lock's filter. Refusals, in order
-    (facts before policy):
+def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter, *, detail: bool = True) -> LockCoverage:
+    """Measure a LOCKED brain's sidecar under the lock's filter. `detail` False leaves `stale_content_hash` None
+    (not measured): that count hashes every memory's text, which `doctor` and `status` pay for and a recall does not.
+    Refusals, in order (facts before policy):
       PROVENANCE_UNREADABLE   the sidecar / vector table cannot be read: UNMEASURED, not 0
       (empty brain)           0/0 is returned, unless the lock's checksum is not shipped
       STAMP_INCONSISTENT      the lock's checksum on another table or width
@@ -1716,17 +1736,19 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
     inconsistent = [{"vec_table": r[0], "dim": int(r[1]), "rows": int(r[2])} for r in conn.execute(
         f"SELECT vec_table, dim, COUNT(*) FROM {PROVENANCE_TABLE} WHERE weights_hash = ? "
         f"  AND (vec_table <> ? OR dim <> ?) GROUP BY vec_table, dim", (whash, table, dim)).fetchall()]
-    conn.create_function("vl_sha256", 1, content_hash, deterministic=True)
-    stale = conn.execute(
-        f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p JOIN memories m ON m.id = p.memory_id "
-        f"WHERE p.vec_table = ? AND p.weights_hash = ? AND p.input_kind = 'text' "
-        f"  AND p.memory_id IN (SELECT memory_id FROM {table}) "
-        f"  AND p.content_hash <> vl_sha256(m.content)", (table, whash)).fetchone()[0]
+    stale = None
+    if detail:
+        conn.create_function("vl_sha256", 1, content_hash, deterministic=True)
+        stale = int(conn.execute(
+            f"SELECT COUNT(*) FROM {PROVENANCE_TABLE} p JOIN memories m ON m.id = p.memory_id "
+            f"WHERE p.vec_table = ? AND p.weights_hash = ? AND p.input_kind = 'text' "
+            f"  AND p.memory_id IN (SELECT memory_id FROM {table}) "
+            f"  AND p.content_hash <> vl_sha256(CAST(m.content AS BLOB))", (table, whash)).fetchone()[0])
     cov = LockCoverage(
         filter=flt, denominator=denominator, active_memories=int(active), vectors=int(vectors),
         matched=int(matched), stamped_other_hash=int(other),
         stamped_without_vector=int(stamp_no_vec), vectors_without_stamp=int(vec_no_stamp),
-        stale_content_hash=int(stale), histogram=histogram, inconsistent=inconsistent,
+        stale_content_hash=stale, histogram=histogram, inconsistent=inconsistent,
         verified=int(verified), legacy_unverified=int(matched) - int(verified),
         stamped_foreign_hash=int(foreign), db_path=_db_file(conn))
     shipped = el.is_shipped_hash(whash)
@@ -1757,9 +1779,10 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter) -> LockCover
     return cov
 
 
-def coverage_envelope(conn: sqlite3.Connection) -> Dict[str, Any]:
+def coverage_envelope(conn: sqlite3.Connection, *, detail: bool = True) -> Dict[str, Any]:
     """Coverage for a caller that must ALWAYS carry it: never raises, and always
     carries `basis`, `matched`, `total` and `coverage: {matched, total, value}`.
+    A hot path passes `detail=False` (see _lock_coverage).
 
     On a refusal that measured the sidecar the figures are the measured ones. On a
     refusal that could NOT measure (LOCK_MALFORMED, PROVENANCE_UNREADABLE, an
@@ -1772,7 +1795,7 @@ def coverage_envelope(conn: sqlite3.Connection) -> Dict[str, Any]:
                 "coverage_basis": "search set unbuildable under this refusal; matched is 0 by construction",
                 "matched": 0, "total": total, "coverage": _three_numbers(0, total)}
     try:
-        cov = provenance_coverage(conn)
+        cov = _measure_coverage(conn, detail)
         return {"ok": True, "coverage_basis": "measured", **cov.as_dict()}
     except ProvenanceUnmatched as e:
         return {"ok": False, "error": e.code, "message": str(e), "coverage_basis": "measured",
@@ -1951,8 +1974,33 @@ def search_set(conn: sqlite3.Connection) -> Optional[ProvenanceFilter]:
     flt = provenance_filter(conn)
     if not flt.locked:
         return flt
-    cov = _lock_coverage(conn, flt)
+    if _search_set_is_sound(conn, flt):
+        return flt
+    cov = _lock_coverage(conn, flt, detail=False)       # the slow read names the refusal, or finds an empty brain
     return None if cov.empty else cov.filter
+
+
+def _search_set_is_sound(conn: sqlite3.Connection, flt: ProvenanceFilter) -> bool:
+    """True when no refusal of _lock_coverage can apply: the sidecar and the table read, the lock's checksum is shipped,
+    no stamp carries it on another table or width, and one active memory is in the set. Each read stops at its first row,
+    so this costs the same on any size of brain: this is the check every per-row reader may reach. False says only that
+    the full measurement must decide."""
+    table = flt.vec_table
+    try:
+        if "weights_hash" not in _sidecar_columns(conn) or not _embedder_lock().is_shipped_hash(flt.weights_hash):
+            return False
+        if conn.execute("SELECT 1 FROM pragma_module_list WHERE name = 'vec0'").fetchone() is None:
+            return False
+        if conn.execute(f"SELECT 1 FROM {PROVENANCE_TABLE} WHERE weights_hash = ? AND (vec_table <> ? OR dim <> ?) LIMIT 1",
+                        (flt.weights_hash, table, flt.dim)).fetchone():
+            return False
+        mcols = {r[1] for r in conn.execute("PRAGMA table_info(memories)").fetchall()}
+        active = "AND COALESCE(m.is_archived, 0) = 0" if "is_archived" in mcols else ""
+        return conn.execute(
+            f"SELECT 1 FROM memories m JOIN {table}_rowids r ON r.rowid = m.id WHERE {flt.member_sql('m')} {active} LIMIT 1",
+            flt.search_set_params).fetchone() is not None
+    except sqlite3.Error:
+        return False
 
 
 def read_vector(conn: sqlite3.Connection, memory_id: int, *,
@@ -2074,7 +2122,7 @@ def needs_embedding_sql(flt: ProvenanceFilter, mem_alias: str = "m", scope: str 
             f"SELECT 1 FROM {PROVENANCE_TABLE} p WHERE p.memory_id = {mem_alias}.id "
             f"AND p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? "
             f"AND (p.input_kind = 'centroid' OR (p.input_kind = 'text' "
-            f"AND p.content_hash = vl_sha256({mem_alias}.content))) "
+            f"AND p.content_hash = vl_sha256(CAST({mem_alias}.content AS BLOB)))) "
             f"AND p.memory_id IN (SELECT memory_id FROM {flt.vec_table}))")
 
 
@@ -2253,6 +2301,69 @@ class _TextMatcher:
         return out
 
 
+VECTOR_TABLES = ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3")
+
+
+class HardDeleteRefused(RuntimeError):
+    """A hard delete that could not finish, refused before any row went."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(f"{code}: {message}")
+        self.code, self.message = code, message
+
+
+def clear_vector(conn: sqlite3.Connection, table: str, memory_id: int) -> int:
+    """Remove one vector, its bytes included; the rows removed. vec0's DELETE clears a validity bit and leaves the floats
+    in the chunk, where VACUUM copies them as they are, so they are overwritten with zeros through vec0 first."""
+    row = conn.execute(f"SELECT embedding FROM {table} WHERE memory_id = ?", (int(memory_id),)).fetchone()
+    if row is None:
+        return 0
+    if row[0] is not None:
+        conn.execute(f"UPDATE {table} SET embedding = ? WHERE memory_id = ?", (bytes(len(row[0])), int(memory_id)))
+    return conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (int(memory_id),)).rowcount
+
+
+def _vector_on_disk(conn: sqlite3.Connection, table: str, memory_id: int) -> bool:
+    """Does vec0's own rowid table hold this memory? A plain table, so this answers without the extension."""
+    try:
+        return conn.execute(f"SELECT 1 FROM {table}_rowids WHERE rowid = ?", (int(memory_id),)).fetchone() is not None
+    except sqlite3.OperationalError:
+        return False
+
+
+def clear_vectors_or_refuse(conn: sqlite3.Connection, memory_id: int, present: Iterable[str]) -> Dict[str, int]:
+    """Every tier's vector for this memory, gone with its bytes. A connection without vec0 cannot reach them, and a delete
+    that left one and said done would be worse than none: it refuses, before any row goes, and names the interpreter."""
+    tables = [t for t in VECTOR_TABLES if t in set(present)]
+    if conn.execute("SELECT 1 FROM pragma_module_list WHERE name = 'vec0'").fetchone() is None:
+        held = [t for t in tables if _vector_on_disk(conn, t, memory_id)]
+        if held:
+            raise HardDeleteRefused(
+                "HARD_DELETE_VECTOR_UNREACHABLE",
+                f"memory {memory_id} has a vector in {', '.join(held)}, and this Python cannot open that table "
+                f"(no sqlite_vec). Nothing was deleted. Run it again under the install's own interpreter: "
+                f"{_embedder_lock().brain_python()}")
+        return {}
+    return {t: clear_vector(conn, t, memory_id) for t in tables}
+
+
+SEED_TOMBSTONE_PREFIX = "seed_tombstone:"
+
+
+def tombstone_seed(conn: sqlite3.Connection, memory_id: int) -> None:
+    """A seed entry the owner deleted stays deleted: its anchor is recorded, and the next load of the pack leaves that
+    entry out. The anchor is the pack's own name for the entry, not any of its text."""
+    try:
+        anchors = [r[0] for r in conn.execute(
+            "SELECT tag FROM memory_tags WHERE memory_id = ? AND tag LIKE 'anchor:seed\\_%' ESCAPE '\\'",
+            (int(memory_id),)).fetchall()]
+        for anchor in anchors:
+            conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+                         (SEED_TOMBSTONE_PREFIX + anchor, anchor))
+    except sqlite3.OperationalError:          # a brain with no tags or no metadata table has nothing to remember it by
+        pass
+
+
 def _ordinary_tables(conn: sqlite3.Connection) -> List[str]:
     """Every table but a virtual one and its storage: the full-text index is merged after
     the sweep, a vector table holds no text, and neither has a foreign key."""
@@ -2319,42 +2430,65 @@ def purge_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, Any]:
     or the whole text from 12 characters up, is found: in any table, and in the memories written
     from this one. A different memory that happens to say the same thing is not edited: it is
     counted in `other_memories_sharing_text`. Words reworded by a model are not a copy this can see."""
-    wanted = ", ".join(c for c in ("content", "summary") if c in _columns(conn, "memories"))
-    row = conn.execute(f"SELECT {wanted} FROM memories WHERE id = ?", (memory_id,)).fetchone()
-    if row is None:
-        raise KeyError(memory_id)
-    conn.execute("PRAGMA secure_delete = ON")         # freed pages are zeroed, not left holding the text
-    tables = _ordinary_tables(conn)
-    present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-    removed: Dict[str, int] = {}
-    cleared: Dict[str, int] = {}
-    redacted: Dict[str, int] = {}
-    lineage = _lineage_of(conn, memory_id, present)
-    for table in ("memory_embeddings", "memory_embeddings_v2", "memory_embeddings_v3"):
-        if table in present:
-            try:
-                _bump(removed, table, conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (memory_id,)).rowcount)
-            except sqlite3.OperationalError:          # no vec0 on this connection: a keyword brain
-                pass
-    if PROVENANCE_TABLE in present:
-        _bump(removed, PROVENANCE_TABLE,
-              conn.execute(f"DELETE FROM {PROVENANCE_TABLE} WHERE memory_id = ?", (memory_id,)).rowcount)
-    _clear_references(conn, memory_id, tables, removed, cleared)
-    conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
-    swept = _scrub_copies(conn, _TextMatcher([t for t in row if t]), lineage, redacted, removed)
-    if "memories_fts" in present:                     # a deleted row's terms stay in old segments until they are merged
-        conn.execute("INSERT INTO memories_fts(memories_fts) VALUES ('optimize')")
+    # A row that is not valid UTF-8 cannot stop the sweep: it is read with its bad bytes replaced, for this call only.
+    factory = conn.text_factory
+    conn.text_factory = lambda b: b.decode("utf-8", "replace")
+    try:
+        wanted = ", ".join(c for c in ("content", "summary") if c in _columns(conn, "memories"))
+        row = conn.execute(f"SELECT {wanted} FROM memories WHERE id = ?", (memory_id,)).fetchone()
+        if row is None:
+            raise KeyError(memory_id)
+        conn.execute("PRAGMA secure_delete = ON")     # freed pages are zeroed, not left holding the text
+        tables = _ordinary_tables(conn)
+        present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        removed: Dict[str, int] = {}
+        cleared: Dict[str, int] = {}
+        redacted: Dict[str, int] = {}
+        lineage = _lineage_of(conn, memory_id, present)
+        for table, n in clear_vectors_or_refuse(conn, memory_id, present).items():
+            _bump(removed, table, n)
+        tombstone_seed(conn, memory_id)
+        if PROVENANCE_TABLE in present:
+            _bump(removed, PROVENANCE_TABLE,
+                  conn.execute(f"DELETE FROM {PROVENANCE_TABLE} WHERE memory_id = ?", (memory_id,)).rowcount)
+        _clear_references(conn, memory_id, tables, removed, cleared)
+        conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        swept = _scrub_copies(conn, _TextMatcher([t for t in row if t]), lineage, redacted, removed)
+        if "memories_fts" in present:                 # a deleted row's terms stay in old segments until they are merged
+            conn.execute("INSERT INTO memories_fts(memories_fts) VALUES ('optimize')")
+    finally:
+        conn.text_factory = factory
     return {"rows_removed": removed, "references_cleared": cleared, "rows_redacted": redacted, **swept}
 
 
-def finish_purge(conn: sqlite3.Connection) -> bool:
-    """After the commit: the write-ahead log still holds the pages as they were. True when it
-    was emptied; False when a reader held it open, and its next checkpoint will do it."""
+def copies_beside_the_brain(conn: sqlite3.Connection) -> List[str]:
+    """Files beside the database that are copies of it: a pre-image an install or a migration kept. A delete does not
+    reach them, and the receipt says so by name."""
+    db = _db_file(conn)
+    if not db:
+        return []
+    base = Path(db)
+    return sorted(str(p) for p in base.parent.glob(base.name + ".*")
+                  if p.is_file() and not p.name.endswith(("-wal", "-shm", "-journal")))
+
+
+def finish_purge(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """After the commit. An earlier UPDATE of a row leaves its older copy in the page's free space, where no delete of the
+    live row reaches, so the file is rebuilt (VACUUM); then the write-ahead log, which still holds the pages as they were,
+    is emptied. A reader that blocks either is named in the receipt: `compacted` False, and the bytes remain until the
+    verb runs with no other process on the brain."""
+    out: Dict[str, Any] = {"compacted": True, "wal_emptied": False, "other_copies_not_reached": copies_beside_the_brain(conn)}
+    try:
+        conn.execute("VACUUM")
+    except sqlite3.Error as e:
+        out["compacted"] = False
+        out["not_compacted_because"] = f"{type(e).__name__}: {e}"
     try:
         busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        out["wal_emptied"] = bool(busy) and not busy[0]
     except sqlite3.Error:
-        return False
-    return bool(busy) and not busy[0]
+        pass
+    return out
 
 
 # --------------------------------------------------------------------------

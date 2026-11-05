@@ -90,6 +90,7 @@ import contextlib
 import hashlib
 import json
 import os
+import shlex
 import re
 import sqlite3
 import sys
@@ -484,16 +485,76 @@ def lock_path_for(target: Union[None, str, Path, sqlite3.Connection]) -> Path:
     return p / LOCK_NAME
 
 
+def brain_python() -> str:
+    """The interpreter that can run this install's organs: its own venv when it has one. Whatever `python3` means on the
+    caller's PATH usually has no sqlite_vec, so a repair command that names it fails where it is printed."""
+    root = Path(os.path.abspath(__file__)).parent.parent
+    for rel in ("venv/bin/python3", "venv/Scripts/python.exe"):
+        if (root / rel).exists():
+            return str(root / rel)
+    return sys.executable or "python3"
+
+
+def brain_db() -> str:
+    """This install's brain: WIZARD_LIBRARY_DB when set (an attached brain lives elsewhere), else beside the organs."""
+    return (os.environ.get("WIZARD_LIBRARY_DB") or "").strip() or \
+        str(Path(os.path.abspath(__file__)).parent.parent / "claude_memory.db")
+
+
+def organ_command(rel: str, *args: Any) -> str:
+    """A command that runs an organ from any directory: absolute paths under the install's own interpreter. Every repair
+    command the product prints goes through here, so what is printed is what works."""
+    organs = Path(os.path.abspath(__file__)).parent
+    return " ".join(shlex.quote(str(a)) for a in (brain_python(), organs / rel, *args))
+
+
+def fetch_command(db: Optional[Union[str, Path]] = None) -> str:
+    return organ_command("model_fetch.py", "--db", db or brain_db())
+
+
+_stamped_by_a_shipped_model: Dict[str, Optional[Dict[str, Any]]] = {}
+
+
+def _promised_by_stamps(data_dir: Path) -> Optional[Dict[str, Any]]:
+    """{"tier": ...} when a stamp beside this directory names a checksum the catalogue ships. A stamp under a shipped
+    checksum is only ever written under a lock, or by a `re-embed` that left a receipt, so with no history at all it is
+    the evidence that a lock existed. Remembered per process: a lockless brain's every read comes through here."""
+    key = str(data_dir)
+    if key in _stamped_by_a_shipped_model:
+        return _stamped_by_a_shipped_model[key]
+    found = None
+    try:
+        hashes = {e["weights_hash"]: t for t, e in catalogue_tiers().items()}
+        marks = ",".join("?" * len(hashes))
+        for db in sorted(data_dir.glob("*.db")):
+            c = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
+            try:
+                row = c.execute(f"SELECT weights_hash FROM embedding_provenance WHERE weights_hash IN ({marks}) LIMIT 1",
+                                list(hashes)).fetchone()
+            except sqlite3.Error:
+                row = None
+            finally:
+                c.close()
+            if row:
+                found = {"tier": hashes[row[0]]}
+                break
+    except (OSError, sqlite3.Error, EmbedderLockError):
+        found = None
+    _stamped_by_a_shipped_model[key] = found
+    return found
+
+
 def lost_lock(data_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
     """Should a lock be beside this database? The history file answers: every write of a lock
     leaves a receipt there. {"tier": ...} when the last word on the lock says it exists, None
     when no receipt ever wrote one, or a rollback took the brain back to having none. Only the
     receipts that move the lock count: `re-embed` writes one on a brain that never had a lock.
-    A history with nothing readable in it still proves a lock was written."""
+    A history with nothing readable in it still proves a lock was written. With no history
+    file at all, the stamps answer (_promised_by_stamps)."""
     try:
         raw = (Path(data_dir) / LOCK_HISTORY_NAME).read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return None
+        return _promised_by_stamps(Path(data_dir))
     lines = [ln for ln in raw.splitlines() if ln.strip()]
     readable = 0
     locked: Optional[Dict[str, Any]] = None
@@ -521,6 +582,15 @@ def lost_lock(data_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
     return {"tier": None} if lines and not readable else None
 
 
+def refuse_lost_lock(target: Any) -> None:
+    """A write on a brain that lost its lock refuses: nothing vouches for the model the vector would be stamped under."""
+    try:
+        resolve(target)
+    except EmbedderLockError as e:
+        if e.code == "LOCK_MISSING" and e.detail.get("was_locked"):
+            raise
+
+
 def read_lock(path: Union[str, Path]) -> Dict[str, Any]:
     """Open and shape-check the install lock. LOCK_MISSING / LOCK_MALFORMED only:
     catalogue membership is the reader's and the loader's question, decided
@@ -532,13 +602,13 @@ def read_lock(path: Union[str, Path]) -> Dict[str, Any]:
         lost = lost_lock(p.parent)
         if lost is not None:
             tier = lost.get("tier") or "<tier>"
-            fix = f"python3 organs/claude_memory.py init --tier {tier}"
+            fix = organ_command("claude_memory.py", "init", "--tier", tier)
             raise EmbedderLockError(
                 "LOCK_MISSING",
                 f"no embedder lock at {p}, and {LOCK_HISTORY_NAME} beside it records one (tier {tier}): "
                 f"this brain was locked and the file is gone, so nothing says which model its vectors "
-                f"came from. Restore the file from a backup, or run `{fix}` from the installed brain "
-                f"directory to write it again from the catalogue.",
+                f"came from. Restore the file from a backup, or run `{fix}` to write it again from the "
+                f"catalogue.",
                 lock=str(p), was_locked=True, tier=lost.get("tier"), retry=[fix])
         raise EmbedderLockError(
             "LOCK_MISSING",
@@ -818,6 +888,28 @@ def hub_closed() -> Iterator[None]:
         _flags(was_offline)
 
 
+_fetch_scopes = 0
+
+
+@contextlib.contextmanager
+def fetch_allowed() -> Iterator[None]:
+    """The only way a model reaches this machine after install: `tier set`, `re-embed` and model_fetch run their load in
+    here. Everywhere else the loader refuses SNAPSHOT_ABSENT, so a store or a nightly job never starts a download
+    nobody asked for."""
+    global _fetch_scopes
+    _fetch_scopes += 1
+    try:
+        yield
+    finally:
+        _fetch_scopes -= 1
+
+
+def snapshot_complete(snap: Optional[Path], files: Optional[Sequence[str]]) -> bool:
+    """Is every file the pin names in this snapshot? An interrupted download leaves the directory and some of its files,
+    and a directory is not a model."""
+    return snap is not None and all((snap / f).exists() for f in (files or ()))
+
+
 def hf_offline() -> bool:
     """HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE, as huggingface_hub reads them: a
     reader under either never fetches, and this module says so TYPED
@@ -845,35 +937,35 @@ def _fetch_pinned(model_id: str, revision: str, *, allow_fetch: bool, weights_ha
     fetched bytes (2,766,959,110 of 4,522,421,943) were files no pin named,
     including 1,099,584,724 B of weights for a repository pinned only as code."""
     snap = snapshot_dir_for(model_id, revision)
-    if snap is not None:
+    if snapshot_complete(snap, allow_patterns):
         return snap
     if not allow_fetch or hf_offline():
+        fix = fetch_command()
         raise EmbedderLockError(
             "SNAPSHOT_ABSENT",
-            f"no local snapshot for {what} {model_id}@{revision[:12]} under {hf_hub_cache()} and "
-            + ("a read does not fetch" if _hub_closures
-               else "this process is HF-offline (HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE)" if hf_offline()
-               else "fetching is disabled for this caller")
-            + ". Fetch it, with the network: `python3 organs/model_fetch.py --db <brain>/claude_memory.db` "
-              "(from the installed brain directory) -- or populate the cache yourself at exactly this revision.",
+            f"{'no local snapshot' if snap is None else 'an incomplete snapshot (a download was interrupted)'} for "
+            f"{what} {model_id}@{revision[:12]} under {hf_hub_cache()} and "
+            + ("a read does not fetch, and neither does a store: only an install, `tier set` and `re-embed` do"
+               if _hub_closures else "this process is HF-offline (HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE)" if hf_offline()
+               else "only an install, `tier set` and `re-embed` fetch")
+            + f". Fetch it, with the network: `{fix}` -- or populate the cache yourself at exactly this revision.",
             weights_hash=weights_hash, model_id=model_id, revision=revision, what=what,
-            hf_hub_cache=str(hf_hub_cache()),
-            retry=["python3 organs/model_fetch.py --db <brain>/claude_memory.db"])
-    from huggingface_hub import snapshot_download    # only here, only when absent
+            hf_hub_cache=str(hf_hub_cache()), retry=[fix])
+    from huggingface_hub import snapshot_download    # only here, only when absent; a partial snapshot is completed
     kwargs: Dict[str, Any] = {"revision": revision}
     if allow_patterns:
         kwargs["allow_patterns"] = list(allow_patterns)
     snapshot_download(model_id, **kwargs)
     snap = snapshot_dir_for(model_id, revision)
-    if snap is None:
+    if not snapshot_complete(snap, allow_patterns):
         raise EmbedderLockError(
             "WEIGHTS_MISMATCH",
-            f"fetched {what} {model_id}@{revision[:12]} but no snapshot appeared under {hf_hub_cache()}",
+            f"fetched {what} {model_id}@{revision[:12]} but no complete snapshot appeared under {hf_hub_cache()}",
             weights_hash=weights_hash)
     return snap
 
 
-def verify_snapshot_against_lock(lock: Dict[str, Any], *, allow_fetch: bool = True,
+def verify_snapshot_against_lock(lock: Dict[str, Any], *, allow_fetch: Optional[bool] = None,
                                  catalogue: Optional[Union[str, Path]] = None,
                                  pin_kind: str = "tier") -> Tuple[Path, str]:
     """Locate the snapshot the lock names -- AND the remote-code snapshot its
@@ -884,8 +976,9 @@ def verify_snapshot_against_lock(lock: Dict[str, Any], *, allow_fetch: bool = Tr
       * a snapshot absent locally and the lock's hash is not in the catalogue ->
         LOCK_NOT_SHIPPED, before any fetch (nothing outside the catalogue is
         ever downloaded on this path);
-      * a snapshot absent and allow_fetch -> fetched at ITS pinned revision (the
-        model at lock.revision, the code at lock.code.revision);
+      * a snapshot absent or missing a named file, and allow_fetch -> fetched at ITS
+        pinned revision (the model at lock.revision, the code at lock.code.revision);
+        allow_fetch defaults to whether the caller is inside fetch_allowed();
       * computed != lock.weights_hash -> WEIGHTS_MISMATCH (forty f's land here;
         so does a changed byte in the code repository);
       * computed == lock but the hash is not shipped -> LOCK_NOT_SHIPPED.
@@ -899,9 +992,15 @@ def verify_snapshot_against_lock(lock: Dict[str, Any], *, allow_fetch: bool = Tr
             return is_shipped_hash(h, catalogue)
         return any(e["weights_hash"] == h for e in catalogue_rerankers(catalogue).values())
 
+    if allow_fetch is None:
+        allow_fetch = _fetch_scopes > 0
     code = lock.get("code")
     model_snap = snapshot_dir_for(lock["model_id"], lock["revision"])
     code_snap = snapshot_dir_for(code["model_id"], code["revision"]) if code else None
+    if not snapshot_complete(model_snap, lock.get("files")):
+        model_snap = None
+    if code and not snapshot_complete(code_snap, code.get("files")):
+        code_snap = None
     if model_snap is None or (code and code_snap is None):
         if not _shipped(lock["weights_hash"]):
             raise EmbedderLockError(
@@ -1062,6 +1161,8 @@ def fetch_models_needed(lock: Dict[str, Any], *, catalogue: Optional[Union[str, 
         rec: Dict[str, Any] = {k: m[k] for k in ("what", "pin", "model_id", "revision", "pin_kind")}
         rec["files_named"] = len(m["files"])
         snap = snapshot_dir_for(m["model_id"], m["revision"], hub=hub)
+        if not snapshot_complete(snap, m["files"]):
+            snap = None
         rec["present_before"] = snap is not None
         if snap is None:
             if not allow_fetch or hf_offline():
@@ -1098,11 +1199,9 @@ def fetch_models_needed(lock: Dict[str, Any], *, catalogue: Optional[Union[str, 
             f"{len(absent)} of {plan['count']} models the memory system needs are not under {hub} and could "
             f"not be fetched: {names}; bytes on disk for the needed set: {out['bytes_named_total']:,}. "
             f"The install is NOT complete and no working memory is claimed. Retry, with the network: "
-            f"`python3 organs/model_fetch.py --db <brain>/claude_memory.db` (from the installed brain "
-            f"directory) -- or populate the cache yourself at exactly these revisions.",
+            f"`{fetch_command()}` -- or populate the cache yourself at exactly these revisions.",
             absent=absent, needed=plan["count"], hf_hub_cache=str(hub), offline=hf_offline(),
-            bytes_on_disk=out["bytes_named_total"], models=out["models"],
-            retry=["python3 organs/model_fetch.py --db <brain>/claude_memory.db"])
+            bytes_on_disk=out["bytes_named_total"], models=out["models"], retry=[fetch_command()])
     # every present model is then HASHED against its pin (the loader's own check),
     # so "present" means "the bytes the catalogue promised", never "a directory exists"
     for m, rec in zip(plan["needed"], out["models"]):

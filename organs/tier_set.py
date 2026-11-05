@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """tier set -- move a brain to another embedding model by RE-EMBEDDING every memory.
 
-    voidloom tier set <nomic|qwen> [--plan] [--batch-size N]
+    voidloom tier set <nomic|qwen> [--plan] [--batch-size N] [--char-budget N] [--stall-seconds S]
     voidloom tier status
     voidloom tier rollback
     voidloom tier cleanup --confirm <old vector table>
@@ -111,9 +111,22 @@ PREIMAGE_NAME = "embedder.lock.preimage.json"
 PREIMAGE_SCHEMA = "voidloom.tier-set-preimage/1"
 ORGAN = "tier_set"
 BATCH_SIZE = 16
+# What one encoder call may hold, in characters of padded text: a batch costs its count times its longest member (see
+# _batches). Measured with Qwen3-Embedding on an 11 GB card, 1,500 memories sampled from a 31,904-memory brain, shortest
+# first: 2,048 gave 16.3 a second, 4,096 19.9, 8,192 23.3, 16,384 23.6; no call passed 2.4 s at any of them. 8,192 is
+# where the gain stops, at half the padded peak of the next step.
+BATCH_CHAR_BUDGET = 8192
+PROGRESS_EVERY = 500
+# A batch that has run this long is not going to finish: the run stops, says so and names --batch-size. Finished rows are
+# committed, so re-running resumes. INVENTED, NOT TUNED: well over any batch the budget above admits, measured or not.
+BATCH_STALL_SECONDS = 600
 DERIVED_LAYER_NOTE = ("not recomputed here: similarity links, communities and summaries were derived in the "
                       "previous model's space; the sleep loop recomputes them on its own schedule")
-USAGE = "voidloom tier set <nomic|qwen> [--plan]  (or: python3 organs/tier_set.py --db <brain>/claude_memory.db set <nomic|qwen>)"
+USAGE = "voidloom tier set <nomic|qwen> [--plan] [--batch-size N] [--char-budget N]  (or: python3 organs/tier_set.py --db <brain>/claude_memory.db set <nomic|qwen>)"
+
+
+# This run's limits, set once from the command line.
+_LIMITS: Dict[str, Any] = {"char_budget": BATCH_CHAR_BUDGET, "stall_seconds": BATCH_STALL_SECONDS}
 
 
 class TierRefused(RuntimeError):
@@ -133,7 +146,8 @@ class TierRefused(RuntimeError):
 
 def _load(lock: Dict[str, Any]) -> None:
     import embedding_upgrade
-    embedding_upgrade.get_locked_embedder(lock)
+    with embedder_lock.fetch_allowed():
+        embedding_upgrade.get_locked_embedder(lock)
 
 
 def _encode(texts: List[str], lock: Dict[str, Any]) -> List[bytes]:
@@ -150,13 +164,18 @@ def _now() -> str:
 
 
 def _open(db: Path, *, readonly: bool = False) -> sqlite3.Connection:
-    import sqlite_vec
+    try:
+        import sqlite_vec
+    except ImportError:
+        raise TierRefused("TIER1_REQUIRED", "this install is keyword-only, so it has no embedding tier to read or move; "
+                          "add semantic recall first: bash install.sh")
     import memory_write
     if readonly:
         conn = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True, timeout=60.0)
     else:
         conn = sqlite3.connect(str(db), timeout=60.0)
     conn.isolation_level = None            # transactions are explicit in this module
+    conn.text_factory = lambda b: b.decode("utf-8", "replace")      # one damaged row cannot stop a build
     conn.enable_load_extension(True)
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
@@ -246,7 +265,7 @@ _PENDING_SQL = """
             WHERE p.memory_id = m.id AND p.vec_table = :t AND p.weights_hash = :h
               AND p.dim = :d
               AND (p.input_kind = 'centroid'
-                   OR (p.input_kind = 'text' AND p.content_hash = vl_sha256(m.content)))
+                   OR (p.input_kind = 'text' AND p.content_hash = vl_sha256(CAST(m.content AS BLOB))))
               AND m.id IN (SELECT memory_id FROM {t}))
      ORDER BY m.id
 """
@@ -438,12 +457,74 @@ def _encode_alone(mid: int, text: str, lock: Dict[str, Any], outcome: _Outcome) 
             return None
 
 
+def _on_accelerator() -> bool:
+    try:
+        import voidloom_device
+        return not str(voidloom_device.torch_device()).startswith("cpu")
+    except Exception:                       # noqa: BLE001 -- no answer is no reason to shorten anything
+        return False
+
+
+class _StallGuard:
+    """Stops the process when one encoder call outlives BATCH_STALL_SECONDS. A card that has spilled into host memory
+    does not raise out-of-memory, it crawls, and an encoder call cannot be cancelled from Python, so the only honest
+    exit is to stop, typed: the rows finished so far are committed and a re-run resumes from them."""
+
+    def __init__(self, seconds: Optional[float], size: int, chars: int):
+        self.seconds, self.size, self.chars, self.timer = seconds, size, chars, None
+
+    def _fire(self) -> None:
+        print(json.dumps({"status": "error", "error": "TIER_SET_STALLED",
+                          "message": f"one batch of {self.size} ({self.chars} characters) ran past "
+                                     f"{self.seconds} s. Finished rows are kept. Re-run with --batch-size 2, or a "
+                                     f"smaller --char-budget."}), flush=True)
+        os._exit(1)
+
+    def __enter__(self):
+        if self.seconds:
+            import threading
+            self.timer = threading.Timer(self.seconds, self._fire)
+            self.timer.daemon = True
+            self.timer.start()
+        return self
+
+    def __exit__(self, *exc):
+        if self.timer is not None:
+            self.timer.cancel()
+        return False
+
+
+class _Pace:
+    """How far a long build has got, on stderr, so half an hour of work is not half an hour of silence."""
+
+    def __init__(self, total: int):
+        self.total, self.done, self.next, self.t0 = total, 0, PROGRESS_EVERY, time.time()
+
+    def add(self, n: int) -> None:
+        self.done += n
+        if self.done >= self.next:
+            self.next = self.done - self.done % PROGRESS_EVERY + PROGRESS_EVERY
+            rate = self.done / max(time.time() - self.t0, 0.001)
+            left = int((self.total - self.done) / max(rate, 0.001) / 60)
+            print(f"tier: {self.done} of {self.total} embedded ({rate:.1f} a second, about {left} minutes left)",
+                  file=sys.stderr, flush=True)
+
+
 def _encode_rows(rows: List[Any], texts: List[str], lock: Dict[str, Any], outcome: _Outcome) -> List[Any]:
     """[(row, text, vector)] for `rows`. A batch that runs out of memory on the accelerator is
     retried one item at a time, so one long memory cannot stop the whole run at the same batch
     on every rerun. Any other error is the caller's: it is not a property of one long memory."""
+    # A text past the measured length is embedded from its head at once on an accelerator: such a text does not always
+    # raise out-of-memory, it can simply never come back. The stamp still names the whole text.
+    cut = list(texts)
+    if _on_accelerator():
+        for i, (row, text) in enumerate(zip(rows, texts)):
+            if len(text) > SHORTEN_START_CHARS:
+                cut[i] = text[:SHORTEN_START_CHARS]
+                outcome.shortened[int(row[0])] = SHORTEN_START_CHARS
     try:
-        return list(zip(rows, texts, _encode(texts, lock)))
+        with _StallGuard(_LIMITS["stall_seconds"], len(cut), sum(len(t) for t in cut)):
+            return list(zip(rows, texts, _encode(cut, lock)))
     except (RuntimeError, MemoryError) as e:
         if not _is_out_of_memory(e):
             raise
@@ -520,7 +601,7 @@ def _write_centroid(conn: sqlite3.Connection, memory_id: int, members: List[int]
     cols = memory_write.PROVENANCE_COLUMNS
     conn.execute("SAVEPOINT rebuilt_centroid")
     try:
-        conn.execute(f"DELETE FROM {table} WHERE memory_id = ?", (int(memory_id),))
+        memory_write.clear_vector(conn, table, int(memory_id))
         conn.execute(f"INSERT INTO {table} (memory_id, embedding) VALUES (?, ?)",
                      (int(memory_id), _centroid_embedding(vectors)))
         conn.execute(f"INSERT OR REPLACE INTO {memory_write.PROVENANCE_TABLE} ({', '.join(cols)}) "
@@ -566,6 +647,29 @@ def _embed_pending(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any
     return done
 
 
+def _batches(conn: sqlite3.Connection, ids: List[int], batch_size: int) -> List[List[int]]:
+    """`ids` in encoder calls, shortest text first. An encoder pads every text in a call to the longest one, so a single
+    long memory in a call of 16 makes it cost 16 long memories; on a real brain that stalled a card with no out-of-memory
+    for 13 minutes. So a call holds at most `batch_size` memories and at most the character budget once padded, and
+    similar lengths share a call."""
+    lengths: Dict[int, int] = {}
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        marks = ",".join("?" * len(chunk))
+        lengths.update(conn.execute(f"SELECT id, COALESCE(LENGTH(content), 0) FROM memories WHERE id IN ({marks})",
+                                    chunk).fetchall())
+    out: List[List[int]] = []
+    cur: List[int] = []
+    for i in sorted(ids, key=lambda m: (lengths.get(m, 0), m)):
+        if cur and (len(cur) >= batch_size or lengths.get(i, 0) * (len(cur) + 1) > _LIMITS["char_budget"]):
+            out.append(cur)
+            cur = []
+        cur.append(i)
+    if cur:
+        out.append(cur)
+    return out
+
+
 def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *,
                batch_size: int, in_txn: bool, outcome: Optional[_Outcome] = None) -> int:
     """Embed `ids` under `lock`. Outside a transaction: one transaction per batch
@@ -574,8 +678,8 @@ def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *
     import memory_write
     outcome = _Outcome() if outcome is None else outcome
     done = 0
-    for start in range(0, len(ids), batch_size):
-        chunk = ids[start:start + batch_size]
+    pace = _Pace(len(ids))
+    for chunk in _batches(conn, ids, batch_size):
         marks = ",".join("?" * len(chunk))
         rows = conn.execute(f"SELECT id, content FROM memories WHERE id IN ({marks}) ORDER BY id",
                             chunk).fetchall()
@@ -585,7 +689,8 @@ def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *
             conn.execute("BEGIN IMMEDIATE")
         try:
             for (mid, _c), text, vec in encoded:
-                memory_write.attach_under_lock(conn, mid, text, vec, lock=lock, organ=ORGAN)
+                memory_write.attach_under_lock(conn, mid, memory_write.stamp_source(conn, mid, text), vec,
+                                               lock=lock, organ=ORGAN)
             if not in_txn:
                 conn.execute("COMMIT")
         except BaseException:
@@ -593,6 +698,7 @@ def _embed_ids(conn: sqlite3.Connection, ids: List[int], lock: Dict[str, Any], *
                 conn.execute("ROLLBACK")
             raise
         done += len(encoded)
+        pace.add(len(encoded))
     return done
 
 
@@ -626,6 +732,9 @@ def _log_start(conn: sqlite3.Connection, lock: Dict[str, Any], total: int, *,
         return None
     cols = {r[1] for r in conn.execute("PRAGMA table_info(embedding_upgrade_log)")}
     started = _now()
+    # The verb's mutex is held: a row still in progress belongs to a run that was killed.
+    conn.execute("UPDATE embedding_upgrade_log SET status = 'aborted', completed_at = ? "
+                 "WHERE status = 'in_progress' AND notes = ?", (started, notes))
     if "weights_hash" in cols:
         conn.execute("INSERT INTO embedding_upgrade_log (started_at, model_name, embedding_dim, memories_total, "
                      "status, weights_hash, notes) VALUES (?, ?, ?, ?, 'in_progress', ?, ?)",
@@ -670,7 +779,7 @@ def _coverage(conn: sqlite3.Connection, lock: Dict[str, Any]) -> Dict[str, int]:
     matched = conn.execute(
         f"SELECT COUNT(*) FROM memories m JOIN embedding_provenance p ON p.memory_id = m.id "
         f" WHERE p.vec_table = ? AND p.weights_hash = ? AND p.dim = ? "
-        f"   AND (p.input_kind = 'centroid' OR (p.input_kind = 'text' AND p.content_hash = vl_sha256(m.content))) "
+        f"   AND (p.input_kind = 'centroid' OR (p.input_kind = 'text' AND p.content_hash = vl_sha256(CAST(m.content AS BLOB)))) "
         f"   AND m.id IN (SELECT memory_id FROM {t})",
         (t, lock["weights_hash"], int(lock["dim"]))).fetchone()[0]
     orphan_stamps = conn.execute(
@@ -788,6 +897,7 @@ def set_tier(db: Path, tier: str, *, batch_size: int = BATCH_SIZE) -> Dict[str, 
 
 def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier: str,
                      batch_size: int) -> Dict[str, Any]:
+    import memory_write
     t = lock["vec_table"]
     conn = _open(db)
     try:
@@ -826,22 +936,28 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
 
         # ---- THE FLIP: one write transaction; nothing lands between check and switch ----
         gap = 0
-        for attempt in range(FLIP_ATTEMPTS):
-            conn.execute("BEGIN IMMEDIATE")
-            late = pending_ids(conn, lock)
-            if len(late) > FLIP_GAP_CAP:
-                conn.execute("ROLLBACK")
-                built += _converge(conn, lock, batch_size, outcome)
-                continue
-            break
-        else:
-            raise TierRefused("TIER_SET_WRITER_STORM",
-                              f"another writer added more than {FLIP_GAP_CAP} memories between each of "
-                              f"{FLIP_ATTEMPTS} attempts to switch; stop it and re-run (finished rows are kept)")
+        try:
+            for attempt in range(FLIP_ATTEMPTS):
+                conn.execute("BEGIN IMMEDIATE")
+                late = pending_ids(conn, lock)
+                if len(late) > FLIP_GAP_CAP:
+                    conn.execute("ROLLBACK")
+                    built += _converge(conn, lock, batch_size, outcome)
+                    continue
+                break
+            else:
+                raise TierRefused("TIER_SET_WRITER_STORM",
+                                  f"another writer added more than {FLIP_GAP_CAP} memories between each of "
+                                  f"{FLIP_ATTEMPTS} attempts to switch; stop it and re-run (finished rows are kept)")
+        except TierRefused as e:
+            _log_failed(conn, started, "tier set", e.message)
+            raise
         env_change, lock_moved = None, False
         try:
             gap = _embed_pending(conn, late, lock, batch_size=batch_size, in_txn=True, outcome=outcome) if late else 0
-            conn.execute(f"DELETE FROM {t} WHERE memory_id NOT IN (SELECT id FROM memories)")
+            for (gone,) in conn.execute(f"SELECT rowid FROM {t}_rowids WHERE rowid NOT IN "
+                                        f"(SELECT id FROM memories)").fetchall():
+                memory_write.clear_vector(conn, t, gone)
             orphans = conn.execute("DELETE FROM embedding_provenance WHERE vec_table = ? AND memory_id NOT IN "
                                    "(SELECT id FROM memories)", (t,)).rowcount
             cov = _coverage(conn, lock)
@@ -879,10 +995,12 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
                 written = embedder_lock.write_lock(data_dir, lock["tier"], replace=True, locked_by="tier set")
             lock_moved = True
             conn.execute("COMMIT")
-        except BaseException:
+        except BaseException as e:
             conn.execute("ROLLBACK")
             if env_change and not lock_moved:
                 _restore_env_pin(env_change)
+            if isinstance(e, TierRefused):
+                _log_failed(conn, started, "tier set", e.message)
             raise
         from_meta = preimage["previous_metadata"] if (resuming or not already) else src["metadata"]
         from_table = preimage["previous_vec_table"] if (resuming or not already) else src["vec_table"]
@@ -1002,14 +1120,19 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
         os.replace(data_dir / PREIMAGE_NAME, data_dir / f"embedder.lock.preimage.{stamp}.used.json")
         gap = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE m.id NOT IN "
                            f"(SELECT memory_id FROM {restored})").fetchone()[0]
+        stale = conn.execute(
+            f"SELECT COUNT(*) FROM embedding_provenance p JOIN memories m ON m.id = p.memory_id "
+            f"WHERE p.vec_table = ? AND p.input_kind = 'text' AND m.id IN (SELECT memory_id FROM {restored}) "
+            f"AND p.content_hash <> vl_sha256(CAST(m.content AS BLOB))", (restored,)).fetchone()[0]
     finally:
         conn.close()
     restored_tier = {"memory_embeddings": "nomic", "memory_embeddings_v3": "qwen"}.get(restored)
     fill = (f"voidloom tier set {restored_tier}" if restored_tier else
-            f"python3 organs/embedding_upgrade.py --db-path {db} re-embed")
+            embedder_lock.organ_command("embedding_upgrade.py", "--db-path", db, "re-embed"))
     receipt = {"at": _now(), "action": "tier-rollback", "by": "tier rollback", "db": str(db),
                "restored_vec_table": restored, "restored_lock": pre["previous_lock_raw"] is not None,
-               "memories_without_a_restored_vector": int(gap), "env_file": env_change}
+               "memories_without_a_restored_vector": int(gap),
+               "memories_with_a_stale_restored_vector": int(stale), "env_file": env_change}
     if restored_tier:
         route = (f"the restored tier ({restored_tier}) is shipped, so `voidloom tier set {restored_tier}` is the "
                  f"route that fills any gap: it reuses every vector already stamped under it and embeds only "
@@ -1021,9 +1144,12 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
     receipt["route"] = route
     _receipt(data_dir, receipt)
     return {"status": "ok", "action": "rollback", "receipt": receipt, "route": route,
-            "gap_fill": fill if gap else None,
-            "note": (f"{gap} memor(ies) written after the switch have no vector in {restored}; they are found by "
-                     f"keyword until `{fill}` embeds them") if gap else None}
+            "gap_fill": fill if (gap or stale) else None,
+            "note": "; ".join(n for n in (
+                f"{gap} memor(ies) written after the switch have no vector in {restored}; they are found by "
+                f"keyword until `{fill}` embeds them" if gap else "",
+                f"{stale} memor(ies) edited after the switch still carry the vector of their old text in {restored}, "
+                f"until `{fill}` embeds them" if stale else "") if n) or None}
 
 
 def cleanup(db: Path, confirm: Optional[str]) -> Dict[str, Any]:
@@ -1034,6 +1160,7 @@ def cleanup(db: Path, confirm: Optional[str]) -> Dict[str, Any]:
 
 def _cleanup_locked(db: Path, confirm: Optional[str]) -> Dict[str, Any]:
     import embed_resolver
+    import memory_write
     data_dir = db.parent
     conn = _open(db)
     try:
@@ -1048,15 +1175,20 @@ def _cleanup_locked(db: Path, confirm: Optional[str]) -> Dict[str, Any]:
                               "(named by its lock or its metadata rows)", active=active)
         if not _table_exists(conn, confirm):
             raise TierRefused("CLEANUP_REFUSED", f"{confirm!r} does not exist in this brain", active=active)
+        # A vec0 DELETE leaves the floats in the chunk, so the table is dropped and made again, empty, and the file rebuilt.
+        conn.execute("PRAGMA secure_delete = ON")
         conn.execute("BEGIN IMMEDIATE")
         try:
             n_vec = conn.execute(f"SELECT COUNT(*) FROM {confirm}").fetchone()[0]
-            conn.execute(f"DELETE FROM {confirm}")
+            ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name = ?", (confirm,)).fetchone()[0]
+            conn.execute(f"DROP TABLE {confirm}")
+            conn.execute(ddl)
             n_stamp = conn.execute("DELETE FROM embedding_provenance WHERE vec_table = ?", (confirm,)).rowcount
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
             raise
+        finished = memory_write.finish_purge(conn)
     finally:
         conn.close()
     pre_p = data_dir / PREIMAGE_NAME
@@ -1071,7 +1203,7 @@ def _cleanup_locked(db: Path, confirm: Optional[str]) -> Dict[str, Any]:
             os.replace(pre_p, retired)
     receipt = {"at": _now(), "action": "tier-cleanup", "by": "tier cleanup", "db": str(db),
                "emptied": confirm, "vectors_removed": int(n_vec), "stamps_removed": int(n_stamp),
-               "rollback_retired": retired}
+               "rollback_retired": retired, **finished}
     _receipt(data_dir, receipt)
     return {"status": "ok", "action": "cleanup", "receipt": receipt}
 
@@ -1113,7 +1245,11 @@ def _parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("set", parents=[common], help="re-embed under <tier>, switch at 100%% coverage")
     sp.add_argument("tier", help="nomic | qwen")
     sp.add_argument("--plan", action="store_true", help="counts only: no model, no writes")
-    sp.add_argument("--batch-size", type=int, default=BATCH_SIZE)
+    sp.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="most memories in one encoder call")
+    sp.add_argument("--char-budget", type=int, default=BATCH_CHAR_BUDGET,
+                    help="most padded characters in one encoder call")
+    sp.add_argument("--stall-seconds", type=float, default=BATCH_STALL_SECONDS,
+                    help="stop, typed, when one encoder call runs this long (0: never)")
     sub.add_parser("status", parents=[common],
                    help="the current tier, vectors per table, whether a rollback is available")
     sub.add_parser("rollback", parents=[common], help="restore the lock and rows from before the last switch")
@@ -1138,6 +1274,7 @@ def run(argv: List[str]) -> Dict[str, Any]:
         if args.action == "set":
             if args.plan:
                 return plan(db, args.tier)
+            _LIMITS.update(char_budget=max(1, int(args.char_budget)), stall_seconds=args.stall_seconds or None)
             return set_tier(db, args.tier, batch_size=max(1, int(args.batch_size)))
         if args.action == "status":
             return status(db)
