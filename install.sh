@@ -4348,7 +4348,6 @@ GATE
             WIZARD_LIBRARY_DB="$DB_PATH" BRAIN_DIR="$BRAIN_DIR" \
             RERANKER_REPO="$_pc_rr" RERANKER_FALLBACK_REPO="$RERANKER_FALLBACK_REPO" \
             PRECACHE_FALLBACK="$_pc_fb" \
-            T1_MODELS_ABSENT=0
             "$VENV_PY" - <<'PYEOF' || { T1_MODELS_ABSENT=1; warn "MODELS_ABSENT: the models could not be fetched. Nothing is wrong with this machine. Retry with the network: bash install.sh"; }
 import os
 
@@ -4442,6 +4441,7 @@ try:
         print("  embedder cached (no reranker: the gate is off).")
 except Exception as e:
     print("  pre-cache note: %s" % e)
+    raise SystemExit(1)
 PYEOF
 
             # C.embed — GIVE THE SEED PACK ITS VECTORS. Drew's ruling, 2026-09-17:

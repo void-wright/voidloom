@@ -82,6 +82,27 @@ class AHubOutage(unittest.TestCase):
         self.assertIn('T1_MODELS_ABSENT=1; warn "MODELS_ABSENT: the models could not be fetched. Nothing is wrong with this machine.', SH)
         self.assertNotIn("lazy-download", SH)
 
+    def _precache(self, d: Path, **env):
+        """The installer's own pre-cache step, cut from install.sh and run: its environment, its heredoc, its verdict."""
+        i = SH.index('WIZARD_EMBED_MODEL="$EMBED_MODEL" EMBED_REPO="$EMBED_REPO" \\\n            WIZARD_LIBRARY_DB="$DB_PATH" BRAIN_DIR')
+        step = SH[i:SH.index("\nPYEOF\n", i) + 7]
+        script = ('warn() { echo "WARN: $*"; }\nT1_MODELS_ABSENT=0\n'
+                  f'EMBED_MODEL=nomic EMBED_REPO=nomic-ai/nomic-embed-text-v1.5 DB_PATH="{d}/claude_memory.db" BRAIN_DIR="{ROOT}" '
+                  f'_pc_rr= RERANKER_FALLBACK_REPO= _pc_fb=0 VENV_PY="{sys.executable}"\n{step}\necho "ABSENT=$T1_MODELS_ABSENT"\n')
+        return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=120,
+                              env={**os.environ, "HOME": str(d), "HF_HOME": str(d / "hf"), **env})
+
+    def test_the_step_gets_its_environment_and_a_failed_fetch_is_absent_models(self):
+        import embedder_lock as el
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td).resolve()
+            el.write_lock(d, "cpu")
+            p = self._precache(d, HF_HUB_OFFLINE="1")
+        self.assertIn("ABSENT=1", p.stdout, p.stdout[-600:] + p.stderr[-300:])
+        self.assertIn("MODELS_ABSENT", p.stdout)
+        self.assertNotIn("'BRAIN_DIR'", p.stdout, "the step ran without its environment")
+        self.assertIn("SNAPSHOT_ABSENT", p.stdout)
+
     def test_no_device_is_proven_or_recorded_on_absent_models(self):
         i = SH.index("T1_DEVICE_OK=1")
         self.assertIn('[ "$T1_MODELS_ABSENT" -eq 0 ]', SH[i:i + 300])
