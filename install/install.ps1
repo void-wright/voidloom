@@ -613,11 +613,17 @@ print(f"  re-embedded {res.get('embedded')} memories into {res.get('table')} ({r
       f"{res.get('status')}, {res.get('unembedded_after')} without a vector")
 sys.exit({"ok": 0, "incomplete": 1, "refused": 3}.get(res.get("status"), 1))
 '@
-                $tmp2 = Join-Path $env:TEMP "wl_reembed.py"; Set-Content -Path $tmp2 -Value $reembedPy -Encoding UTF8
-                & $VenvPy $tmp2 $DbPath $BrainDir
-                if ($LASTEXITCODE -ne 0) { Warn "embedding the seed pack did not complete (rc $LASTEXITCODE); re-run: & `"$VenvPy`" `"$BrainDir\organs\embed_backfill.py`" `"$DbPath`"" }
-                else { Invoke-SeedSelfTest }
-                Remove-Item $tmp2 -ErrorAction SilentlyContinue
+                # An existing brain is never embedded unasked: it is told what is outstanding, and how.
+                if ($PriorInstall) {
+                    Say "  this brain already existed, so nothing is embedded here. What is outstanding:"
+                    & $VenvPy (Join-Path $BrainDir "organs\embed_backfill.py") $DbPath --outstanding
+                } else {
+                    $tmp2 = Join-Path $env:TEMP "wl_reembed.py"; Set-Content -Path $tmp2 -Value $reembedPy -Encoding UTF8
+                    & $VenvPy $tmp2 $DbPath $BrainDir
+                    if ($LASTEXITCODE -ne 0) { Warn "embedding the seed pack did not complete (rc $LASTEXITCODE); re-run: & `"$VenvPy`" `"$BrainDir\organs\embed_backfill.py`" `"$DbPath`"" }
+                    else { Invoke-SeedSelfTest }
+                    Remove-Item $tmp2 -ErrorAction SilentlyContinue
+                }
                 & $VenvPy (Join-Path $BrainDir "organs\claude_memory.py") recall --query "how do I capture knowledge as I work" --top_k 1 *> $null
                 if ($LASTEXITCODE -eq 0) {
                     Say "  Tier 1 VERIFIED — semantic recall is live."

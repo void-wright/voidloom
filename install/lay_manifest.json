@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "3127c40",
+  "derived_at_head": "63e6ebf",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 504,
   "not_laid": {
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 33274,
+   "bytes": 33322,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "305c6e3d12c2d55855881ccd25108b9d803ddb8f571940984d66dcd99b934db7",
+   "sha256": "930077289055ce960c626d62098dbe97f3a9a8e8a79ea60cda072e7c01fec26a",
    "src": "CHANGELOG.md"
   },
   {
@@ -547,13 +547,13 @@
    "src": "cron/wizard-library-dreaming.timer"
   },
   {
-   "bytes": 1501,
+   "bytes": 1516,
    "component": "core",
    "dst": "cron/wizard-library-embed-backfill.service",
    "exec": false,
    "platform": "posix",
    "root": "brain",
-   "sha256": "39a91aff18a1cf6169f0d9a49c64fd1cd2725f8312c242f783a732234155b9c9",
+   "sha256": "471787c3dfcccf69ca23a8076c84be13d86a41c308257dd28cb61c5396897035",
    "src": "cron/wizard-library-embed-backfill.service"
   },
   {
@@ -937,13 +937,13 @@
    "src": "install/accelerator_plan.py"
   },
   {
-   "bytes": 14576,
+   "bytes": 14591,
    "component": "core",
    "dst": "install/cron_roster.json",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "3c4a06b7ab45761bf86e1fd3df2b48df86cc0442e31a9db99805c22500bdb07d",
+   "sha256": "212dbb7c34d14485adaf1b56c2afe9cf730a901730db603735ce6c8f8e36a11e",
    "src": "install/cron_roster.json"
   },
   {
@@ -997,13 +997,13 @@
    "src": "install/golden_vectors.py"
   },
   {
-   "bytes": 63899,
+   "bytes": 64310,
    "component": "core",
    "dst": "install/install.ps1",
    "exec": false,
    "platform": "windows",
    "root": "brain",
-   "sha256": "62fc4243f06a22ee9e520d5742b5e1d26f4c04774d661094886ee42c70a70e83",
+   "sha256": "5bb912c86393e535853410664b52cad008e58b4dbda552a567ebdd413f7043ce",
    "src": "install/install.ps1"
   },
   {
@@ -4367,13 +4367,13 @@
    "src": "voidloom/tests/test_recall_topk_after_placement.py"
   },
   {
-   "bytes": 13507,
+   "bytes": 14315,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "7ebfeb3d690df71a651da403dd3ac8e405d7c1901b752c809ade5c41cf84dd4a",
+   "sha256": "8d8c0d0e5a58540a2a794def5a303a488e79b3a8822d68efc7feb1faa769975f",
    "src": "voidloom/tests/test_refusals_name_the_way_out.py"
   },
   {
@@ -5047,13 +5047,13 @@
    "src": "voidloom/tests/test_tier_verbs_tell_the_whole_story.py"
   },
   {
-   "bytes": 4826,
+   "bytes": 5556,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "6df74695738067bf1ab4e64700c5842228c50c38862429f63e03d0d92f486ddf",
+   "sha256": "ea24069dfc46d361056dad25081e223ac4c6cdea6818fd2eb912a80bd56071e2",
    "src": "voidloom/tests/test_upgrade_embeds_nothing_unasked.py"
   },
   {

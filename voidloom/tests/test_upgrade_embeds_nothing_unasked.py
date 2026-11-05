@@ -69,6 +69,18 @@ class TheInstallerGate(unittest.TestCase):
         self.assertEqual(sorted(r.strip() for r in runs), ["--outstanding || true", "; then"])
 
 
+class TheNightlyJob(unittest.TestCase):
+    def test_it_embeds_what_has_no_vector_and_leaves_legacy_vectors_alone(self):
+        roster = json.loads((ROOT / "install" / "cron_roster.json").read_text(encoding="utf-8"))
+        self.assertIn("--only-missing", roster["units"]["embed-backfill"]["exec"])
+        self.assertIn("--only-missing", (ROOT / "cron" / "wizard-library-embed-backfill.service").read_text(encoding="utf-8"))
+
+    def test_the_windows_installer_keeps_the_same_rule(self):
+        text = (ROOT / "install" / "install.ps1").read_text(encoding="utf-8")
+        i = text.index("if ($PriorInstall) {\n                    Say \"  this brain already existed")
+        self.assertIn("--outstanding", text[i:i + 300])
+
+
 @unittest.skipUnless(tt._vec_available(), "needs sqlite_vec")
 class WhatItPrints(unittest.TestCase):
     def setUp(self):

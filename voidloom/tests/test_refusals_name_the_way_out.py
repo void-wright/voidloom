@@ -91,6 +91,21 @@ class OnlyInstallAndTierVerbsFetch(_Room):
 
 
 @unittest.skipUnless(HAVE_VEC, "needs sqlite_vec")
+class ABrainWithNoLockFetchesNothingEither(_Room):
+    LOCK = None
+
+    def test_a_store_refuses_typed_and_nothing_lands_in_the_cache(self):
+        out, p = self.engine("store", "--content", "a new fact worth keeping", "--category", "insight", "--summary", "s")
+        self.assertEqual(out.get("error"), "SNAPSHOT_ABSENT", (out, p.stderr[-500:]))
+        self.assertFalse((self.d / "hub").exists() and any((self.d / "hub").iterdir()))
+
+    def test_a_keyword_store_stands_at_the_front_door_with_no_lock_promised(self):
+        env, p = self.cli_json("store", "--content", "a new fact worth keeping", "--category", "insight")
+        self.assertEqual(env["status"], "ok", (env, p.stderr[-400:]))
+        self.assertEqual(env["data"].get("tier"), 0, env)
+
+
+@unittest.skipUnless(HAVE_VEC, "needs sqlite_vec")
 class AHalfDownloadedModel(_Room):
     def setUp(self):
         super().setUp()

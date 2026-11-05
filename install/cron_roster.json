@@ -305,7 +305,7 @@
    "thinks": false,
    "claude_credential": "thinker",
    "why": "round 1 (L5): the safety net for organ write paths that stored a memory without a vector (359 found by the 2026-10-14 health check); idempotent, refuses rather than guessing a tier, exit 3 (keyword-only Tier 0) admitted. Armed by the owner's ruling (2026-10-15): it makes no LLM call and loads the embedder once a day, so a missed vector is repaired by morning instead of waiting for someone to notice",
-   "exec": "organs/embed_backfill.py {DB} --limit 2000 --json",
+   "exec": "organs/embed_backfill.py {DB} --only-missing --limit 2000 --json",
    "systemd": "*-*-* 09:40:00",
    "launchd": "daily:09:40",
    "timeout": 1800,

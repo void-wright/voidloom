@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-05T01:53:10Z from the working tree whose HEAD was `3127c40`
+> Generated 2026-11-05T01:56:02Z from the working tree whose HEAD was `63e6ebf`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 504 |
 | files hashed | 504 |
-| total bytes | 11180868 |
+| total bytes | 11182895 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -102,7 +102,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  231 files, 3302571 bytes
+### `voidloom` — The CLI facade  ·  231 files, 3304109 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -263,7 +263,7 @@
 | `voidloom/tests/test_readers_lock_first.py` | 8699 | `2c622570e4347fd4` |
 | `voidloom/tests/test_recall_carries_coverage.py` | 11053 | `24d4f4ba01deb761` |
 | `voidloom/tests/test_recall_topk_after_placement.py` | 3824 | `b697d7b65e0fd52a` |
-| `voidloom/tests/test_refusals_name_the_way_out.py` | 13507 | `7ebfeb3d690df71a` |
+| `voidloom/tests/test_refusals_name_the_way_out.py` | 14315 | `8d8c0d0e5a58540a` |
 | `voidloom/tests/test_release_check_reads_its_own_row.py` | 2414 | `8586fe740f8700fa` |
 | `voidloom/tests/test_release_gates_execute.py` | 3803 | `e8ae84f6b38ab25e` |
 | `voidloom/tests/test_reranker_gate.py` | 27921 | `77c41f4d1b428239` |
@@ -331,7 +331,7 @@
 | `voidloom/tests/test_tier_set.py` | 30173 | `e4af4b3fa5f1a085` |
 | `voidloom/tests/test_tier_switch_owns_the_env.py` | 8738 | `2e55055fd5db0f9e` |
 | `voidloom/tests/test_tier_verbs_tell_the_whole_story.py` | 7410 | `c3a07a99f20562e4` |
-| `voidloom/tests/test_upgrade_embeds_nothing_unasked.py` | 4826 | `6df74695738067bf` |
+| `voidloom/tests/test_upgrade_embeds_nothing_unasked.py` | 5556 | `ea24069dfc46d361` |
 | `voidloom/tests/test_voidloom.py` | 37785 | `61a17601055b5173` |
 | `voidloom/tests/test_website_store_stamps.py` | 8758 | `177dee58bdbab780` |
 | `voidloom/tests/test_windows_scripts_encoding.py` | 3585 | `7407c0787dd07272` |
@@ -382,24 +382,24 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 968054 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  23 files, 968480 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `install/CLAUDE.md.template` | 6780 | `a44033e0a1480fcb` |
 | `install/accelerator_plan.py` | 29139 | `5aed96c2e335eb03` |
-| `install/cron_roster.json` | 14576 | `3c4a06b7ab45761b` |
+| `install/cron_roster.json` | 14591 | `212dbb7c34d14485` |
 | `install/cron_roster.py` | 16531 | `1f34cca9a2d7b089` |
 | `install/env_file.py` | 102683 | `cb0fe029b977aa64` |
 | `install/fixtures/golden_vectors_nomic.json` | 144295 | `7ca287b27b7b7b91` |
 | `install/fixtures/golden_vectors_qwen.json` | 191567 | `4e9f3a72527ad86f` |
 | `install/golden_vectors.py` | 10872 | `fc268ca66da450f9` |
-| `install/install.ps1` | 63899 | `62fc4243f06a22ee` |
+| `install/install.ps1` | 64310 | `5bb912c86393e535` |
 | `install/install_council.sh` | 9233 | `7efe5c588226bf00` |
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 138854 | `3a335eb1444332b6` |
+| `install/lay_manifest.json` | 138854 | `0fc4d8c6416568e7` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -428,7 +428,7 @@
 | `hooks/voidloom_precompact.py` | 7027 | `da67266abbf2ac5e` |
 | `hooks/voidloom_signoff.py` | 1478 | `f5b48e7f42b92483` |
 
-### `cron` — systemd units + timers  ·  48 files, 81427 bytes
+### `cron` — systemd units + timers  ·  48 files, 81442 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -460,7 +460,7 @@
 | `cron/wizard-library-dream-daytime.timer` | 292 | `19c35eac409e2384` |
 | `cron/wizard-library-dreaming.service` | 1838 | `b161c4195d66700d` |
 | `cron/wizard-library-dreaming.timer` | 422 | `a97b9976bb527526` |
-| `cron/wizard-library-embed-backfill.service` | 1501 | `39a91aff18a1cf61` |
+| `cron/wizard-library-embed-backfill.service` | 1516 | `471787c3dfcccf69` |
 | `cron/wizard-library-embed-backfill.timer` | 578 | `28ce043da7f1fe97` |
 | `cron/wizard-library-gap-mapping.service` | 455 | `b8dfbea75a39f75e` |
 | `cron/wizard-library-gap-mapping.timer` | 379 | `dfe50d13827946cd` |
@@ -558,12 +558,12 @@
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 459795 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 459843 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 33274 | `305c6e3d12c2d558` |
+| `CHANGELOG.md` | 33322 | `930077289055ce96` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3050 | `fd1c349c71739b63` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |

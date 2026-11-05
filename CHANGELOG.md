@@ -29,7 +29,7 @@ All notable changes to Voidloom are recorded here. The format follows
 - **An upgrade embeds nothing unasked.** A plain `bash install.sh` on a brain you have written to
   prints how many memories have no vector, how many are legacy, and the command for each. Only a new
   brain has its seed embedded at install. `embed_backfill.py --only-missing` embeds what has no vector
-  and leaves a legacy vector alone.
+  and leaves a legacy vector alone, and the nightly backfill job now runs that way.
 - **`tier set` batches by length.** Each call to the encoder holds similar lengths up to a padded
   character budget, a text past 16,000 characters is embedded from its head on an accelerator, progress
   prints every 500 rows, and a batch that stalls stops typed and names `--batch-size`.

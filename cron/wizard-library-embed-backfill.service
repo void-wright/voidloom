@@ -15,7 +15,7 @@ After=network.target
 EnvironmentFile=-%h/.voidloom/wizard-library-env
 Type=oneshot
 Environment=PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
-ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/embed_backfill.py %h/.claude/memory/claude_memory.db --limit 2000 --json
+ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/embed_backfill.py %h/.claude/memory/claude_memory.db --only-missing --limit 2000 --json
 WorkingDirectory=%h/.claude/memory
 StandardOutput=journal
 StandardError=journal
