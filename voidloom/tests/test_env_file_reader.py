@@ -1581,8 +1581,10 @@ class TestTheWindowsWriterIsTheReadersToo(unittest.TestCase):
         owner = b"OWNER_LINE=keep\n# an owner comment\n"
         (tmp / "D[1]").mkdir()
         (tmp / "D[1]" / "wizard-library-env").write_bytes(owner)
-        cases = {"A": "D:\\Profiles\\O'Brien Q\\.wizard-library", "B": "D:\\Profiles\\Ay\u015fe\\.wizard-library",
-                 "D": "D:\\Profiles\\plain\\.wizard-library"}
+        # The system drive: Join-Path needs a drive that exists, and these are spelling cases, not paths anything opens. A
+        # second drive's own faults are not this test's (measured: WinError 1117 from a D: that had read fine an hour before).
+        cases = {"A": "C:\\Profiles\\O'Brien Q\\.wizard-library", "B": "C:\\Profiles\\Ay\u015fe\\.wizard-library",
+                 "D": "C:\\Profiles\\plain\\.wizard-library"}
         drv = ["$ErrorActionPreference = 'Continue'", "function Say ($m) { Write-Host \"[install] $m\" }",
                "function Warn ($m) { Write-Warning \"[install] $m\" }",
                "$PySys = if (Get-Command python -ErrorAction SilentlyContinue) { 'python' } else { 'py -3' }",

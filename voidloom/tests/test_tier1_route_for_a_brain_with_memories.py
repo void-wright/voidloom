@@ -105,7 +105,7 @@ class ACommandPrintedOnWindows(unittest.TestCase):
 
     def test_saboteur_a_dollar_a_backtick_and_a_quote_in_a_path_stay_literal(self):
         import embedder_lock as el
-        word = "C:\\Users\\o'neil\\$env:PATH `n brain"
+        word = "C:\\Users\\you\\o'neil\\$env:PATH `n brain"
         self.assertEqual(el._ps_quote(word), "'" + word.replace("'", "''") + "'")
         ps = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
         if not os.path.isfile(ps):
