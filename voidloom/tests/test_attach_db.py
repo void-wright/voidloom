@@ -243,7 +243,8 @@ class TestAttachDb(unittest.TestCase):
 
     def test_saboteur_a_tier0_run_over_a_locked_brain_says_doctor_will_not_be_healthy(self):
         p = self._run("--tier0-only", "--brain-db", str(self.snapshot(memories=2, lock_row="cpu")))
-        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+        self.assertEqual(p.returncode, 5, (p.stdout + p.stderr)[-2000:])       # recall refuses this brain: the gate says so
+        self.assertIn("recall gate: the engine admits this brain", p.stdout + p.stderr)
         self.assertIn("this brain was locked and its lock is not beside it", p.stdout + p.stderr)
         self.assertIn("init --tier cpu", p.stdout + p.stderr)
 

@@ -241,6 +241,8 @@ def _pretty(data: Any) -> str:
 _MEMORY_TEXT_KEYS = ("summary", "content", "text", "body")
 # Max characters of memory prose shown per card before truncation.
 _CARD_TEXT_MAX = 240
+# install/requirements.txt pins this; doctor prints it, and a person installs what doctor prints.
+PEFT_PIN = "peft==0.19.1"
 
 
 def _card_text(row: Dict[str, Any]) -> str:
@@ -1985,7 +1987,7 @@ def verb_doctor(args) -> Dict[str, Any]:
             _organs_importable()
             import embedder_lock
             _reason = (f"this brain's jina model needs peft, which {sys.executable} does not have: recall is answering "
-                       f"by keyword. Fix: {embedder_lock.shell_command(sys.executable, '-m', 'pip', 'install', 'peft')}")
+                       f"by keyword. Fix: {embedder_lock.shell_command(sys.executable, '-m', 'pip', 'install', PEFT_PIN)}")
     if _reason:
         brain_healthy = False
     # The ladder, read rather than printed. A platform that is NOT_INSTALLED is

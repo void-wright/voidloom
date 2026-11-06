@@ -46,6 +46,9 @@ WHAT IT CHECKS (all against the known seed memories, so results are deterministi
      Gated on Tier 1 being
      present and loads local-files-only (never downloads); on Tier 0 it is skipped,
      never failed — Tier 0 does not depend on any model.
+  8. The engine's recall gate: this brain is one `voidloom recall` answers, not one it refuses.
+     The engine's own reader runs here, on any interpreter, so a refused brain fails naming the
+     refusal, however well its keyword index reads.
 
 SCHEMA NOTES (must match the full + lite CLI's DB)
   * `memories_fts` is an EXTERNAL-CONTENT FTS5 table (content='memories') kept in
@@ -199,6 +202,144 @@ def _uri(db_path, mode: str) -> str:
 def _connect_ro(db_path: Path):
     uri = _uri(db_path, "ro")
     return sqlite3.connect(uri, uri=True)
+
+
+# The codes the engine's recall refuses a brain on, as the gate in organs/claude_memory.py cmd_recall names them.
+# voidloom/tests/test_self_check_recall_gate.py reads that gate and fails if the two ever differ.
+RECALL_REFUSALS = frozenset({
+    "LOCK_MISSING", "NO_ROWS_FOR_LOCK", "STAMP_INCONSISTENT", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED",
+})
+
+# Stamps that carry the lock's checksum on a table or width the lock does not name: `re-embed` rewrites the lock's own
+# table and never reaches them. Single quotes only, because PowerShell mangles a double quote on its way to python.
+_DROP_STAMPS = ("import sqlite3,sys; a=sys.argv; c=sqlite3.connect(a[1]); c.execute('DELETE FROM embedding_provenance "
+                "WHERE weights_hash=? AND (vec_table<>? OR dim<>?)',(a[2],a[3],int(a[4]))); c.commit()")
+
+
+def _recall_refusal(e):
+    """The code the engine's gate refuses `e` on, or None: a lock that never existed and a brain holding no vectors at
+    all are legal brains there, and here."""
+    code = getattr(e, "code", None)
+    if code not in RECALL_REFUSALS:
+        return None
+    if code == "LOCK_MISSING" and not (getattr(e, "detail", None) or {}).get("was_locked"):
+        return None
+    if code == "NO_ROWS_FOR_LOCK" and not getattr(getattr(e, "coverage", None), "vectors", 0):
+        return None
+    return code
+
+
+def _open_vectors(conn, table: str) -> None:
+    """Let the reader count `table` on a connection with no sqlite-vec: it keeps one ordinary row per vector in
+    `<table>_rowids`, and a TEMP view of those rows takes the table's name on this connection alone. A table that was
+    never built holds no vector. One whose rows are gone gets no view, so the reader says it cannot read it."""
+    def built(name):
+        return conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (name,)).fetchone() is not None
+    if built(table + "_rowids"):
+        conn.execute('CREATE TEMP VIEW "%s" AS SELECT rowid AS memory_id FROM main."%s_rowids"' % (table, table))
+    elif not built(table):
+        conn.execute('CREATE TEMP VIEW "%s" AS SELECT NULL AS memory_id WHERE 0' % table)
+
+
+def _repair_command(el, cmd: str) -> str:
+    """`cmd` as it runs from here. The product names its own interpreter, which is this one when no venv is laid, and this
+    script runs on any stdlib python: `init` and `re-embed` cannot open a vector table there. An ambient install recorded
+    the interpreter that can."""
+    try:
+        import sqlite_vec  # noqa: F401
+        return cmd
+    except ImportError:
+        pass
+    named = el.brain_python()
+    if named != sys.executable:
+        return cmd
+    try:
+        lines = (Path(__file__).resolve().parent.parent / "INSTALL_RECORD").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    recorded = [ln.split("=", 1)[1].strip() for ln in lines if ln.startswith("interpreter=")]
+    if recorded and os.access(recorded[-1], os.X_OK):
+        return cmd.replace(el.shell_command(named), el.shell_command(recorded[-1]))
+    return cmd + "  (under a Python that has sqlite_vec: this one has none)"
+
+
+def _way_out(el, mw, e, code: str, flt, db_path: Path) -> str:
+    """The command that repairs this refusal. Each was run on a brain in that state."""
+    then = "; " if sys.platform == "win32" else " && "
+    retry = (getattr(e, "detail", None) or {}).get("retry") or []
+    if retry:
+        return _repair_command(el, retry[0])
+    if code in ("LOCK_MISSING", "LOCK_MALFORMED"):
+        return ("Restore the lock from a backup, or write it again with `claude_memory.py init --tier`, naming the tier "
+                "this brain's vectors came from, cpu or gpu (nothing beside this brain records it).")
+    embed = mw.re_embed_command(str(db_path))
+    if code == "NO_ROWS_FOR_LOCK":
+        return _repair_command(el, embed)
+    if code == "STAMP_INCONSISTENT":
+        drop = el.shell_command(el.brain_python(), "-c", _DROP_STAMPS, db_path, flt.weights_hash, flt.vec_table, flt.dim)
+        return _repair_command(el, drop + then + embed)
+    lock = Path(flt.lock_path)
+    aside = lock.with_name(lock.name + ".unshipped")
+    if flt.tier not in el.catalogue_tiers():
+        return ("This package does not ship the lock's tier: restore the lock from a backup, or move it aside and write "
+                "it again with `claude_memory.py init --tier`, naming cpu or gpu, then run: " + _repair_command(el, embed))
+    move = ("Move-Item -Force %s %s" % (el._ps_quote(lock), el._ps_quote(aside)) if sys.platform == "win32"
+            else el.shell_command("mv", lock, aside))
+    init = el.organ_command("claude_memory.py", "init", "--tier", flt.tier)
+    return _repair_command(el, move + then + init + then + embed)
+
+
+def _embedder_absent(el, lock) -> bool:
+    """Is any file the lock's embedder pins missing from the local cache? Presence only: the reader's own test."""
+    return any(not el.snapshot_complete(el.snapshot_dir_for(pin["model_id"], pin["revision"]), pin.get("files"))
+               for pin in (lock, lock.get("code")) if pin)
+
+
+def check_recall_gate(checks: Checks, db_path: Path) -> None:
+    """8. Does the engine's recall admit this brain? Every other check reads the keyword index directly, so a brain whose
+    recall refuses passes them all. This runs the reader the engine's gate runs, on a connection any python can open, and
+    fails on exactly what the gate refuses. A reader that could not run fails too: it has said nothing about this brain.
+
+    Also notes a locked brain whose embedder is not on this disk (`checks.fetch_first`): recall answers by keyword there,
+    so the brain is alive, and a store refuses."""
+    name = "recall gate: the engine admits this brain"
+    means = "`voidloom recall` refuses this brain, so questions to it fail until it is repaired"
+    flt = None
+    conn = None
+    try:
+        organs = str(Path(__file__).resolve().parent.parent / "organs")
+        if organs not in sys.path:
+            sys.path.insert(0, organs)
+        import embed_resolver as er
+        import embedder_lock as el
+        import memory_write as mw
+        conn = _connect_ro(db_path)
+        try:
+            flt = mw.provenance_filter(conn)
+            if flt.locked:
+                _open_vectors(conn, flt.vec_table)
+            mw.search_set(conn)
+        except Exception as e:  # noqa: BLE001 -- the gate catches every exception too, then reads its code
+            code = _recall_refusal(e)
+            if code:
+                checks.refused = code
+                checks.add(name, False, detail=f"{code}: {str(e).split(': ', 1)[-1]}",
+                           fix=_way_out(el, mw, e, code, flt, db_path), means=means)
+                return
+            if getattr(e, "code", None) != "NO_ROWS_FOR_LOCK" and not isinstance(e, (er.EmbedTierUnresolved,
+                                                                                     mw.EmbeddingUnavailable)):
+                raise
+        if flt is not None and flt.locked and _embedder_absent(el, el.resolve(conn)):
+            checks.fetch_first = _repair_command(el, el.fetch_command(str(db_path)))
+        checks.add(name, True, detail="the search set opens under this brain's lock" if flt is not None and flt.locked
+                   else "no lock on this brain, so nothing for the gate to hold it to")
+    except Exception as e:  # noqa: BLE001 -- an unread gate is a finding, never a pass
+        checks.add(name, False, detail=f"the engine's reader could not run: {type(e).__name__}: {e}",
+                   fix="`voidloom doctor` names what is wrong; re-run the installer if organs/memory_write.py is missing.",
+                   means="whether recall answers this brain is not known")
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def check_schema(checks: Checks, db_path: Path):
@@ -608,8 +749,11 @@ def check_tier(checks: Checks, db_path: Path):
 
 def note_tier(checks: Checks):
     """The sentence a reader acts on, said only after the model check: tables on disk are not recall by meaning, and a
-    brain whose model will not load answers by keyword whatever its tables hold."""
-    if getattr(checks, "semantic_tables", False) and getattr(checks, "models_loaded", None) is True:
+    brain whose model will not load answers by keyword whatever its tables hold. A refused brain answers neither way."""
+    if getattr(checks, "refused", None):
+        checks.note(f"Recall is REFUSED on this brain ({checks.refused}): the failed check above says why and how to "
+                    "repair it.")
+    elif getattr(checks, "semantic_tables", False) and getattr(checks, "models_loaded", None) is True:
         checks.note("Semantic (Tier 1) recall is ACTIVE.")
     elif getattr(checks, "semantic_tables", False) and getattr(checks, "models_loaded", None) is False:
         checks.note("Semantic recall is NOT active: this brain's model did not load (see the check above), so recall "
@@ -818,7 +962,10 @@ def check_models(checks: Checks, db_path: Path):
             f"(~/.cache/huggingface): {e}"
         )
         run = _el.fetch_command(db_path) if _el is not None else "bash install.sh"
-        fix = (f"Fetch them at the install lock's pins: {run}, or re-run install.sh. Keyword recall is unaffected.")
+        refused = getattr(checks, "refused", None)
+        fix = f"Fetch them at the install lock's pins: {run}" + ("." if refused else ", or re-run install.sh.")
+        if isinstance(_lock, Exception) or "LOCK_NOT_SHIPPED" in (refused, getattr(e, "code", None)):
+            fix = "Nothing can be fetched against this lock until it is repaired: the recall gate check names how."
     checks.models_loaded = ok
     checks.add(
         "full L4 models load (embedder + reranker)", ok, required=False,
@@ -856,6 +1003,8 @@ def run_self_check(seed_optional: bool = False) -> Checks:
                    fix="Ship seed_pack.json beside self_check.py or set WIZARD_LIBRARY_SEED.")
 
     conn = check_schema(checks, db_path)
+    if conn is not None:
+        check_recall_gate(checks, db_path)
     no_pack_here = False
     plan = None
     if conn is not None and seeds and seed_optional:
@@ -953,6 +1102,15 @@ def run_self_check(seed_optional: bool = False) -> Checks:
     return checks
 
 
+def _alive(checks: Checks):
+    """What a passing run may say: (the verdict line, the short form). Only a brain that can store may claim it can."""
+    fetch = getattr(checks, "fetch_first", None)
+    if not fetch:
+        return "YOUR BRAIN IS ALIVE. Store + recall work end-to-end.", "brain alive"
+    said = f"recall answers by keyword, and a store refuses until the model is fetched: {fetch}"
+    return f"YOUR BRAIN IS ALIVE BY KEYWORD: {said}", f"brain alive by keyword: {said}"
+
+
 def _print_human(checks: Checks) -> None:
     print("=" * 64)
     print("Voidloom MEMORY — SELF-CHECK (Tier 0, keyword recall)")
@@ -980,7 +1138,7 @@ def _print_human(checks: Checks) -> None:
           + (f"   |   Bonus: {checks.passed_optional}/{checks.total_optional}"
              if checks.total_optional else ""))
     if ok:
-        print("  VERDICT: YOUR BRAIN IS ALIVE. Store + recall work end-to-end.")
+        print(f"  VERDICT: {_alive(checks)[0]}")
     else:
         print(f"  VERDICT: {len(checks.required_failures)} required check(s) FAILED "
               "— see FIX lines above.")
@@ -1023,10 +1181,10 @@ def main(argv=None) -> int:
             "checks": checks.results,
             "notes": checks.notes,
             "choices": checks.choices,
-            "verdict": "brain alive" if ok else "brain check failed",
+            "verdict": _alive(checks)[1] if ok else "brain check failed",
         }, indent=2))
     elif args.quiet:
-        print("brain alive" if ok else f"brain check FAILED "
+        print(_alive(checks)[1] if ok else f"brain check FAILED "
               f"({len(checks.required_failures)} required check(s))")
     else:
         _print_human(checks)

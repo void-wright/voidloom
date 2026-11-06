@@ -199,20 +199,19 @@ def make_counter(name: str = "auto") -> Tuple[str, Callable[[str], int]]:
     """Return (counter_name, fn).
 
     The name is carried in every payload so nobody reads an estimate as a
-    measurement.  ``auto`` prefers tiktoken cl100k_base when importable and
-    falls back to a deterministic ceil(chars/4).  The SAME fn produces the
-    reported ``tokens`` and decides every budget drop — a count derived from a
-    different object than the verdict is the defect this avoids.
+    measurement.  ``auto`` is a deterministic ceil(chars/4), because it is what
+    the session hook runs and the hook makes no network call: tiktoken downloads
+    its encoding on a cache miss, and again when a cached file fails its hash,
+    with no offline switch, so no check of the cache can make it safe.  Only an
+    explicit ``tiktoken`` loads it.  The SAME fn produces the reported ``tokens``
+    and decides every budget drop — a count derived from a different object than
+    the verdict is the defect this avoids.
     """
-    if name in ("auto", "tiktoken"):
-        try:
-            import tiktoken  # type: ignore
-            enc = tiktoken.get_encoding("cl100k_base")
-            return ("tiktoken:cl100k_base",
-                    lambda s: len(enc.encode(s, disallowed_special=())))
-        except Exception:
-            if name == "tiktoken":
-                raise
+    if name == "tiktoken":
+        import tiktoken  # type: ignore
+        enc = tiktoken.get_encoding("cl100k_base")
+        return ("tiktoken:cl100k_base",
+                lambda s: len(enc.encode(s, disallowed_special=())))
     if name in ("auto", "heuristic", "chars4"):
         return ("heuristic:chars_div4_ceil", lambda s: -(-len(s) // 4))
     if name == "chars":

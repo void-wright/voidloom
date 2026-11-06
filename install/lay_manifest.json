@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 493,
+    "core": 496,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 448,
+    "all": 451,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 235,
+    "null": 238,
     "skills": 18
    }
   },
-  "derived_at_head": "699504d",
+  "derived_at_head": "b221826",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 511,
+  "entries": 514,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 224,
+     "count": 227,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 235
+   "total": 238
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7edf89d92400f4c1247c8fd6be8b16c11a733f87744263ab3c3a0405937f11ef",
+   "sha256": "9fabcfcccef040f98654c2c4c7359fbb1d9805504d6c9fdaf0874a1b37a69002",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1107,13 +1107,13 @@
    "src": "install/requirements.txt"
   },
   {
-   "bytes": 55874,
+   "bytes": 64922,
    "component": "core",
    "dst": "install/self_check.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1d16bcd8ef68c0522802764b528eb240bb0f3ce3f8a2b2fac48c0e4b8b7742fd",
+   "sha256": "71424bbf10abba84ba3038ade3ea5b5bed36b53105ea91a52b4371885d76e7ea",
    "src": "install/self_check.py"
   },
   {
@@ -2267,13 +2267,13 @@
    "src": "organs/voidloom_persona.py"
   },
   {
-   "bytes": 163373,
+   "bytes": 163482,
    "component": "core",
    "dst": "organs/voidloom_preamble.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ce97d0f48c40d99b7bfc8c7e9d6fd63b518972d41ee4ba858c19eac644074eef",
+   "sha256": "99e2a7cf0d8b9f19a59ab411fc82b4a2779d08f681ea0f4f4f4824d779476695",
    "src": "organs/voidloom_preamble.py"
   },
   {
@@ -2907,13 +2907,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 180753,
+   "bytes": 180879,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "5ab474c4892a664b8b46865df2d01e1c4c4c94794c0fcc8705b1dd617a33a60c",
+   "sha256": "b1ef68346c791bad177dba73742bdb77b00262efbea60f2b1c1aa3ddd4853aab",
    "src": "voidloom/cli.py"
   },
   {
@@ -3197,13 +3197,13 @@
    "src": "voidloom/tests/test_arcane_manifest_r3.py"
   },
   {
-   "bytes": 21368,
+   "bytes": 21508,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "7afa0e138df53c302354967e4e1dbf1a395776e86b4812d67584ac706dbd7645",
+   "sha256": "2ef4995572bb2d0cb482823aad71f8801e457b7f70692b3160193c0d9c3ab217",
    "src": "voidloom/tests/test_attach_db.py"
   },
   {
@@ -3525,6 +3525,16 @@
    "root": null,
    "sha256": "3e963d8c1954d31990ce49e57a49ca972d85c3a738743049c6dea2ba9b9239fa",
    "src": "voidloom/tests/test_doctor_cpu_only_truth_r2.py"
+  },
+  {
+   "bytes": 1177,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "db4cec867d98158d4d67a58bbacdfc64810fcbe4235afe94a23425632610e30f",
+   "src": "voidloom/tests/test_doctor_prints_the_peft_pin.py"
   },
   {
    "bytes": 6252,
@@ -3925,6 +3935,16 @@
    "root": null,
    "sha256": "c2a70343a42ff8479629296d2be681e9f292a12314294095caba2e81492cec0a",
    "src": "voidloom/tests/test_hidden_cuda_probe_r1.py"
+  },
+  {
+   "bytes": 3918,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "f531c3a77bb5a384a16c7279c6734b97076a637e4b7b67f0baf0cb4e8b3d5b2b",
+   "src": "voidloom/tests/test_hook_counts_tokens_offline.py"
   },
   {
    "bytes": 3693,
@@ -4545,6 +4565,16 @@
    "root": null,
    "sha256": "40ce1e1805941fdabae9a679dba14b04b465244af42f1df4b39673b4549512f9",
    "src": "voidloom/tests/test_self_check_models_lock.py"
+  },
+  {
+   "bytes": 18502,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "7906414e8f91e9da777eca8d630c0a79ad18df38c5dea62812ab1c69bb258b47",
+   "src": "voidloom/tests/test_self_check_recall_gate.py"
   },
   {
    "bytes": 7970,
