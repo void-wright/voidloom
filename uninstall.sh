@@ -48,6 +48,8 @@ for c in "${BRAIN_DIR}/venv/bin/python3" "$(sed -n 's/^interpreter=//p' "${BRAIN
     [ -n "$c" ] && command -v "$c" >/dev/null 2>&1 && { PY="$c"; break; }
 done
 [ -n "$PY" ] || { echo "uninstall: no python3 found" >&2; exit 2; }
+# `readlink -f` does not exist before macOS 12.3.
+real_path() { "$PY" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 
 say() { printf '%s\n' "$*"; }
 act() {  # act <description> <command...>: print in preview, run with --yes
@@ -173,7 +175,7 @@ if [ "$REMOVE_BRAIN" = 1 ]; then
         fi
         if [ "$answer" = "$PHRASE" ]; then
             # An attached brain lives elsewhere: the folder holds a link to it, and removing a link removes no memory.
-            ATTACHED=""; [ -L "${BRAIN_DIR}/claude_memory.db" ] && ATTACHED="$(readlink -f "${BRAIN_DIR}/claude_memory.db")"
+            ATTACHED=""; [ -L "${BRAIN_DIR}/claude_memory.db" ] && ATTACHED="$(real_path "${BRAIN_DIR}/claude_memory.db")"
             rm -rf "$BRAIN_DIR" && say "  removed  $BRAIN_DIR"
             rm -rf "$ENV_DIR" && say "  removed  $ENV_DIR"
             [ -n "$ATTACHED" ] && say "  KEPT     ${ATTACHED}  (an attached brain, and its lock beside it: you chose where it lives, so deleting it is yours to do)"
@@ -184,7 +186,7 @@ if [ "$REMOVE_BRAIN" = 1 ]; then
     else
         if [ -L "${BRAIN_DIR}/claude_memory.db" ]; then
             say "  would delete  $BRAIN_DIR  (its link to your attached brain, records and pre-upgrade copies)"
-            say "  would keep    $(readlink -f "${BRAIN_DIR}/claude_memory.db")  (the attached brain itself)"
+            say "  would keep    $(real_path "${BRAIN_DIR}/claude_memory.db")  (the attached brain itself)"
         else
             say "  would delete  $BRAIN_DIR  (your memories, records and pre-upgrade copies)"
         fi

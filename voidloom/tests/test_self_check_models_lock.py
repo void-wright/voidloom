@@ -71,6 +71,20 @@ class SelfCheckVerifiesTheLock(unittest.TestCase):
         self.assertFalse(res["ok"], res["detail"])
         self.assertIn("organs/model_fetch.py", res["fix"])
 
+    def test_saboteur_a_brain_under_another_name_that_lost_its_lock_is_not_read_as_lockless(self):
+        """Attached under its own name: only its own row can say a lock was written, so the check must ask the file it was given."""
+        import embedder_lock as el
+        other = self.brain / "attached.db"
+        self.db.rename(other)
+        self.db = other
+        c = sqlite3.connect(str(other))
+        c.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT)")
+        c.execute("INSERT INTO metadata VALUES (?, 'cpu')", (el.BRAIN_LOCK_KEY,))
+        c.commit(); c.close()
+        res = self.probe()
+        self.assertFalse(res["ok"], res["detail"])
+        self.assertIn("LOCK_MISSING", res["detail"] + res["fix"])
+
     def test_saboteur_a_malformed_lock_fails_and_is_never_read_as_absent(self):
         (self.brain / "embedder.lock.json").write_text("{not json", encoding="utf-8")
         res = self.probe()

@@ -421,9 +421,13 @@ licences are listed in [`NOTICE`](./NOTICE).
 
 Storing, recalling, the CLI and the session hook make no network calls of
 their own, and there is no telemetry. A store or a recall on a machine missing
-its model does not download it: a recall answers by keyword and, on a brain with an
-install lock, a store refuses, and both name the command that fetches it. A brain with
-no lock stores by keyword only until the model is back.
+its model does not download it. `voidloom recall` and the engine's `recall` answer by
+keyword and say so, on the answer and as a banner. On a brain with an install lock,
+`voidloom store` and the engine's `store` refuse and name the command that fetches it. A
+brain with no lock stores by keyword only through `voidloom` until the model is back.
+`claude_memory_lite.py` is the floor and keeps storing: Tier 0 cannot fail, so it writes
+the memory with no vector and a later embed picks it up. A lock that no row answers to, or
+that cannot be read, is a different case: recall refuses, typed, and prints the way out.
 
 ---
 

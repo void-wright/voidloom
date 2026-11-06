@@ -162,10 +162,10 @@ MODEL_REGISTRY: Dict[str, ModelSpec] = {
         loader_type=LOADER_JINA,
         device="cuda:0",
         footprint_mb=1500,
-        enable_default=True,
+        enable_default=False,
         kill_switch_env="VOIDLOOM_DISABLE_JINA",
         requires_packages=("sentence_transformers", "torch"),
-        description="Primary embedder (1024-dim, LoRA task adapters). Recall hot path.",
+        description="Not shipped (cc-by-nc-4.0). 1024-dim, LoRA task adapters. Loads only for a brain already on this tier.",
     ),
     "qwen": ModelSpec(
         key="qwen",

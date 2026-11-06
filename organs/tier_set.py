@@ -44,8 +44,8 @@ THE ORDER, and what each step guarantees:
      those readers on another model's table. A crash between the lock rename and
      the commit leaves lock=target, rows=old; re-running `tier set` finishes it.
   5. The OLD VECTORS ARE KEPT: they are the rollback path. `tier rollback` restores
-     the pre-image (lock and rows) and reports how many memories, written after the
-     switch, have no vector in the restored table. Only `tier cleanup --confirm
+     the pre-image (lock and rows) and reports how many memories have no vector in the
+     restored table, whenever they were written. Only `tier cleanup --confirm
      <table>` removes old vectors, with its own receipt; after it, rollback refuses.
 
 NOT done by this verb, and said in every receipt: the derived layer was computed in
@@ -1152,8 +1152,8 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
     return {"status": "ok", "action": "rollback", "receipt": receipt, "route": route,
             "gap_fill": fill if (gap or stale) else None,
             "note": "; ".join(n for n in (
-                f"{gap} memor(ies) written after the switch have no vector in {restored}; they are found by "
-                f"keyword until `{fill}` embeds them" if gap else "",
+                f"{gap} memor(ies) have no vector in {restored}; they are found by keyword until `{fill}` embeds them"
+                if gap else "",
                 f"{stale} memor(ies) edited after the switch still carry the vector of their old text in {restored}, "
                 f"until `{fill}` embeds them" if stale else "") if n) or None}
 

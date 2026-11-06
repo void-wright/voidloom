@@ -777,10 +777,10 @@ def check_models(checks: Checks, db_path: Path):
         if _organs_dir not in sys.path:
             sys.path.insert(0, _organs_dir)
         import embedder_lock as _el
-        _lock = _el.read_lock(_el.lock_path_for(str(db_path)))
+        _lock = _el.read_lock(_el.lock_path_for(str(db_path)), brain=str(db_path))
     except Exception as _e:
-        if _el is None or getattr(_e, "code", None) != "LOCK_MISSING":
-            _lock = _e                            # a lock present but unreadable: reported below, never "absent"
+        if _el is None or getattr(_e, "code", None) != "LOCK_MISSING" or getattr(_e, "detail", {}).get("was_locked"):
+            _lock = _e                            # unreadable, or lost: reported below, never read as "no lock"
     try:
         if isinstance(_lock, Exception):
             raise _lock

@@ -4,7 +4,9 @@ THE CLAIM UNDER TEST
   * a brain whose recall or store degrades or fails is not healthy: the locked model absent, the keyword index dropped, a
     metadata table name nothing builds, a lockless brain's own model absent;
   * each reason names the fault, and a printed fix is one that runs;
-  * a keyword-only brain and a brain with no vector need no model, and stay healthy.
+  * a keyword-only brain and a lockless brain with no vector need no model, and stay healthy. A locked brain needs its
+    model whatever it holds, because its store refuses without it;
+  * a model is the snapshot the loader reads, whole, at its pin: a folder of that name is what a failed download leaves.
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ import os
 import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from voidloom.tests.test_doctor_brain_verdict import JINA, JINA_DIM, _Brain, cli
@@ -104,6 +107,51 @@ class ALocklessBrainsOwnModelIsAbsent(_Cold):
         with _peft():
             d = self.doctor(models_on_disk=False)
         self.assertIs(d["brain_healthy"], True, d["reason"])
+
+    def folder(self, *files):
+        """What a download leaves in the loader's cache, at the engine's pin."""
+        import embedding_upgrade as eu
+        snap = Path(self.hub.name) / ("models--" + eu.JINA_MODEL_NAME.replace("/", "--")) / "snapshots" / eu.JINA_REVISION
+        snap.mkdir(parents=True)
+        for rel in files:
+            (snap / rel).parent.mkdir(parents=True, exist_ok=True)
+            (snap / rel).write_bytes(b"x")
+
+    def test_saboteur_a_folder_an_interrupted_download_left_is_not_a_model(self):
+        self.memory(whash="unresolved")
+        self.folder("config.json")
+        with _peft():
+            d = self.doctor(models_on_disk=False)
+        self.assertIs(d["brain_healthy"], False, d["reason"])
+        self.assertIn("SNAPSHOT_ABSENT", d["reason"])
+
+    def test_control_a_whole_snapshot_at_the_pin_is_a_model(self):
+        import embedding_upgrade as eu
+        self.memory(whash="unresolved")
+        self.folder(*eu.JINA_SNAPSHOT_FILES)
+        with _peft():
+            d = self.doctor(models_on_disk=False)
+        self.assertIs(d["brain_healthy"], True, d["reason"])
+
+
+class ALocklessNomicBrainInAColdCache(_Cold):
+    LOCK = None
+
+    def test_saboteur_an_empty_model_folder_reads_as_absent(self):
+        self.memory(whash="unresolved")
+        (Path(self.hub.name) / "models--nomic-ai--nomic-embed-text-v1.5").mkdir()
+        d = self.doctor(models_on_disk=False)
+        self.assertIs(d["brain_healthy"], False, d["reason"])
+        self.assertIn("SNAPSHOT_ABSENT", d["reason"])
+
+
+class ALockedBrainNeedsItsModelWhateverItHolds(_Cold):
+    def test_saboteur_a_first_store_would_refuse_so_doctor_is_not_healthy(self):
+        self.memory(whash=None, vector=False)
+        d = self.doctor(models_on_disk=False)
+        self.assertIs(d["brain_healthy"], False, d["reason"])
+        self.assertEqual([f.split(":")[0] for f in self.status()["faults"] if f.startswith("SNAPSHOT_ABSENT")],
+                         ["SNAPSHOT_ABSENT"], "status names the model too")
 
 
 if __name__ == "__main__":

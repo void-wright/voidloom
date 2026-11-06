@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -275,12 +276,72 @@ class OnlyWhatWriteLockLeftProvesALock(_Room):
         self.el.write_lock(self.dir, "cpu", brain=db)
         self.assertEqual(self.row(db), "cpu")
 
-    def test_control_a_brain_too_busy_for_the_row_still_gets_its_lock(self):
+    def test_control_a_brain_too_damaged_for_the_row_still_gets_its_lock(self):
         db = make_brain(self.dir, "nomic")
         (self.dir / "embedder.lock.json").unlink()
         c = sqlite3.connect(str(db)); c.execute("DROP TABLE metadata"); c.commit(); c.close()
         self.assertEqual(self.el.write_lock(self.dir, "cpu", brain=db)["tier"], "cpu")
         self.assertTrue((self.dir / "embedder.lock.json").exists())
+
+    def test_control_a_brain_too_busy_for_the_row_still_gets_its_lock(self):
+        db = make_brain(self.dir, "nomic")
+        (self.dir / "embedder.lock.json").unlink()
+        c = sqlite3.connect(str(db)); c.execute("DELETE FROM metadata WHERE key = ?", (self.el.BRAIN_LOCK_KEY,)); c.commit()
+        c.execute("BEGIN EXCLUSIVE")
+        real = sqlite3.connect
+        with mock.patch.object(self.el.sqlite3, "connect", lambda *a, **k: real(*a, **{**k, "timeout": 0.1})):
+            self.assertEqual(self.el.write_lock(self.dir, "cpu", brain=db)["tier"], "cpu")
+        c.rollback(); c.close()
+        self.assertTrue((self.dir / "embedder.lock.json").exists())
+
+    def test_saboteur_an_unreadable_brain_is_not_a_brain_with_no_record(self):
+        db = make_brain(self.dir, "nomic")
+        (self.dir / "embedder.lock.json").unlink()
+        (self.dir / self.el.LOCK_HISTORY_NAME).unlink()
+        c = sqlite3.connect(str(db)); c.execute("BEGIN EXCLUSIVE")
+        real = sqlite3.connect
+        with mock.patch.object(self.el.sqlite3, "connect", lambda *a, **k: real(*a, **{**k, "timeout": 0.1})):
+            with self.assertRaises(self.el.EmbedderLockError) as cm:
+                self.el.resolve(db)
+        c.rollback(); c.close()
+        self.assertEqual((cm.exception.code, cm.exception.detail["was_locked"]), ("LOCK_MISSING", True))
+        self.assertIn("did not answer", str(cm.exception))
+
+    def test_saboteur_bytes_that_are_no_database_are_not_a_brain_with_no_record(self):
+        db = self.dir / "claude_memory.db"
+        db.write_bytes(b"this is not a database at all, and it is longer than a header")
+        self.assertEqual(self.el.lost_lock(self.dir), {"tier": None, "unreadable": True})
+
+    def test_control_a_brain_with_no_metadata_table_holds_no_record(self):
+        db = self.dir / "claude_memory.db"
+        c = sqlite3.connect(str(db)); c.execute("CREATE TABLE t (a)"); c.commit(); c.close()
+        self.assertIsNone(self.el.lost_lock(self.dir))
+
+    def test_saboteur_a_row_that_already_says_so_is_not_written_again(self):
+        """Its table stamps every write, so a second run of the same install would change the brain's bytes."""
+        db = make_brain(self.dir, "nomic")
+        c = sqlite3.connect(str(db))
+        c.execute("ALTER TABLE metadata ADD COLUMN updated_at TEXT")      # the shipped schema's stamp; a rewrite resets it
+        c.execute("UPDATE metadata SET updated_at = 'the first run' WHERE key = ?", (self.el.BRAIN_LOCK_KEY,)); c.commit()
+        before = db.read_bytes()
+        self.el.write_lock(self.dir, "cpu", brain=db)
+        self.assertEqual(db.read_bytes(), before)
+        self.el.mark_brain(c, "cpu"); c.commit()
+        self.assertEqual(c.execute("SELECT updated_at FROM metadata WHERE key = ?", (self.el.BRAIN_LOCK_KEY,)).fetchone()[0],
+                         "the first run")
+        self.el.mark_brain(c, "gpu"); c.commit()
+        self.assertEqual(self.row(db), "gpu")
+        c.close()
+
+    def test_control_a_lock_with_a_list_for_a_tier_reads_as_malformed_not_a_traceback(self):
+        make_brain(self.dir, "nomic")
+        (self.dir / self.el.LOCK_HISTORY_NAME).unlink()
+        c = sqlite3.connect(str(self.dir / "claude_memory.db")); c.execute("DELETE FROM metadata WHERE key = ?", (self.el.BRAIN_LOCK_KEY,))
+        c.execute("DELETE FROM metadata WHERE key = 'active_embedding_table'"); c.commit(); c.close()
+        (self.dir / "embedder.lock.json").write_text('{"tier": ["a"]}', encoding="utf-8")
+        with self.assertRaises(self.el.EmbedderLockError) as cm:
+            self.el.read_lock(self.dir / "embedder.lock.json")
+        self.assertEqual(cm.exception.code, "LOCK_MALFORMED")
 
     def test_control_a_tier_nothing_recorded_prints_no_placeholder(self):
         make_brain(self.dir, "jina")

@@ -1788,17 +1788,18 @@ def coverage_envelope(conn: sqlite3.Connection, *, detail: bool = True) -> Dict[
     refusal that could NOT measure (LOCK_MALFORMED, PROVENANCE_UNREADABLE, an
     unresolvable tier) the search set is unbuildable, so `matched` is 0 by
     construction and `total` is the active-memory count the memories table still
-    answers; `coverage_basis` says which. Refusing the search is the caller's call."""
+    answers; `coverage_basis` says which. Refusing the search is the caller's call. Every refusal sets `degraded`, so
+    a surface that answers `ok` over one says so."""
     def unbuildable(code: str, message: str) -> Dict[str, Any]:
         total = _active_memory_count(conn)
-        return {"ok": False, "error": code, "message": message,
+        return {"ok": False, "degraded": True, "error": code, "message": message,
                 "coverage_basis": "search set unbuildable under this refusal; matched is 0 by construction",
                 "matched": 0, "total": total, "coverage": _three_numbers(0, total)}
     try:
         cov = _measure_coverage(conn, detail)
         return {"ok": True, "coverage_basis": "measured", **cov.as_dict()}
     except ProvenanceUnmatched as e:
-        return {"ok": False, "error": e.code, "message": str(e), "coverage_basis": "measured",
+        return {"ok": False, "degraded": True, "error": e.code, "message": str(e), "coverage_basis": "measured",
                 **e.coverage.as_dict()}
     except ProvenanceError as e:
         return unbuildable(e.code, str(e))
@@ -1806,9 +1807,20 @@ def coverage_envelope(conn: sqlite3.Connection, *, detail: bool = True) -> Dict[
         det = getattr(e, "detail", None) or {}
         code = getattr(e, "code", type(e).__name__)
         if isinstance(det.get("coverage"), dict):
-            return {"ok": False, "error": code, "message": str(e), "coverage_basis": "measured",
+            return {"ok": False, "degraded": True, "error": code, "message": str(e), "coverage_basis": "measured",
                     **det["coverage"]}
         return unbuildable(code, str(e))
+
+
+def degrade_of(coverage: Any, means: str) -> Optional[Dict[str, Any]]:
+    """The envelope's own `degraded` block from a coverage that says the answer is one, else None. Coverage holds the
+    figures; this block is what a surface shows a person, so a flag that stays inside the figures reaches nobody."""
+    if not isinstance(coverage, dict) or coverage.get("degraded") is not True:
+        return None
+    flag = {"reason": str(coverage.get("refusal") or coverage.get("error") or "the reader refused"), "means": means}
+    if coverage.get("fix"):
+        flag["fix"] = coverage["fix"]
+    return flag
 
 
 # --------------------------------------------------------------------------
@@ -2178,7 +2190,9 @@ _COPY_RUN = 2 * _RUN_GRAM - 1
 _TIED_TEXT_FLOOR = 8
 # THE COLUMNS THE SWEEP MAY EDIT, and nothing else: free text a memory's words can be copied into. A delete never touches
 # `metadata`, a stamp, a provenance key, or any config or schema-bearing table, whatever those hold. Every text column of
-# the schema is in one of these two maps; voidloom/tests/test_hard_delete_touches_only_copies.py fails on a new one.
+# the fresh schema and of the older brains the upgrade path keeps is in one of these two maps;
+# voidloom/tests/test_hard_delete_touches_only_copies.py fails on a new one, and a column neither names is left alone
+# and named in the receipt.
 _TEXT_COPY_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "memories": ("content", "summary", "source_context"),
     "access_log": ("query_text",),
@@ -2215,7 +2229,7 @@ _TEXT_COPY_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "resurfacing_log": ("reason",),
     "self_eval_enacted_proposals": ("proposal_title", "proposal_json", "error_log"),
     "self_eval_reports": ("health_scorecard", "proposed_enhancements", "proposed_deprecations", "threshold_assessment",
-                          "persona_evolution"),
+                          "persona_evolution", "drew_approved"),
     "skill_graduation_log": ("reason",),
     "skill_usage_log": ("context", "outcome", "outcome_notes"),
     "sleep_loop_runs": ("error_log", "stage_log"),
@@ -2229,7 +2243,7 @@ _NEVER_SWEPT_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "dream_activity_profile": ("*",), "unit_attention": ("*",), "organ_declared_units": ("*",), "organ_run_log": ("*",),
     "approval_ping_state": ("*",), "assayer_scores": ("*",), "merge_provenance": ("*",), "memory_community_members": ("*",),
     "memories": ("category", "source_project", "created_at", "updated_at", "last_accessed", "kind", "derived_from",
-                 "consolidated_at", "source_brain", "source_user", "origin"),
+                 "consolidated_at", "source_brain", "source_user", "origin", "skill_tier"),
     "access_log": ("access_type", "accessed_at"),
     "affect_quarantine_log": ("channel", "expires_on", "observed_at"),
     "approval_audit_log": ("surface", "ref", "action", "confirmed_via", "outcome_status", "reversible_note", "actor",
@@ -2240,7 +2254,8 @@ _NEVER_SWEPT_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "calibration_log": ("prediction_unit", "prediction_kind", "domain", "predicted_at", "actual_at", "session_id", "tags",
                         "created_at", "updated_at"),
     "community_summaries": ("member_edge_hash", "summary_mode", "generated_at", "weights_hash"),
-    "council_sessions": ("trigger_type", "topic_category", "participants", "created_at", "completed_at", "status"),
+    "council_sessions": ("trigger_type", "topic_category", "participants", "created_at", "completed_at", "status",
+                         "substrate_version"),
     "counterfactual_decisions": ("last_revisited", "status", "captured_at", "captured_by"),
     "decision_backfill_exceptions": ("source_table", "ref", "reason_code", "recorded_at"),
     "decision_events": ("outcome", "decided_at", "actor", "evidence_source", "recorded_at"),
@@ -2269,7 +2284,7 @@ _NEVER_SWEPT_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "raptor_clusters": ("cluster_signature", "member_ids_json", "last_summarized_at", "created_at", "updated_at"),
     "resurfacing_log": ("resurfaced_at",),
     "self_eval_enacted_proposals": ("enacted_at", "status", "created_at"),
-    "self_eval_reports": ("month", "drew_approved", "created_at", "status"),
+    "self_eval_reports": ("month", "created_at", "status"),
     "skill_graduation_log": ("old_tier", "new_tier", "graduated_at", "graduated_by"),
     "skill_usage_log": ("used_at", "triggered_by", "session_id"),
     "sleep_loop_runs": ("started_at", "completed_at", "status", "consolidation_mode", "config_snapshot", "stage_reached"),
@@ -2350,10 +2365,10 @@ class _TextMatcher:
     escaped, so the escaped forms are searched as well."""
 
     def __init__(self, texts: Sequence[str]):
-        forms: List[str] = []
-        for text in texts:
-            forms += [text, json.dumps(text)[1:-1], json.dumps(text, ensure_ascii=False)[1:-1]]
-        self.sources = list(dict.fromkeys(f for f in forms if f))
+        self.groups = [list(dict.fromkeys(f for f in (t, json.dumps(t)[1:-1], json.dumps(t, ensure_ascii=False)[1:-1]) if f))
+                       for t in texts]
+        self.sources = list(dict.fromkeys(f for group in self.groups for f in group))
+        self.shared: Set[str] = set()         # forms of a text another memory also holds: see `note_shared`
         self.whole = sorted((t for t in self.sources if len(t) >= _COPY_RUN), key=len, reverse=True)
         self.tied_whole = sorted((t for t in self.sources if len(t) >= _TIED_TEXT_FLOOR), key=len, reverse=True)
         self.grams: Dict[str, List[Tuple[int, int]]] = {}
@@ -2383,18 +2398,25 @@ class _TextMatcher:
             pos = best[1]
         return spans
 
-    def holds_whole(self, cell: str) -> bool:
-        return any(t in cell for t in self.whole)
+    def note_shared(self, cell: str) -> None:
+        """A different memory's cell holds one of these texts whole, so that text is not this memory's alone. The next
+        memory's words stay out of it: a summary two memories share says nothing about the content only one of them holds."""
+        for group in self.groups:
+            if any(len(f) >= _COPY_RUN and f in cell for f in group):
+                self.shared.update(group)
 
-    def scrub(self, cell: str, *, tied: bool = False) -> str:
-        """`cell` with every copy replaced, or `cell` itself when it holds none."""
+    def scrub(self, cell: str, *, tied: bool = False, every_text: bool = False) -> str:
+        """`cell` with every copy replaced, or `cell` itself when it holds none. An unrelated row keeps a text another
+        memory shares; `every_text` is the census of the memories themselves, which edits nothing."""
+        keep = set() if tied or every_text else self.shared
         if not tied:
             body = cell.strip()
-            if len(body) >= _COPY_RUN and any(len(body) <= len(s) and body in s for s in self.sources):
+            if (len(body) >= _COPY_RUN and not any(body in s for s in keep)
+                    and any(len(body) <= len(s) and body in s for s in self.sources)):
                 return REDACTED                       # the whole cell is cut from this memory
         out = cell
         for text in (self.tied_whole if tied else self.whole):
-            if text in out:
+            if text in out and text not in keep:
                 out = out.replace(text, REDACTED)
         if tied:
             for a, b in sorted(self._runs(out), reverse=True):
@@ -2526,7 +2548,6 @@ def _tied_rows(conn: sqlite3.Connection, ids: Set[int], tables: Sequence[str]) -
 def _scrub_copies(conn: sqlite3.Connection, matcher: _TextMatcher, lineage: Set[int], tied: Dict[str, Set[int]],
                   redacted: Dict[str, int], removed: Dict[str, int]) -> Dict[str, Any]:
     shared: Set[int] = set()
-    common = False
     unswept: List[str] = []
     columns, unknown = _copy_columns(conn)
     for table, cols in columns:
@@ -2541,15 +2562,15 @@ def _scrub_copies(conn: sqlite3.Connection, matcher: _TextMatcher, lineage: Set[
         for row in rows:
             rid = row[0]
             own = rid in ties
-            if common and not own:
-                continue
+            other_memory = table == "memories" and not own
             edits: Dict[str, str] = {}
             for col, cell in zip(cols, row[1:]):
                 if isinstance(cell, str) and len(cell) >= 4:
-                    clean = matcher.scrub(cell, tied=own)
+                    clean = matcher.scrub(cell, tied=own, every_text=other_memory)
                     if clean != cell:
                         edits[col] = clean
-                        common = common or (table == "memories" and not own and matcher.holds_whole(cell))
+                        if other_memory:
+                            matcher.note_shared(cell)
             if not edits:
                 continue
             if table == "memories" and not own:
@@ -2563,7 +2584,7 @@ def _scrub_copies(conn: sqlite3.Connection, matcher: _TextMatcher, lineage: Set[
                 _bump(redacted, table, 1)
             except sqlite3.IntegrityError:           # the edited value breaks a constraint: the row goes instead
                 _bump(removed, table, conn.execute(f'DELETE FROM "{table}" WHERE rowid = ?', (rid,)).rowcount)
-    return {"other_memories_sharing_text": len(shared), "unrelated_rows_left_as_shared_text": common,
+    return {"other_memories_sharing_text": len(shared), "unrelated_rows_left_as_shared_text": bool(matcher.shared),
             "tables_not_swept": unswept, "text_columns_not_classified": unknown}
 
 
@@ -2581,8 +2602,9 @@ def purge_memory(conn: sqlite3.Connection, memory_id: int) -> Dict[str, Any]:
         47 characters or more, or a cell that is itself 47 characters or more cut from it. A run the
         cell merely shares, a template, a table name, a short phrase: none of those are this memory's.
     A different memory that holds the same whole text is not edited, and is counted in
-    `other_memories_sharing_text`: the text is not this memory's alone, so unrelated rows keep theirs too
-    (`unrelated_rows_left_as_shared_text`). Words reworded by a model are not a copy this can see."""
+    `other_memories_sharing_text`: that text is not this memory's alone, so unrelated rows keep their copies of it
+    (`unrelated_rows_left_as_shared_text`), and only of it. A shared summary leaves the memory's own content to the
+    rule above. Words reworded by a model are not a copy this can see."""
     # A row that is not valid UTF-8 cannot stop the sweep: it is read with its bad bytes replaced, for this call only.
     factory = conn.text_factory
     conn.text_factory = lambda b: b.decode("utf-8", "replace")

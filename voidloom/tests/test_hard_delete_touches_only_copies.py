@@ -5,11 +5,14 @@ THE CLAIM UNDER TEST
     never edited, whatever the deleted text says: a memory whose text is a table name leaves recall working;
   * a short or common text redacts no unrelated row. A row lineage ties to the memory loses a shared run; any other row
     loses only an exact copy of a substantial text; a text another memory also holds is not this memory's to erase;
-  * every text column of the schema is classified, so a new column cannot join the sweep or escape it unread.
+  * every text column of the fresh schema, of the tables organs make at runtime and of an older brain is classified, so a
+    new column cannot join the sweep or escape it unread.
 """
 from __future__ import annotations
 
+import json
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -159,10 +162,99 @@ class ACommonTextIsNobodysCopy(_Brain):
         self.assertNotIn(run, self.cell("SELECT summary FROM community_summaries"))
 
 
+class AnotherMemoryHoldsOneOfItsTexts(_Brain):
+    """Sharing is a fact about one text. A summary two memories hold says nothing about the content only one of them holds."""
+    SUMMARY = "A note about the harbour wall that two memories carry word for word, more than long enough."
+    OTHER = "Something else entirely about a different coastline, with its own words and its own reasons."
+
+    def plant(self, table_text):
+        self.conn.execute("INSERT INTO lexical_miss_log (query) VALUES (?)", (table_text,))
+        self.conn.execute("INSERT INTO whisper_observations (observation_type, observation) VALUES ('insight', ?)", (table_text,))
+
+    def left(self, text):
+        return sum(self.cell(f"SELECT COUNT(*) FROM {t} WHERE {c} LIKE ?", "%" + text[:40] + "%")
+                   for t, c in (("lexical_miss_log", "query"), ("whisper_observations", "observation")))
+
+    def test_saboteur_a_shared_summary_leaves_the_content_to_the_sweep(self):
+        mid = self.memory(LONG, self.SUMMARY)
+        self.memory(self.OTHER, self.SUMMARY)
+        self.plant(LONG)
+        out = self.purge(mid)
+        self.assertEqual(self.left(LONG), 0, out)
+        self.assertEqual(out["other_memories_sharing_text"], 1, out)
+
+    def test_saboteur_another_memory_that_merely_opens_with_the_summary_is_the_same_case(self):
+        mid = self.memory(LONG, self.SUMMARY)
+        self.memory(self.SUMMARY + " " + self.OTHER, "its own summary")
+        self.plant(LONG)
+        out = self.purge(mid)
+        self.assertEqual(self.left(LONG), 0, out)
+
+    def test_control_the_shared_text_itself_stays_in_unrelated_rows(self):
+        mid = self.memory(LONG, self.SUMMARY)
+        self.memory(self.OTHER, self.SUMMARY)
+        self.plant(self.SUMMARY)
+        out = self.purge(mid)
+        self.assertEqual(self.left(self.SUMMARY), 2, out)
+        self.assertIs(out["unrelated_rows_left_as_shared_text"], True, out)
+
+    def test_control_a_shared_content_stays_everywhere_and_is_counted_once_per_memory(self):
+        mid = self.memory(LONG, "one")
+        self.memory(LONG, "two")
+        self.memory(LONG, "three")
+        self.plant(LONG)
+        out = self.purge(mid)
+        self.assertEqual(self.left(LONG), 2, out)
+        self.assertEqual(out["other_memories_sharing_text"], 2, out)
+
+    def test_control_with_nothing_shared_the_flag_stays_down(self):
+        mid = self.memory(LONG, self.SUMMARY)
+        self.plant(LONG)
+        out = self.purge(mid)
+        self.assertEqual((self.left(LONG), out["unrelated_rows_left_as_shared_text"]), (0, False), out)
+
+
 class EveryColumnIsClassified(_Brain):
     def test_saboteur_a_new_text_column_fails_here_until_someone_reads_it(self):
         self.assertEqual(mw._copy_columns(self.conn)[1], [], "classify each in memory_write._TEXT_COPY_COLUMNS or "
                          "_NEVER_SWEPT_COLUMNS")
+
+    def test_saboteur_tables_an_organ_makes_at_runtime_are_classified_too(self):
+        """A fresh schema does not hold them, so the test above cannot see them: read their DDL from the organs that own them."""
+        have = {r[0] for r in self.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        missing = sorted(t for t in {*mw._TEXT_COPY_COLUMNS, *mw._NEVER_SWEPT_COLUMNS} if t not in have)
+        self.assertTrue(missing, "every mapped table is on the fresh schema now: this test can go")
+        found = []
+        for py in sorted((ROOT / "organs").glob("*.py")) + sorted((ROOT / "migrations").glob("*.sql")):
+            text = py.read_text(encoding="utf-8", errors="replace")
+            for name in missing:
+                m = re.search(r"CREATE TABLE (?:IF NOT EXISTS )?%s\s*\(" % name, text)
+                if not m or name in found:
+                    continue
+                depth, i = 0, m.end() - 1
+                while True:
+                    depth += {"(": 1, ")": -1}.get(text[i], 0)
+                    i += 1
+                    if depth == 0:
+                        break
+                self.conn.execute(text[m.start():i])
+                found.append(name)
+        self.assertTrue(found, "no organ creates a mapped table any more: read the map")
+        self.assertEqual(mw._copy_columns(self.conn)[1], [])     # the rest are made by nothing here: older brains hold them
+
+    def test_saboteur_columns_an_older_brain_still_holds_are_classified(self):
+        self.conn.execute("ALTER TABLE memories ADD COLUMN skill_tier TEXT") if "skill_tier" not in mw._columns(self.conn, "memories") else None
+        self.conn.execute("ALTER TABLE council_sessions ADD COLUMN substrate_version TEXT") \
+            if "substrate_version" not in mw._columns(self.conn, "council_sessions") else None
+        self.assertEqual(mw._copy_columns(self.conn)[1], [])
+
+    def test_saboteur_a_review_that_quotes_the_memory_loses_the_quote(self):
+        mid = self.memory(LONG)
+        self.conn.execute("INSERT INTO self_eval_reports (month, health_scorecard, proposed_enhancements, proposed_deprecations, "
+                          "threshold_assessment, drew_approved) VALUES ('2026-10', '{}', '[]', '[]', '{}', ?)",
+                          (json.dumps({"approved": [LONG], "rejected": []}),))
+        self.purge(mid)
+        self.assertNotIn(LONG[:30], self.conn.execute("SELECT drew_approved FROM self_eval_reports").fetchone()[0])
 
     def test_control_an_unclassified_column_is_left_alone_and_named(self):
         self.conn.execute("CREATE TABLE made_at_runtime (note TEXT)")

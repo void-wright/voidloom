@@ -235,6 +235,11 @@ NOMIC_REVISION = "e9b6763023c676ca8431644204f50c2b100d9aab"
 QWEN_REVISION = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
 
 # Jina v5 LoRA adapter tasks (from adapters/ directory)
+# What a whole snapshot holds at that pin: the files the load reads. An interrupted download leaves the directory and
+# some of these, and a blob the hub has not finished is not linked in.
+JINA_SNAPSHOT_FILES = ("config.json", "modules.json", "tokenizer.json", "model.safetensors", "custom_st.py",
+                       "configuration_jina_embeddings_v5.py", "modeling_jina_embeddings_v5.py",
+                       "adapters/retrieval/adapter_config.json", "adapters/retrieval/adapter_model.safetensors")
 JINA_TASK_RETRIEVAL = "retrieval"
 JINA_TASK_MATCHING = "text-matching"
 JINA_TASK_CLUSTERING = "clustering"
@@ -316,12 +321,18 @@ def _get_jina_model():
     return model
 
 
+def jina_snapshot_whole() -> bool:
+    """Is every file the load reads on this disk, at the engine's pin? A directory alone is not a model."""
+    import embedder_lock as _el
+    return _el.snapshot_complete(_el.snapshot_dir_for(JINA_MODEL_NAME, JINA_REVISION), JINA_SNAPSHOT_FILES)
+
+
 def fetch_jina_at_pin() -> str:
     """The jina snapshot, on this disk at the engine's pin, loadable offline. Its remote code fetches its adapters with
     no revision, which offline means `refs/main`; a fetch by commit writes no such ref, so one is written, naming the pin.
     A ref already there is the hub's and is left. Loads nothing: the model's code does not run here."""
     import embedder_lock as _el
-    if _el.snapshot_dir_for(JINA_MODEL_NAME, JINA_REVISION) is None:
+    if not jina_snapshot_whole():
         from huggingface_hub import snapshot_download
         snapshot_download(JINA_MODEL_NAME, revision=JINA_REVISION, **_el.fetch_options())
     refs = _el.hf_hub_cache() / ("models--" + JINA_MODEL_NAME.replace("/", "--")) / "refs"

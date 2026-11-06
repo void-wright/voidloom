@@ -79,6 +79,18 @@ class AFetchThatMayNotFetch(_Brain):
         self.assertFalse((self.d / "hub").exists() and any((self.d / "hub").iterdir()))
 
 
+class AFetchOnAFileThatIsNoBrain(unittest.TestCase):
+    def test_saboteur_a_tier_that_cannot_be_read_is_typed_not_a_traceback(self):
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "claude_memory.db"
+            sqlite3.connect(db).close()
+            p = subprocess.run([sys.executable, str(ROOT / "organs" / "model_fetch.py"), "--db", str(db), "--plan", "--json"],
+                               capture_output=True, text=True, timeout=120,
+                               env={**os.environ, "HF_HUB_CACHE": td, "PYTHONDONTWRITEBYTECODE": "1"})
+        self.assertNotIn("Traceback", p.stderr, p.stderr[-400:])
+        self.assertEqual((p.returncode, json.loads(p.stdout)["error"]), (2, "TIER_UNRESOLVED"), p.stdout[-400:])
+
+
 class TheEnginesPinIsLoadableOffline(unittest.TestCase):
     """jina's remote code asks for its adapters with no revision. A fetch by commit writes no `refs/main`, so a cache that
     holds the pinned bytes still failed the load: measured on real bytes, `recall` read `unhandled`."""
@@ -94,8 +106,55 @@ class TheEnginesPinIsLoadableOffline(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
 
-    def snapshot(self):
-        (self.repo / "snapshots" / self.eu.JINA_REVISION).mkdir(parents=True)
+    def snapshot(self, files=None):
+        """The files a whole fetch leaves, or the ones an interrupted one did."""
+        base = self.repo / "snapshots" / self.eu.JINA_REVISION
+        for rel in (self.eu.JINA_SNAPSHOT_FILES if files is None else files):
+            (base / rel).parent.mkdir(parents=True, exist_ok=True)
+            (base / rel).write_bytes(b"x")
+        base.mkdir(parents=True, exist_ok=True)
+
+    def stand_in_hub(self):
+        fake = types.ModuleType("huggingface_hub")
+        fake.calls = []
+
+        def download(repo, revision=None, **kw):
+            fake.calls.append((repo, revision))
+            self.snapshot()
+        fake.snapshot_download = download
+        return mock.patch.dict(sys.modules, {"huggingface_hub": fake}), fake
+
+    def test_saboteur_an_interrupted_download_is_completed_not_taken_for_done(self):
+        self.snapshot(files=("config.json",))
+        patcher, hub = self.stand_in_hub()
+        with patcher:
+            self.eu.fetch_jina_at_pin()
+        self.assertEqual(hub.calls, [(self.eu.JINA_MODEL_NAME, self.eu.JINA_REVISION)])
+        self.assertTrue(self.eu.jina_snapshot_whole())
+
+    def test_control_a_whole_snapshot_is_not_fetched_again(self):
+        self.snapshot()
+        patcher, hub = self.stand_in_hub()
+        with patcher:
+            self.eu.fetch_jina_at_pin()
+        self.assertEqual(hub.calls, [])
+
+    def test_saboteur_the_printed_fix_reads_a_partial_snapshot_as_absent(self):
+        import model_fetch
+        import embedder_lock as _el
+        self.snapshot(files=("config.json",))
+        out = []
+        rc = model_fetch._fetch_engine_pin(_el, types.SimpleNamespace(plan=True, no_fetch=False),
+                                           lambda d, r: (out.append(d), r)[1])
+        self.assertEqual((rc, out[0]["present"]), (0, False), out)
+
+    def test_saboteur_a_real_snapshot_holds_every_file_named_as_whole(self):
+        """The list is not a guess at the repository: read against the bytes, where a machine holds them."""
+        hub = Path(os.environ.get("VOIDLOOM_REAL_HUB", ""))
+        snap = hub / ("models--" + self.eu.JINA_MODEL_NAME.replace("/", "--")) / "snapshots" / self.eu.JINA_REVISION
+        if not snap.is_dir():
+            self.skipTest("no jina snapshot on this machine (set VOIDLOOM_REAL_HUB)")
+        self.assertEqual([f for f in self.eu.JINA_SNAPSHOT_FILES if not (snap / f).exists()], [])
 
     def test_saboteur_a_fetch_by_commit_leaves_a_ref_the_adapters_can_resolve(self):
         self.snapshot()

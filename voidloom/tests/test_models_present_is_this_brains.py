@@ -130,11 +130,17 @@ class Locked(_Case):
 class NoLock(_Case):
     def test_control_a_jina_brain_answers_for_jina(self):
         db = brain(self.d, "memory_embeddings_v2")
-        self.cached(JINA_DIR)
+        import embedding_upgrade as eu
+        self.cached(JINA_DIR, eu.JINA_REVISION, eu.JINA_SNAPSHOT_FILES)
         m = _bootstrap._detect_models(db)
         self.assertIs(m["present"], True)
         self.assertEqual(m["brain_tier"], "jina")
         self.assertIn("has no lock", m["present_semantics"])
+
+    def test_saboteur_a_folder_of_that_name_at_no_pin_is_not_the_model(self):
+        db = brain(self.d, "memory_embeddings_v2")
+        self.cached(JINA_DIR)
+        self.assertIs(_bootstrap._detect_models(db)["present"], False)
 
     def test_saboteur_a_jina_brain_is_not_served_by_nomic(self):
         db = brain(self.d, "memory_embeddings_v2")
@@ -145,7 +151,7 @@ class NoLock(_Case):
 
     def test_control_the_variable_outranks_metadata_as_it_does_in_the_engine(self):
         db = brain(self.d, "memory_embeddings_v2")
-        self.cached(NOMIC_DIR)
+        self.snapshots(el.catalogue_tiers()["cpu"])
         with mock.patch.dict(os.environ, {"WIZARD_EMBED_MODEL": "nomic"}):
             m = _bootstrap._detect_models(db)
         self.assertEqual(m["brain_tier"], "nomic")

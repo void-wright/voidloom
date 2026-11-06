@@ -364,6 +364,8 @@ class TestTierSet(unittest.TestCase):
         after = snapshot(db, "memory_embeddings")
         self.assertEqual(after, before, "old vectors, stamps and metadata rows as before the switch")
         self.assertEqual(env["receipt"]["memories_without_a_restored_vector"], 1)
+        self.assertIn("1 memor(ies) have no vector in memory_embeddings", env["note"])
+        self.assertNotIn("after the switch have no vector", env["note"], "most of a real count never had a vector at all")
         self.assertIn("tier set nomic", env["gap_fill"])
         # the report names `tier set <old tier>` as THE route when the old tier is shipped
         self.assertIn("`voidloom tier set nomic` is the route", env["route"])

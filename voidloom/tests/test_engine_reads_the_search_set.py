@@ -219,6 +219,30 @@ class ALinkFromAnotherModel(_Engine):
         self.assertEqual((rc, whash), (0, self.lock["weights_hash"]), out)
         self.assertAlmostEqual(strength, 0.8, places=4)
 
+    def test_saboteur_a_pair_now_too_far_apart_to_link_still_gets_this_comparison(self):
+        a = self.verified("one note on the harbour", self.v((0, 1.0)))
+        b = self.verified("another note altogether", self.v((1, 1.0)))
+        self.conn.execute("INSERT INTO memory_links (source_id, target_id, link_type, strength, weights_hash) "
+                          "VALUES (?, ?, 'related', 0.77, ?)", (a, b, "f" * 64))
+        self.conn.commit()
+        rc, out = self.verb("maintain")
+        strength, whash = self.link()
+        self.assertEqual((rc, whash), (0, self.lock["weights_hash"]), out)
+        self.assertAlmostEqual(strength, 0.0, places=4)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM memory_links WHERE COALESCE(weights_hash, '') <> ?",
+                                           (self.lock["weights_hash"],)).fetchone()[0], 0, "the stale count reaches zero")
+
+    def test_saboteur_a_link_stored_the_other_way_round_is_found(self):
+        a = self.verified("one note on the tide", self.v((0, 1.0)))
+        b = self.verified("a near note on the tide", self.v((0, 0.8), (1, 0.6)))
+        self.conn.execute("INSERT INTO memory_links (source_id, target_id, link_type, strength, weights_hash) "
+                          "VALUES (?, ?, 'related', 0.5, ?)", (b, a, "f" * 64))
+        self.conn.commit()
+        rc, out = self.verb("maintain")
+        strengths = dict(self.conn.execute("SELECT source_id, strength FROM memory_links WHERE weights_hash = ?",
+                                           (self.lock["weights_hash"],)).fetchall())
+        self.assertAlmostEqual(strengths[b], 0.8, places=4)
+
     def test_control_a_link_under_this_model_is_left_as_it_is(self):
         self.pair(self.lock["weights_hash"])
         rc, out = self.verb("maintain")
@@ -361,8 +385,10 @@ class KeywordRecallNeedsNoEmbedder(_Engine):
 
     def test_saboteur_the_same_child_in_hybrid_mode_reaches_for_the_embedder(self):
         r = self._child()
-        self.assertNotEqual(r.returncode, 0, r.stdout[-400:])
-        self.assertIn("SNAPSHOT_ABSENT", r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 0, r.stdout[-400:] + r.stderr[-400:])
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertEqual(out["degraded"]["reason"], "SNAPSHOT_ABSENT", "it reached for the model, found none and says so")
+        self.assertEqual(out["result_count"], 1, out)
 
 
 class LegacyRecallCarriesAFilter(_Engine):

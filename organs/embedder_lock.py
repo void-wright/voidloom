@@ -523,8 +523,13 @@ def shell_command(*argv: Any, platform: Optional[str] = None) -> str:
     """One command, quoted for the shell it is printed to: PowerShell on Windows, where a quoted first word is only a
     string until `&` calls it, and a POSIX shell everywhere else."""
     if (platform or sys.platform) == "win32":
-        return "& " + " ".join('"%s"' % str(a).replace('"', '`"') for a in argv)
+        return "& " + " ".join(_ps_quote(a) for a in argv)
     return " ".join(shlex.quote(str(a)) for a in argv)
+
+
+def _ps_quote(word: Any) -> str:
+    """A PowerShell literal. Single quotes, because `$` and a backtick in a path expand inside double ones."""
+    return "'%s'" % str(word).replace("'", "''")
 
 
 def fetch_command(db: Optional[Union[str, Path]] = None) -> str:
@@ -535,7 +540,8 @@ def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str])
     """Say inside the brain whether a lock was written for it: `metadata.embedder_lock_written` holds the tier, and an
     empty value says a rollback took the brain back to having none. Deleting the lock and its history leaves this row
     behind. A connection takes the row in its own transaction; a path writes it now, and a brain too busy or too damaged
-    to take it loses only this second record, never the lock."""
+    to take it loses only this second record, never the lock. A row that already says so is left alone: its table
+    stamps every write, and an install run twice must leave the brain's bytes as they were."""
     value = tier or ""
     own = not isinstance(brain, sqlite3.Connection)
     conn: Optional[sqlite3.Connection] = None
@@ -543,6 +549,9 @@ def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str])
         if own and not Path(brain).is_file():
             return
         conn = sqlite3.connect(str(brain), timeout=60.0) if own else brain
+        held = conn.execute("SELECT value FROM metadata WHERE key = ?", (BRAIN_LOCK_KEY,)).fetchone()
+        if held is not None and held[0] == value:
+            return
         conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (BRAIN_LOCK_KEY, value))
         if own:
             conn.commit()
@@ -553,8 +562,13 @@ def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str])
             conn.close()
 
 
+_BRAIN_UNREADABLE = object()
+
+
 def _read_brain(brain: Union[None, str, Path, sqlite3.Connection], sql: str, args: Sequence[Any]) -> Optional[Any]:
-    """One value from this brain's own database, read-only; None when it holds none or cannot be read."""
+    """One value from this brain's own database, read-only. None when it holds none: no file, no such table, no row.
+    `_BRAIN_UNREADABLE` when the file is there and did not answer (busy, damaged, not ours to open), which says nothing
+    about what it holds."""
     own = not isinstance(brain, sqlite3.Connection)
     conn: Optional[sqlite3.Connection] = None
     try:
@@ -563,8 +577,10 @@ def _read_brain(brain: Union[None, str, Path, sqlite3.Connection], sql: str, arg
         conn = sqlite3.connect(f"{Path(brain).resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) if own else brain
         row = conn.execute(sql, args).fetchone()
         return None if row is None else row[0]
+    except sqlite3.OperationalError as e:
+        return None if "no such table" in str(e) else _BRAIN_UNREADABLE
     except (sqlite3.Error, OSError, ValueError):
-        return None
+        return _BRAIN_UNREADABLE
     finally:
         if own and conn is not None:
             conn.close()
@@ -588,7 +604,8 @@ def lost_lock(data_dir: Union[str, Path], brain: Union[None, str, Path, sqlite3.
     """Should a lock be beside this database? Only what `write_lock` itself left can say so: a receipt in the history
     file, and the row it wrote into the brain (`mark_brain`), which survives both files being deleted. {"tier": ...}
     when the last word on the lock says it exists, None when no receipt and no row says one was written, or a rollback
-    took the brain back to having none. No record, no lock: a brain that predates the lock is a legal brain, and a stamp
+    took the brain back to having none. A brain that did not answer is not a brain with no record: with no receipt to
+    go on the answer is {"tier": None, "unreadable": True}, read as a lost lock until it does. No record, no lock: a brain that predates the lock is a legal brain, and a stamp
     proves nothing here, because a store, a `tier set` build and a website store all write shipped checksums with no
     lock in sight. Only the receipts that move the lock count: `re-embed` writes one on a brain that never had a lock.
     A history with nothing readable in it still proves a lock was written. `brain` is a connection or a path; by
@@ -596,9 +613,14 @@ def lost_lock(data_dir: Union[str, Path], brain: Union[None, str, Path, sqlite3.
     d = Path(data_dir)
     mark = _read_brain(brain if brain is not None else _brain_beside(d),
                        "SELECT value FROM metadata WHERE key = ?", (BRAIN_LOCK_KEY,))
+    # Empty, not absent: the rollback writes this row in the same transaction as the rollback, so it cannot outlive or
+    # precede the state it names, and a rollback killed part-way reads the state it left. Only this question reads it:
+    # no search filter is ever chosen from this answer.
     if mark == "":
-        return None                             # the rollback's own word, written with the rollback
+        return None
     written = _lock_in_history(d)
+    if mark is _BRAIN_UNREADABLE:
+        return written if written is not None else {"tier": None, "unreadable": True}
     if written is None and mark:
         return {"tier": str(mark)}
     if written is not None and not written.get("tier") and mark:
@@ -663,6 +685,12 @@ def read_lock(path: Union[str, Path], *, brain: Union[None, str, Path, sqlite3.C
         raw = p.read_bytes()
     except FileNotFoundError:
         lost = lost_lock(p.parent, brain)
+        if lost is not None and lost.get("unreadable"):
+            raise EmbedderLockError(
+                "LOCK_MISSING", f"no embedder lock at {p}, and this brain did not answer when asked whether one was "
+                "written: it is busy or damaged, and that is not a record of having none. Nothing was changed. Try "
+                "again when it is free; `voidloom doctor` names what is wrong if it stays this way.",
+                lock=str(p), was_locked=True, tier=None, unreadable=True)
         if lost is not None:
             tier = lost.get("tier") or _tier_of_brain(brain if brain is not None else _brain_beside(p.parent))
             said = f"tier {tier}" if tier else "its tier is not recorded"
@@ -716,12 +744,12 @@ def _with_way_out(e: EmbedderLockError, p: Path, brain: Any, lock: Any) -> Embed
     the file aside and write it again, under the tier the records name. What they cannot name, it says it cannot."""
     tier = (lost_lock(p.parent, brain) or {}).get("tier") or _tier_of_brain(brain if brain is not None
                                                                             else _brain_beside(p.parent))
-    if not tier and isinstance(lock, dict) and lock.get("tier") in catalogue_tiers():
+    if not tier and isinstance(lock, dict) and isinstance(lock.get("tier"), str) and lock["tier"] in catalogue_tiers():
         tier = lock["tier"]
     aside = p.with_name(p.name + ".malformed")
     if tier:
         init = organ_command("claude_memory.py", "init", "--tier", tier)
-        fix = (f'Move-Item -Force "{p}" "{aside}"; {init}' if sys.platform == "win32"
+        fix = (f"Move-Item -Force {_ps_quote(p)} {_ps_quote(aside)}; {init}" if sys.platform == "win32"
                else f"mv {shlex.quote(str(p))} {shlex.quote(str(aside))} && {init}")
         return EmbedderLockError("LOCK_MALFORMED", f"{str(e).split(': ', 1)[1]}. Restore it from a backup, or move it "
                                  f"aside and write it again: `{fix}`", **{**e.detail, "tier": tier, "retry": [fix]})

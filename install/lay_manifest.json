@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "76fa5f0",
+  "derived_at_head": "0bbfc01",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 511,
   "not_laid": {
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 36051,
+   "bytes": 37618,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "dab18315029c4b9f3f3a5b27788a46e1e099aa0245049fc7d635371e6866ef3b",
+   "sha256": "04fcf8107df26c9ee41261c451c2143f9b0ca9a35bad2c5cc7452774f54b705d",
    "src": "CHANGELOG.md"
   },
   {
@@ -227,13 +227,13 @@
    "src": "NOTICE"
   },
   {
-   "bytes": 30399,
+   "bytes": 30786,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "6421c6ed204c1fc7ceaa4cdf8a1d9e9031af30808d90b39dc476c9addcccea56",
+   "sha256": "716b82e0f9f7967bd8de936c1269faaf348c77a47590b9a45252715fc3c41c12",
    "src": "README.md"
   },
   {
@@ -837,13 +837,13 @@
    "src": "docs/PERSONA_FORGE.md"
   },
   {
-   "bytes": 9222,
+   "bytes": 9212,
    "component": "core",
    "dst": "docs/RESTORE_MANIFEST.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "b59839900dfd3082d4dd30fdea69626c9bcdeb75212f549d2aac50a00eb7321d",
+   "sha256": "88d64a31c6f0106318b3d6cfacbd588ace529cfc50c7bd20076a7356beca9105",
    "src": "docs/RESTORE_MANIFEST.md"
   },
   {
@@ -907,13 +907,13 @@
    "src": "hooks/voidloom_signoff.py"
   },
   {
-   "bytes": 355336,
+   "bytes": 359474,
    "component": "core",
    "dst": null,
    "exec": true,
    "platform": "posix",
    "root": null,
-   "sha256": "2076111e204ba2b328fdf4bc06af13b5840a1d68d153c8acb7925e1d528c8c12",
+   "sha256": "1a1fe53ade42b3813b11ab58ad101c9df0e0c9f197fce20f5409ef4a526231ef",
    "src": "install.sh"
   },
   {
@@ -937,13 +937,13 @@
    "src": "install/accelerator_plan.py"
   },
   {
-   "bytes": 1743,
+   "bytes": 3128,
    "component": "core",
    "dst": "install/brain_is_new.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "dd53dc447a834cc33ef31317533e571ee9f324845be3a51f8b22462d4e04751e",
+   "sha256": "e05570fcd896b9d3554801272eaa0943c54fb4f88dd18e1445c6143b69219c20",
    "src": "install/brain_is_new.py"
   },
   {
@@ -1007,13 +1007,13 @@
    "src": "install/golden_vectors.py"
   },
   {
-   "bytes": 67104,
+   "bytes": 70193,
    "component": "core",
    "dst": "install/install.ps1",
    "exec": false,
    "platform": "windows",
    "root": "brain",
-   "sha256": "04e72b005c770c2e8b1775b4846c8fd90f4063d08f447ef840439bcbb9ce231f",
+   "sha256": "b58038ce34df240345d6bcbe156b0036ed04c1c82f4c30fa427bcc555ebd7873",
    "src": "install/install.ps1"
   },
   {
@@ -1107,13 +1107,13 @@
    "src": "install/requirements.txt"
   },
   {
-   "bytes": 55808,
+   "bytes": 55874,
    "component": "core",
    "dst": "install/self_check.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "cef66900e0900511197a2cbebd20fb93d580e872f28d0cc74c3544338dfbae45",
+   "sha256": "1d16bcd8ef68c0522802764b528eb240bb0f3ce3f8a2b2fac48c0e4b8b7742fd",
    "src": "install/self_check.py"
   },
   {
@@ -1647,23 +1647,23 @@
    "src": "organs/calibration_memory.py"
   },
   {
-   "bytes": 220779,
+   "bytes": 222565,
    "component": "core",
    "dst": "organs/claude_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "4878a89f9d32d67c1569fa0a2a8e6538b20dc445d5b74006f916aa98ea84a394",
+   "sha256": "0f88923a5c567050a6e0c588375ffd97b672cc5a6b81411d5caaa257d73d2c9a",
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 60406,
+   "bytes": 61203,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e1a67b93b1a1ed572e116e94dfa97db3e2f28586b945ca623cbe893e82e7eb04",
+   "sha256": "b12cda4d85f420a117763e34ce023f3c4b191c044dee2806bd7959006a272956",
    "src": "organs/claude_memory_lite.py"
   },
   {
@@ -1767,13 +1767,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 70810,
+   "bytes": 72677,
    "component": "core",
    "dst": "organs/embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7d11e82101d32610fb8731cf7f1779502280be88fb764fb38d10592729cc0dde",
+   "sha256": "699a53174421e0731e4f86580c308241074871221fb1dfebb0387e9a8cb3abde",
    "src": "organs/embedder_lock.py"
   },
   {
@@ -1787,13 +1787,13 @@
    "src": "organs/embedders.lock.json"
   },
   {
-   "bytes": 68912,
+   "bytes": 69669,
    "component": "core",
    "dst": "organs/embedding_upgrade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "b77d7eaa26ae39f817941f70451c759fc0bb9573eaeb562f8573ff03c844c14a",
+   "sha256": "ab04747a42289165dd1ee5344f6b4cbb953462440d4149ff96ee84b9e65d4f1b",
    "src": "organs/embedding_upgrade.py"
   },
   {
@@ -1827,13 +1827,13 @@
    "src": "organs/gpu_guard.py"
   },
   {
-   "bytes": 86596,
+   "bytes": 87501,
    "component": "core",
    "dst": "organs/hybrid_retrieval.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "aa6264bad262f945a05ba7b0e694056cee931e530f35974d1b8c383b901abb28",
+   "sha256": "2d5c66ca89d14cd4cb94d3123dcd54959fdfa973e19bc5f65567ac5f044b2b88",
    "src": "organs/hybrid_retrieval.py"
   },
   {
@@ -1867,33 +1867,33 @@
    "src": "organs/memory_dreaming.py"
   },
   {
-   "bytes": 138391,
+   "bytes": 140208,
    "component": "core",
    "dst": "organs/memory_write.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "4f6192aa1c21d7f185d83c7ca4fd64066b629792a790ff6de189030a86464cd9",
+   "sha256": "29507000486a0e05c15c056b5e4d5e735272ace2c03dc03ad936e6322a3d3d29",
    "src": "organs/memory_write.py"
   },
   {
-   "bytes": 7929,
+   "bytes": 8346,
    "component": "core",
    "dst": "organs/model_fetch.py",
    "exec": true,
    "platform": "all",
    "root": "brain",
-   "sha256": "93c1bd0d860d70c0a334d7abc25b759691e4d5dfa1f5dbfdddff9d3f5601f07a",
+   "sha256": "28cb0b22d82fa0e843cb28e03b0383afc54cc868b2dcce9837230b9760820cf2",
    "src": "organs/model_fetch.py"
   },
   {
-   "bytes": 41486,
+   "bytes": 41524,
    "component": "core",
    "dst": "organs/model_garden.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "376ef38450d4cd2203ef579ef84d11b1cd81cf8382cfaa761b35cc8259cb145d",
+   "sha256": "2d9a94aeda067d5ee2c7d39a28ed4c9d83e34dc170db814621a4913644ecb32b",
    "src": "organs/model_garden.py"
   },
   {
@@ -2127,13 +2127,13 @@
    "src": "organs/thinkers.json"
   },
   {
-   "bytes": 66705,
+   "bytes": 66677,
    "component": "core",
    "dst": "organs/tier_set.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ce8489c8297abb6eef3f0260afea24aeba36d763541a404d540da795e80301a5",
+   "sha256": "ac2b5d902c7d1ebbd9f47fa425ec123c1d11fd265cb45f320e03a4d9d4e0f7d9",
    "src": "organs/tier_set.py"
   },
   {
@@ -2797,13 +2797,13 @@
    "src": "tools/token_doctor.py"
   },
   {
-   "bytes": 10399,
+   "bytes": 10531,
    "component": "core",
    "dst": null,
    "exec": true,
    "platform": "posix",
    "root": null,
-   "sha256": "76a9c820e7e596c562295bb51156e519b09ea1cdf7038c09c94569a8eff82202",
+   "sha256": "2b6b2ab4e02a4c49e2d3eb2a2cde6e23eb6feda98687d6a57150dee41a08556e",
    "src": "uninstall.sh"
   },
   {
@@ -2857,23 +2857,23 @@
    "src": "voidloom/_approvals_faces.py"
   },
   {
-   "bytes": 14186,
+   "bytes": 14800,
    "component": "core",
    "dst": "voidloom/_batch.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e01b2df0460834f01a485fd1332676e8e688176a929530c71f86e9fe9ebff504",
+   "sha256": "c8ed154e8a8fae1fd9e052e6cae409c79e3e8f329763839ace5dfc697d6490fa",
    "src": "voidloom/_batch.py"
   },
   {
-   "bytes": 20201,
+   "bytes": 22203,
    "component": "core",
    "dst": "voidloom/_bootstrap.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7ffb3a3f4438415c94aebec326cb2b6490e3472e452c3dbca98e0a388cb4a1e6",
+   "sha256": "c0fb2cd4640595b7a3f2ab77ff7db714b67abc7e41dac183ad3610a14c9bba96",
    "src": "voidloom/_bootstrap.py"
   },
   {
@@ -2907,13 +2907,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 178957,
+   "bytes": 180753,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "5d51b56dced9f02372dc89dd4ceb4bcc2968b2f24eab763674bb1746f1af1bed",
+   "sha256": "5ab474c4892a664b8b46865df2d01e1c4c4c94794c0fcc8705b1dd617a33a60c",
    "src": "voidloom/cli.py"
   },
   {
@@ -3083,7 +3083,7 @@
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2e83f031c6c550c0d347457f35d3a3b7eba76a64e2ad1594ba8400b16865fcab",
+   "sha256": "03d441e15d7bb59b7bb93820f48e9cf3c78224886c0e431cd08b8b7f5b63adec",
    "src": "voidloom/tests/harness/outside_target_diff.py"
   },
   {
@@ -3127,13 +3127,13 @@
    "src": "voidloom/tests/test_a_damaged_row_stops_nothing.py"
   },
   {
-   "bytes": 13499,
+   "bytes": 17206,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "034539c703ca684de75609004a096b9f90c06998d2c0425dfe28106559d19a30",
+   "sha256": "192802915d8f6c8740003313d27ac16947aa4e308479c7830cdd42268c12025a",
    "src": "voidloom/tests/test_a_stamp_is_not_a_lock.py"
   },
   {
@@ -3197,13 +3197,13 @@
    "src": "voidloom/tests/test_arcane_manifest_r3.py"
   },
   {
-   "bytes": 13849,
+   "bytes": 21368,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2b785f8dbad680c749cbbf6b2b071dfa65abb3194d362ed358a63157e62159cc",
+   "sha256": "7afa0e138df53c302354967e4e1dbf1a395776e86b4812d67584ac706dbd7645",
    "src": "voidloom/tests/test_attach_db.py"
   },
   {
@@ -3367,13 +3367,13 @@
    "src": "voidloom/tests/test_compat_and_version_json.py"
   },
   {
-   "bytes": 2152,
+   "bytes": 2799,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2c9d2a12ae3fa434f58d307a7ea25f684c0112f372e93099327051ace4ce068d",
+   "sha256": "620770094c8252710cf6ea3b4e1b2491a1cb5e3c18e40cf8d31305915a84ceed",
    "src": "voidloom/tests/test_config_default_tier.py"
   },
   {
@@ -3527,13 +3527,13 @@
    "src": "voidloom/tests/test_doctor_cpu_only_truth_r2.py"
   },
   {
-   "bytes": 3995,
+   "bytes": 6252,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "f45c98c5fd9d0ea9b116051abf66d9bf4cfb1406b1a855980904122976841239",
+   "sha256": "74356844036b7db209fa6f477a4b4c4aeb05c7fdcbc9f71f954bc0fc482329cc",
    "src": "voidloom/tests/test_doctor_reads_what_recall_reads.py"
   },
   {
@@ -3717,13 +3717,13 @@
    "src": "voidloom/tests/test_encoder_tier_is_bijective.py"
   },
   {
-   "bytes": 30844,
+   "bytes": 32676,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "e94bb98224ebd55fd22c753212aaaa836a248fd2c3b8c4b562c7d9032fe77970",
+   "sha256": "2e63a9d23f1c8b7702368bbad14eadb8effd53b6433f72f9a0d93c4abc5317ce",
    "src": "voidloom/tests/test_engine_reads_the_search_set.py"
   },
   {
@@ -3877,13 +3877,13 @@
    "src": "voidloom/tests/test_hard_delete_leaves_nothing.py"
   },
   {
-   "bytes": 10003,
+   "bytes": 15130,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "c0acc7bdc544dfd30370b0ac5da404262123ef4ffbf89fae1317d6c15a47114a",
+   "sha256": "906aff96d2fbf9d27ed23164177acf6d2b780040b6ccb81905f976822ac538fc",
    "src": "voidloom/tests/test_hard_delete_touches_only_copies.py"
   },
   {
@@ -4087,13 +4087,13 @@
    "src": "voidloom/tests/test_leak_gate.py"
   },
   {
-   "bytes": 5780,
+   "bytes": 8846,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "cebb9f0fecac591d3fa84907f96e92cb9f4322defb7b0cb54783224156a87517",
+   "sha256": "454377498ccfeba7902b9b8cb91fb847f2a764495be6e2a41fe4bd4b49056859",
    "src": "voidloom/tests/test_lite_and_fetch_behaviours.py"
   },
   {
@@ -4177,13 +4177,13 @@
    "src": "voidloom/tests/test_migrations_042_045.py"
   },
   {
-   "bytes": 9100,
+   "bytes": 9433,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "7b96215f90c7cc85fb6d6f31ff519e374e3e1967594b1c3ed3b9d7dfc6b0d57c",
+   "sha256": "6b0e351cadd27c2b9e38edf0124e8b9ad9287a398608f351f3fcd88b8a5acd7d",
    "src": "voidloom/tests/test_models_present_is_this_brains.py"
   },
   {
@@ -4317,23 +4317,23 @@
    "src": "voidloom/tests/test_preflight_verb.py"
   },
   {
-   "bytes": 4593,
+   "bytes": 5776,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "29d1cf6b7f7ef7216942e623cde506f5fd81766c74d3363346a0a64bc8290433",
+   "sha256": "11f77b5c23f3df5c97b00645d4b1607e5b46b92c50368de119631876b1c44308",
    "src": "voidloom/tests/test_ps1_lays_a_brain.py"
   },
   {
-   "bytes": 3956,
+   "bytes": 6735,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "adbd619480b0fd684cb66873ed6a9bf0a0e34519b997b487e70c3c52beda1b77",
+   "sha256": "168f613a0cb0a548def54c0e2aa968be08aea52e00b70ceaace324828e867b6f",
    "src": "voidloom/tests/test_ps1_precache_by_pin.py"
   },
   {
@@ -4347,13 +4347,13 @@
    "src": "voidloom/tests/test_ps1_reembed_stamped.py"
   },
   {
-   "bytes": 7293,
+   "bytes": 9876,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "08f5320cfc98132231cde166459cb59eb4421b37009e657289be0ccd199dc390",
+   "sha256": "2c6be7468e2559cfe7973acacabf96fc7a3ee384941b634c0c22d6771bc02951",
    "src": "voidloom/tests/test_ps1_stops_and_says_why.py"
   },
   {
@@ -4427,13 +4427,13 @@
    "src": "voidloom/tests/test_recall_topk_after_placement.py"
   },
   {
-   "bytes": 17284,
+   "bytes": 29520,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "de0cb891c0c481dfc8042c4ffa267844e6f4af09c02500f722c1c883e28724db",
+   "sha256": "1c401ec29c82d1c159085a2fce078734ffa31aafadcd140defd2cbf37265b557",
    "src": "voidloom/tests/test_refusals_name_the_way_out.py"
   },
   {
@@ -4537,13 +4537,13 @@
    "src": "voidloom/tests/test_seed_doctrine_and_denylist.py"
   },
   {
-   "bytes": 3539,
+   "bytes": 4278,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "870921cfe7efb8394afe3822f38c12be5cada8ff3506192044dcdac30fe83d2c",
+   "sha256": "40ce1e1805941fdabae9a679dba14b04b465244af42f1df4b39673b4549512f9",
    "src": "voidloom/tests/test_self_check_models_lock.py"
   },
   {
@@ -5077,23 +5077,23 @@
    "src": "voidloom/tests/test_tier1_ambient.py"
   },
   {
-   "bytes": 7463,
+   "bytes": 15361,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "3fbf6b8e7fca910fda7f943dd24878aa27883699e90a63080b493d60b55c5018",
+   "sha256": "cac2c726201ee57018ba4e38e913029711b759c94798a597fb8fc9ec8d39a3a4",
    "src": "voidloom/tests/test_tier1_route_for_a_brain_with_memories.py"
   },
   {
-   "bytes": 30173,
+   "bytes": 30383,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "e4af4b3fa5f1a085b3c08049f90734e8e47abc475ec2c003a55996a8d73f5135",
+   "sha256": "ac51437602f5b3320e208423b3b012356bc8afcb3b3c60376503c6ba162c1849",
    "src": "voidloom/tests/test_tier_set.py"
   },
   {

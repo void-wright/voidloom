@@ -38,6 +38,20 @@ class ConfigDefaultTier(unittest.TestCase):
         self.assertTrue(cfg.is_jina)
 
 
+class TheEncumberedModelIsNoDefault(unittest.TestCase):
+    def test_saboteur_the_garden_does_not_enable_it_and_says_what_it_is(self):
+        import model_garden as mg
+        spec = mg.MODEL_REGISTRY["jina"]
+        self.assertIs(spec.enable_default, False)
+        self.assertIn("cc-by-nc-4.0", spec.description)
+        self.assertIn("Not shipped", spec.description)
+        self.assertEqual(mg._is_enabled("jina", {})[0], False)
+
+    def test_control_an_owner_who_enables_it_in_the_manifest_is_heard(self):
+        import model_garden as mg
+        self.assertEqual(mg._is_enabled("jina", {"models": {"jina": {"enabled": True}}})[0], True)
+
+
 class GardenFetchesNothing(unittest.TestCase):
     def test_saboteur_asking_for_jina_on_a_host_without_it_loads_nothing(self):
         import embedding_upgrade as eu

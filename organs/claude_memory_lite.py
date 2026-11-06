@@ -189,8 +189,10 @@ def _lock_was_written(data_dir: str) -> bool:
             finally:
                 conn.close()
             return bool(row and row[0])
+        except sqlite3.OperationalError as e:
+            return "no such table" not in str(e)      # a busy brain is not a brain with no record
         except (sqlite3.Error, ValueError):
-            return False
+            return True
     return embedder_lock.lost_lock(data_dir, os.path.realpath(str(DB_PATH))) is not None
 
 
@@ -245,7 +247,8 @@ def _lock_coverage(conn: sqlite3.Connection) -> dict:
 
     lock, why = _read_lock()
     if lock is None and why != "LOCK_MISSING":
-        return settle(0, f"lock unreadable beside the database ({why}); matched 0 by construction")
+        return settle(0, f"lock unreadable beside the database ({why}); matched 0 by construction",
+                      degraded=True, error=str(why).split(":")[0].split(" ")[0])
     if lock is None:
         er = _embed_resolver()
         try:
@@ -281,6 +284,8 @@ def _lock_coverage(conn: sqlite3.Connection) -> dict:
                             f"AND m.id IN ({stamped})", (vt, wh, dim)).fetchone()[0]
     matched = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active} AND m.id IN ({ids}) "
                            f"AND m.id NOT IN ({foreign})", (vt, wh, dim, _UNRESOLVED_STAMP)).fetchone()[0]
+    if not matched and conn.execute(f"SELECT 1 FROM memories m WHERE {active} AND m.id IN ({ids}) LIMIT 1").fetchone():
+        named.update(degraded=True, error="NO_ROWS_FOR_LOCK")
     return settle(matched, "active memories with a vector in the lock's table and no stamp naming another "
                            "checksum (derived on this connection)", measured=True,
                   search_rule="lock: verified + legacy", verified=int(verified), legacy_unverified=int(matched) - int(verified), **named)
@@ -335,6 +340,10 @@ def cmd_recall(args: argparse.Namespace) -> int:
         "query": args.query, "result_count": len(results), "results": results,
         "coverage": coverage,
     }
+    if coverage.get("degraded"):
+        # Tier 0 cannot fail, so it answers. It says what a recall with a model would have refused over.
+        out["degraded"] = {"reason": coverage.get("error"), "means": "keyword recall from the floor; the engine refuses this "
+                                                                     "brain until its lock is repaired (`voidloom doctor`)"}
     print(json.dumps(out, default=str))
     conn.close()
     return 0

@@ -1365,6 +1365,20 @@ def _hydrate_memory_rows(
 # Migration runner (one-shot, safe to re-run)
 # ============================================================
 
+def _holds_memories(db: Path) -> bool:
+    """Whether this file holds a memory, and True when that cannot be read: a backup is never skipped on a guess."""
+    try:
+        conn = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
+        try:
+            return conn.execute("SELECT 1 FROM memories LIMIT 1").fetchone() is not None
+        finally:
+            conn.close()
+    except sqlite3.OperationalError as e:
+        return "no such table" not in str(e)
+    except (sqlite3.Error, OSError, ValueError):
+        return True
+
+
 def apply_fts5_migration(
     db_path: str,
     migration_sql_path: str,
@@ -1373,7 +1387,8 @@ def apply_fts5_migration(
     """Apply ``migration_001_fts5.sql`` to the given DB. Idempotent + safe.
 
     Workflow:
-        1. Backup ``db_path`` → ``db_path + backup_suffix`` (only if missing).
+        1. Backup ``db_path`` → ``db_path + backup_suffix`` (only if missing, and
+           only when it holds a memory).
         2. Open connection + load sqlite-vec (required even though migration
            doesn't touch vec0 — schema introspection reads vec0 tables).
         3. Run migration SQL inside its own transaction (the SQL file itself
@@ -1395,9 +1410,12 @@ def apply_fts5_migration(
     if not db.exists():
         return {"status": "error", "message": f"DB not found: {db_path}"}
 
-    # 1. Backup (only if missing — never overwrite an existing backup).
+    # 1. Backup (only if missing — never overwrite an existing backup). A brain holding no memory has nothing to keep:
+    # `init` on a fresh install lands here, and a copy of an empty schema is a file nobody asked for.
     backup = db.with_suffix(db.suffix + backup_suffix)
-    if not backup.exists():
+    if not _holds_memories(db) and not backup.exists():
+        result["steps"]["backup"] = {"path": None, "size_bytes": 0, "note": "no memory to keep"}
+    elif not backup.exists():
         shutil.copy2(db, backup)
         result["steps"]["backup"] = {
             "path": str(backup),

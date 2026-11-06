@@ -134,6 +134,8 @@ $HookCmd = "$PySys `"$(Join-Path $BrainDir 'hooks\session_start_inject.py')`""
 $VenvDir = Join-Path $BrainDir "venv"
 $VenvPy  = Join-Path $VenvDir "Scripts\python.exe"   # Windows venv layout
 
+# How a person types this interpreter into PowerShell: `py -3` as it is, anything else called with `&`.
+function Get-PyCommand { if ($PySys -eq "py -3") { "py -3" } else { "& `"$PySys`"" } }
 function Invoke-Py {
     param([string]$Exe, [string[]]$ArgList)
     if ($Exe -eq "py -3") { & py -3 @ArgList } else { & $Exe @ArgList }
@@ -172,7 +174,7 @@ function Invoke-SkillColumn {
     $sg = Join-Path $BrainDir "organs\skill_graduation.py"
     $mig = Join-Path $BrainDir "migrations\migration_007_skill_graduation.sql"
     $null = @(Invoke-PyOut $PySys @($sg, $DbPath, "--apply-migration", $mig) 2>&1)
-    if ($LASTEXITCODE -ne 0) { Warn "could not add the skill-graduation column (rc $LASTEXITCODE); its job will refuse until you run: `"$sg`" `"$DbPath`" --apply-migration `"$mig`"" }
+    if ($LASTEXITCODE -ne 0) { Warn "could not add the skill-graduation column (rc $LASTEXITCODE); its job will refuse until you run: $(Get-PyCommand) `"$sg`" `"$DbPath`" --apply-migration `"$mig`"" }
 }
 
 # The seed load. The denylist runs over the whole pack before the first write, and a hit refuses the load, rc 4, naming
@@ -214,6 +216,12 @@ function Invoke-SeedSelfTest {
 # AST -- exactly as install.sh's C.declare reads it -- and typed nowhere else in this file. Unreadable registry: Tier 1
 # is skipped with that reason (Tier 0 is unaffected); nothing is guessed.
 $EmbedTier = "nomic"
+# A brain that exists keeps the tier it embeds under: moving it means re-embedding every memory, and `voidloom tier set` is
+# the one verb that does. `init` refuses a tier the brain does not hold, so choosing for it here would stop the install.
+if (-not $BrainIsNew) {
+    $BrainTier = ("" + (Invoke-PyOut $PySys @((Join-Path $PkgRoot "install\brain_is_new.py"), $DbPath, "--tier") 2>$null | Select-Object -Last 1)).Trim()
+    if ($BrainTier) { $EmbedTier = $BrainTier }
+}
 function Get-EngineTier {
     param([string]$Py, [string]$Engine, [string]$Key)
     $src = @'
@@ -315,7 +323,10 @@ if (Test-Path $VoidloomSrc) {
     $VoidloomDest = Join-Path $BrainDir "voidloom"
     if ($DryRun) { Say "  DRY: copy voidloom\ -> $VoidloomDest ; write ~\.local\bin\voidloom.cmd + ensure on PATH" }
     else {
-        Copy-Item -Recurse -Force $VoidloomSrc $VoidloomDest
+        # Into the folder's contents: with the destination already there, the folder itself would land inside it, and
+        # this package holds a FILE named voidloom in that place, so a re-run would copy nothing and say nothing.
+        New-Item -ItemType Directory -Force -Path $VoidloomDest | Out-Null
+        Copy-Item -Recurse -Force (Join-Path $VoidloomSrc "*") $VoidloomDest
         $LocalBin = Join-Path $env:USERPROFILE ".local\bin"
         New-Item -ItemType Directory -Force -Path $LocalBin | Out-Null
         $brainAbs = (Resolve-Path $BrainDir).Path
@@ -480,6 +491,7 @@ print(f"  DB created. {res['brain_objects']} objects, "
 # STEP C — TIER 1 ATTEMPT (OPTIONAL; GRACEFUL FALLBACK)
 # ---------------------------------------------------------------------------
 Step "STEP C — Tier 1 (optional): venv + semantic stack ($EmbedTier, CPU)"
+if ($EmbedTier -eq "jina") { Warn "This brain embeds under jina. jina-embeddings-v5 is CC-BY-NC-4.0 -- NON-COMMERCIAL. Fine for personal use; it must not be used in anything you sell or distribute commercially." }
 $Tier1Ok = $false
 $Tier1Skip = ""
 function Tier1-Hint ($reason) {
@@ -487,13 +499,13 @@ function Tier1-Hint ($reason) {
   ----------------------------------------------------------------
   Tier 0 is ACTIVE — you have a working keyword-recall brain now.
   The optional SEMANTIC upgrade (Tier 1) was not completed:
-    reason: $reason
+    reason: $reason$(if ($script:ModelsAbsent -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $DbPath) "embedder.lock.json"))) { "`n  This brain is locked to that model: until it is here a store refuses, and recall answers by keyword." })
   $(if ($script:EmbedOwed) { "To add semantic recall, run this once, then re-run the installer to verify:`n    $($script:EmbedOwed)" } else { "To add semantic recall later, fix the reason above, then re-run:`n    powershell -ExecutionPolicy Bypass -File install.ps1" })
   or build by hand:
-    $PySys -m venv "$VenvDir"
-    "$VenvPy" -m pip install --upgrade pip
-    "$VenvPy" -m pip install -r "$(Join-Path $BrainDir 'install\requirements.txt')"
-    `$env:WIZARD_EMBED_MODEL='$EmbedTier'; "$VenvPy" "$(Join-Path $BrainDir 'organs\claude_memory.py')" init
+    $(Get-PyCommand) -m venv "$VenvDir"
+    & "$VenvPy" -m pip install --upgrade pip
+    & "$VenvPy" -m pip install -r "$(Join-Path $BrainDir 'install\requirements.txt')"
+    `$env:WIZARD_EMBED_MODEL='$EmbedTier'; & "$VenvPy" "$(Join-Path $BrainDir 'organs\claude_memory.py')" init
   ----------------------------------------------------------------
 "@
 }
@@ -532,8 +544,8 @@ if ($Tier0Only) {
 
             # THE LOCK FIRST (install.sh's C.init): `init` writes <brain>\embedder.lock.json, and
             # the pre-download below fetches exactly the bytes it names. init is idempotent:
-            # on a locked brain it never re-points the lock; a tier the shipped catalogue does
-            # not carry gets no lock, and the pre-download keeps its by-name path.
+            # on a locked brain it never re-points the lock; a brain with no lock on a tier the
+            # catalogue does not ship is fetched at the engine's pin.
             $null = Invoke-BrainInit
 
             # PRE-DOWNLOAD the models this host will ACTUALLY load.
@@ -571,8 +583,9 @@ try:
     # Fetch EXACTLY the bytes it names -- the model at lock.revision and its remote-code
     # repository at lock.code.revision -- checksum them against lock.weights_hash, and
     # instantiate nothing. A by-name load resolves the hub's moving `main`, which a cache
-    # holding only the pinned bytes cannot satisfy offline. A brain with no lock (a tier
-    # the shipped catalogue does not carry) keeps the by-name load.
+    # holding only the pinned bytes cannot satisfy offline. A brain with no lock on a tier
+    # the catalogue does not ship is fetched at the engine's pin, and only that one: with
+    # any other tier no lock means `init` did not finish, so nothing is fetched.
     try:
         lock = embedder_lock.resolve(os.environ["WIZARD_LIBRARY_DB"])
     except embedder_lock.EmbedderLockError as e:
@@ -589,6 +602,8 @@ try:
         print(f"  cached + verified {lock['model_id']} (weights {computed[:12]} == lock)", flush=True)
     else:
         import embedding_upgrade
+        if EMBED_MODEL != embedding_upgrade.JINA_MODEL_NAME:
+            raise RuntimeError("no install lock beside this brain: `init` did not finish, so nothing is fetched")
         print(f"  ... fetching embedder {EMBED_MODEL} at the engine's pin (no install lock for this tier)", flush=True)
         embedding_upgrade.fetch_jina_at_pin()
     # THE RERANKER, BY ITS PIN: only a reranker the catalogue pins is fetched, at that
@@ -608,13 +623,16 @@ print("  models cached and verified against their pins" + (" -- semantic + reran
 sys.exit(0)
 '@
             $tmpPre = Join-Path $env:TEMP "wl_predownload.py"; Set-Content -Path $tmpPre -Value $predlPy -Encoding UTF8
-            & $VenvPy $tmpPre
+            & $VenvPy $tmpPre | Tee-Object -Variable preDlOut
             $preDlOk = ($LASTEXITCODE -eq 0)
             Remove-Item $tmpPre -ErrorAction SilentlyContinue
+            # A name is not a pin: a reranker the catalogue does not pin was not fetched, and nothing below may say it was.
+            if ("$preDlOut" -match 'is NOT pinned') { $RerankerUnfetched = $env:RERANKER_MODEL; $env:RERANKER_MODEL = "" }
             if ($preDlOk) {
                 Say "  models pre-downloaded — nothing will lazy-download on first recall."
             } else {
-                Warn "could not pre-download one or both models (offline, low disk, or HF unreachable)."
+                $script:ModelsAbsent = $true
+                Warn "could not pre-download one or both models; the line above says why."
                 Warn "Tier 0 (keyword recall) is unaffected. To fetch the models by hand:"
                 Warn "  & `"$VenvPy`" `"$BrainDir\organs\model_fetch.py`" --db `"$DbPath`"   (fetches the pinned bytes the install lock names)"
             }
@@ -1036,21 +1054,27 @@ Write-InstallRecord
 # DONE
 # ---------------------------------------------------------------------------
 Step "INSTALL COMPLETE"
+if ($Tier0Only -and -not $DryRun) {
+    $lostPy = "import sys; sys.path.insert(0, sys.argv[1]); import embedder_lock as el`ntry:`n    el.read_lock(el.lock_path_for(sys.argv[2]), brain=sys.argv[2])`nexcept el.EmbedderLockError as e:`n    if e.code == 'LOCK_MISSING' and e.detail.get('was_locked'): print((e.detail.get('retry') or ['claude_memory.py init --tier <cpu or gpu>'])[0])"
+    $lostFix = ("" + (Invoke-PyOut $PySys @("-c", $lostPy, (Join-Path $BrainDir "organs"), $DbPath) 2>$null | Select-Object -Last 1)).Trim()
+    if ($lostFix) { Warn "this brain was locked and its lock is not beside it, so ``voidloom doctor`` calls it unhealthy and a store refuses. A -Tier0Only run does not write it: re-run this installer without -Tier0Only, or run: $lostFix" }
+}
 Say ("Tier 0 (always): " + $(if ($Tier0Ok) { "ACTIVE — keyword-recall brain live" } else { "NOT verified (check Step B)" }))
 Say ("Tier 1 (semantic): " + $(if ($Tier1Ok) { "ACTIVE — semantic recall live" } else { "not active" + $(if ($Tier1Skip) { " ($Tier1Skip)" } else { "" }) }))
 if ($Tier1Ok) {
     if ($env:RERANKER_MODEL) { Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) + $RerankerRepo (reranker, backend '$RerankerBackend' — the one recall loads) — pre-downloaded, nothing lazy-loads on first recall." }
+    elseif ($RerankerUnfetched) { Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) — pre-downloaded. Reranker $RerankerUnfetched is not pinned by this package, so it was not fetched: recall loads it only from a cache you populate." }
     else { Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) — pre-downloaded. No reranker: this machine's gate is off." }
 }
 Write-Host ""
 Say "Your Claude Code now has a memory. Confirm your brain is alive:"
-Say "  $PySys `"$(Join-Path $BrainDir 'install\self_check.py')`"        # full PASS/FAIL report (exit 0 = alive)"
+Say "  $(Get-PyCommand) `"$(Join-Path $BrainDir 'install\self_check.py')`"        # full PASS/FAIL report (exit 0 = alive)"
 if ($Tier1Ok) {
-    Say "  `"$VenvPy`" `"$(Join-Path $BrainDir 'organs\claude_memory.py')`" stats"
-    Say "  `"$VenvPy`" `"$(Join-Path $BrainDir 'organs\claude_memory.py')`" recall --query `"how do I store memories`" --top_k 5"
+    Say "  & `"$VenvPy`" `"$(Join-Path $BrainDir 'organs\claude_memory.py')`" stats"
+    Say "  & `"$VenvPy`" `"$(Join-Path $BrainDir 'organs\claude_memory.py')`" recall --query `"how do I store memories`" --top_k 5"
 } else {
-    Say "  $PySys `"$Lite`" stats"
-    Say "  $PySys `"$Lite`" recall --query `"how do I store memories`" --top_k 5"
+    Say "  $(Get-PyCommand) `"$Lite`" stats"
+    Say "  $(Get-PyCommand) `"$Lite`" recall --query `"how do I store memories`" --top_k 5"
 }
 Say "  python3 `"$(Join-Path $BrainDir 'hooks\session_start_inject.py')`"   # preview the session-start preamble"
 Write-Host ""

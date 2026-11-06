@@ -283,6 +283,43 @@ def _brain_tier(db: Path, tiers: Dict[str, tuple]) -> tuple:
     return "nomic", "the engine's default for a brain with no recorded table"
 
 
+def _engine_jina_pin() -> Optional[tuple]:
+    """``(model_id, revision, files)`` the engine loads jina at, BY AST: importing the module pins a card."""
+    try:
+        import ast
+        tree = ast.parse((_paths.organ_dir() / "embedding_upgrade.py").read_text(encoding="utf-8", errors="replace"))
+        got = {n.targets[0].id: ast.literal_eval(n.value) for n in tree.body
+               if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)
+               and n.targets[0].id in ("JINA_MODEL_NAME", "JINA_REVISION", "JINA_SNAPSHOT_FILES")}
+        return got["JINA_MODEL_NAME"], got["JINA_REVISION"], got["JINA_SNAPSHOT_FILES"]
+    except Exception:
+        return None
+
+
+def _loadable_at_pin(tier: Optional[str], tiers: Dict[str, tuple]) -> Optional[bool]:
+    """Can a brain with no lock load `tier`: is the snapshot the loader reads there, at the tier's pin, whole? A folder of
+    that name is what an interrupted download leaves. None when the pin cannot be read here, which claims nothing."""
+    mod = _lock_reader()
+    if mod is None or tier not in tiers:
+        return None
+    dirname = tiers[tier][1]
+    try:
+        pins = None
+        for entry in mod.catalogue_tiers().values():
+            if "models--" + entry["model_id"].replace("/", "--") == dirname:
+                pins = [(entry["model_id"], entry["revision"], entry.get("files"))]
+                if isinstance(entry.get("code"), dict):
+                    pins.append((entry["code"]["model_id"], entry["code"]["revision"], entry["code"].get("files")))
+        if pins is None:
+            jina = _engine_jina_pin()
+            pins = [jina] if jina and "models--" + jina[0].replace("/", "--") == dirname else None
+        if pins is None:
+            return None
+        return all(mod.snapshot_complete(mod.snapshot_dir_for(m, r), f) for m, r, f in pins)
+    except Exception:
+        return None
+
+
 def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple]) -> None:
     """Narrow `present` from "some model is cached" to "the model THIS brain loads is cached". A brain with a lock
     answers for every snapshot the lock names, in the one cache the loader reads, its remote code included; a lock that
@@ -297,7 +334,8 @@ def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple
             return
         tier, how = _brain_tier(db, tiers)
         out["brain_tier"] = tier
-        out["present"] = bool(out["by_model"].get(tier))
+        loadable = _loadable_at_pin(tier, tiers)
+        out["present"] = bool(out["by_model"].get(tier)) if loadable is None else loadable
         import importlib.util
         if tier == "jina" and importlib.util.find_spec("peft") is None:
             out["present"] = False

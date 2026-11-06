@@ -1805,7 +1805,8 @@ def cmd_recall(args):
     # A keyword-only recall needs no embedder: the search reads no vector, so encoding
     # here would refuse SNAPSHOT_ABSENT on a host with an empty cache and pay the model
     # load on every other host.
-    _keywords_answer = False
+    _vector_arm_out = _arm_fix = None   # the code that took the vector arm out of this call, and the command that brings it back
+    query_vec = None
     if mode != "bm25-only":
         # The reader before the encoder: a brain whose vectors the lock cannot admit says so, with its coverage,
         # rather than loading a model to find out.
@@ -1814,15 +1815,23 @@ def cmd_recall(args):
         try:
             _mw_gate.search_set(conn)
         except Exception as _e:  # noqa: BLE001
+            _code = getattr(_e, "code", None)
             # With no vectors at all there is nothing to refuse: the keyword arm answers, as for any unembedded brain.
-            _none_held = getattr(_e, "code", None) == "NO_ROWS_FOR_LOCK" and not getattr(getattr(_e, "coverage", None), "vectors", 0)
-            # A lock that cannot be read, or that no row answers to, leaves the words: keywords answer, degraded, with the
-            # code. Nothing can be encoded against a lock nobody can read, so no model is loaded for it.
-            _keywords_answer = getattr(_e, "code", None) in ("NO_ROWS_FOR_LOCK", "LOCK_MALFORMED") and not _none_held
-            if getattr(_e, "code", None) in ("STAMP_INCONSISTENT", "LOCK_NOT_SHIPPED"):
+            _none_held = _code == "NO_ROWS_FOR_LOCK" and not getattr(getattr(_e, "coverage", None), "vectors", 0)
+            if _code in ("NO_ROWS_FOR_LOCK", "STAMP_INCONSISTENT", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED") and not _none_held:
+                # An integrity refusal is the answer. A keyword answer here would read as a search under this lock.
                 conn.close()
                 raise
-    query_vec = _encode(args.query, "search_query") if mode != "bm25-only" and not _keywords_answer else None
+        try:
+            query_vec = _encode(args.query, "search_query")
+        except Exception as _e:  # noqa: BLE001
+            # Bytes that are absent are not bytes that are wrong: the words still answer, flagged. `--vector-only` asked
+            # for no keyword, so it refuses.
+            if getattr(_e, "code", None) != "SNAPSHOT_ABSENT" or mode == "vector-only":
+                conn.close()
+                raise
+            _vector_arm_out, mode = _e.code, "bm25-only"
+            _arm_fix = ((getattr(_e, "detail", None) or {}).get("retry") or [None])[0]
 
     multi_hop_depth = getattr(args, 'multi_hop', 0) or 0
 
@@ -1886,6 +1895,8 @@ def cmd_recall(args):
     )
     for _r in results:                  # once, on the envelope below; not repeated on every row
         _r.pop("coverage", None)
+    if _vector_arm_out is not None:
+        _coverage.update(vector_arm="refused", degraded=True, refusal=_vector_arm_out, **({"fix": _arm_fix} if _arm_fix else {}))
 
     # L2 Kind Taxonomy — enrich results with the `kind` field.
     # hybrid_retrieval._hydrate_memory_rows does not include `kind` (C1 domain),
@@ -2355,6 +2366,10 @@ def cmd_recall(args):
         result["multi_hop"] = multi_hop_info
     if rerank_info:
         result["rerank"] = rerank_info
+    # The flag a person's surface reads: coverage holds the figures, the envelope says what kind of answer this is.
+    _flag = _degraded_key(_coverage, "keyword (FTS5) recall over the same brain; no semantic ranking")
+    if _flag:
+        result.update(_flag, tier=0)
 
     # L5-N-beta Explainable Recall (OFF unless --explain). Render a per-result
     # "why-surfaced" one-liner from the sub-scores ALREADY on each result dict
@@ -2370,6 +2385,14 @@ def cmd_recall(args):
             print(f"[WARNING] explain skipped: {_explain_err}", file=sys.stderr)
 
     _output(result)
+
+
+def _degraded_key(coverage: Any, means: str) -> Dict[str, Any]:
+    """{"degraded": {...}} for an answer whose coverage says so, else nothing: the flag a person's surface reads."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import memory_write
+    flag = memory_write.degrade_of(coverage, means)
+    return {"degraded": flag} if flag else {}
 
 
 def _refuse_recall(conn, args, t0, err, coverage):
@@ -3020,6 +3043,7 @@ def cmd_stats(args):
         "archived_memories": archived,
         "embedded_memories": embedding_count,
         "coverage": _cov_env,
+        **_degraded_key(_cov_env, "these counts are read without the search set; the coverage figures say what it could measure"),
         "derived_layer": _derived,
         "unique_tags": tags_count,
         "total_links": links_count,
@@ -3212,6 +3236,14 @@ def cmd_maintain(args):
         if _flt is None:
             categories = []
         _dh = _derived_hash(conn, "memory_links") if categories else None
+        # A strength from another model's space, by pair, whichever way round it was stored. A pair that compares too far
+        # apart to link now still has a link, and this comparison is the one it should carry.
+        _stale_links: Dict[Any, List[int]] = {}
+        if _dh:
+            for _lid, _src, _tgt in conn.execute(
+                    "SELECT id, source_id, target_id FROM memory_links WHERE link_type = 'related' "
+                    "AND COALESCE(weights_hash, '') <> ?", (_dh,)).fetchall():
+                _stale_links.setdefault((min(_src, _tgt), max(_src, _tgt)), []).append(_lid)
 
         for cat in categories:
             mems = conn.execute(
@@ -3233,6 +3265,10 @@ def cmd_maintain(args):
                     dot = sum(a * b for a, b in zip(v1, v2))
 
                     distance = 1.0 - dot
+                    for _lid in _stale_links.pop((min(ids[i], ids[j]), max(ids[i], ids[j])), ()):
+                        conn.execute("UPDATE memory_links SET strength = ?, weights_hash = ? WHERE id = ?",
+                                     (1.0 - distance, _dh, _lid))
+                        relinked += 1
                     if distance < 0.15:
                         imp_i = conn.execute("SELECT importance FROM memories WHERE id = ?", (ids[i],)).fetchone()[0]
                         imp_j = conn.execute("SELECT importance FROM memories WHERE id = ?", (ids[j],)).fetchone()[0]
@@ -3251,16 +3287,9 @@ def cmd_maintain(args):
                         deduped += 1
                     elif distance < 0.30:
                         existing = conn.execute(
-                            "SELECT id, weights_hash FROM memory_links WHERE source_id = ? AND target_id = ? "
-                            "AND link_type = 'related'" if _dh else
-                            "SELECT id, NULL FROM memory_links WHERE source_id = ? AND target_id = ? AND link_type = 'related'",
+                            "SELECT id FROM memory_links WHERE source_id = ? AND target_id = ? AND link_type = 'related'",
                             (ids[i], ids[j]),
                         ).fetchone()
-                        if existing and _dh and existing[1] != _dh:
-                            # A strength from another model's space: this comparison is the current one.
-                            conn.execute("UPDATE memory_links SET strength = ?, weights_hash = ? WHERE id = ?",
-                                         (1.0 - distance, _dh, existing[0]))
-                            relinked += 1
                         if not existing:
                             # This strength is a cosine distance between two vectors, so it
                             # carries the checksum it was computed under.
@@ -3806,6 +3835,7 @@ def cmd_anticipate(args):
             "status": "ok",
             "action": "anticipate",
             "coverage": _coverage,
+            **_degraded_key(_coverage, "anticipation reads the brain's own rows; no vector was searched for it"),
             "memories_loaded": result["memories_loaded"],
             "ambiguous": result["ambiguous"],
             "tiers": result["tiers"],

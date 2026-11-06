@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
-"""install.ps1 runs, whole, under Windows PowerShell through WSL interop, and leaves a brain that answers.
+"""install.ps1's Tier 0 path runs under Windows PowerShell through WSL interop and leaves a brain that answers.
 
 Every other test of this file extracts text or one function. That is how a fresh install that could not finish went
 unseen: a `Copy-Item` that lays `organs\\` as an empty folder is invisible until the script runs. Here the script runs,
 in a scratch folder under the Windows temp directory, with USERPROFILE redirected there. The one line that writes the
 Windows user PATH is neutralised in this copy: a test never changes the account it runs under.
+
+This is -Tier0Only: no Tier 1 line runs here, because the semantic stack takes minutes and gigabytes. A second run over
+the same install proves the re-run lays new files. Tier 1 under PowerShell is run by hand, and the run says so.
 
 Skips where powershell.exe or a Windows Python is not reachable.
 """
@@ -29,7 +32,7 @@ def _ps(code: str, timeout: int = 60) -> subprocess.CompletedProcess:
 
 @unittest.skipUnless(os.path.isfile(_PS), "no powershell.exe reachable (not a WSL host with interop)")
 @unittest.skipUnless((ROOT / ".git").exists(), "not a checkout: the file list comes from git")
-class TheScriptRuns(unittest.TestCase):
+class TheTier0PathRuns(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         got = _ps("(Get-Command python -ErrorAction SilentlyContinue).Source; [IO.Path]::GetTempPath()")
@@ -59,9 +62,18 @@ $env:TEMP='{cls.win}'; $env:TMP='{cls.win}'; $env:HF_HOME='{cls.win}\\hf'
 "rc=" + $LASTEXITCODE
 """, encoding="utf-8")
         (cls.root / "home").mkdir()
+        cls.path_before = cls.user_path()
         p = subprocess.run([_PS, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", cls.win + "\\run.ps1"], cwd="/",
                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=400)
         cls.out = p.stdout + p.stderr
+        (pkg / "voidloom" / "NEW_IN_THIS_RELEASE").write_text("x", encoding="utf-8")
+        p = subprocess.run([_PS, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", cls.win + "\\run.ps1"], cwd="/",
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=400)
+        cls.rerun = p.stdout + p.stderr
+
+    @staticmethod
+    def user_path() -> str:
+        return _ps("[Environment]::GetEnvironmentVariable('Path', 'User')").stdout.strip()
 
     @classmethod
     def tearDownClass(cls):
@@ -84,7 +96,13 @@ $env:TEMP='{cls.win}'; $env:TMP='{cls.win}'; $env:HF_HOME='{cls.win}\\hf'
         self.assertNotIn("merge_config.py not present", self.out)
 
     def test_control_the_account_was_not_touched(self):
-        self.assertIn("test copy: user PATH write skipped", (self.root / "pkg" / "install" / "install.ps1").read_text(encoding="utf-8-sig"))
+        self.assertEqual(self.user_path(), self.path_before, "read from the account itself, before and after both runs")
+
+    def test_saboteur_a_re_run_updates_the_voidloom_cli(self):
+        self.assertIn("rc=0", self.rerun, self.rerun[-2000:])
+        dest = self.root / "home" / ".claude" / "memory" / "voidloom"
+        self.assertTrue((dest / "NEW_IN_THIS_RELEASE").is_file(), sorted(p.name for p in dest.iterdir())[:20])
+        self.assertTrue((dest / "voidloom").is_file(), "the launcher stays a file, with nothing folded inside the folder")
 
 
 if __name__ == "__main__":

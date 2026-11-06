@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -44,6 +45,14 @@ class TheCallSites(unittest.TestCase):
         s = _src()
         i = s.index('Warn "embedding the seed pack did not complete')
         self.assertIn("Invoke-SeedSelfTest", s[i:i + 260])
+
+
+class WhatItPrintsRuns(unittest.TestCase):
+    def test_saboteur_no_printed_command_opens_on_a_quoted_word(self):
+        """A quoted first word is only a string until `&` calls it: PowerShell echoes it and runs nothing."""
+        bad = [ln.strip()[:120] for ln in _src().splitlines()
+               if re.search(r'(^\s{4}"\$(VenvPy|PySys)"|(Say|Warn) "\s*`"\$|run: `"\$)', ln)]
+        self.assertEqual(bad, [])
 
 
 @unittest.skipUnless(os.path.isfile(_PS), "no powershell.exe reachable (not a WSL host with interop)")
@@ -89,6 +98,38 @@ class UnderPowerShell(unittest.TestCase):
                "$e.Count" % self._unc(PS1))
         p = subprocess.run([_PS, "-NoProfile", "-Command", cmd], capture_output=True, text=True, timeout=120)
         self.assertEqual(p.stdout.strip(), "0", p.stdout + p.stderr)
+
+    def _predl_lines(self):
+        s = _src()
+        i = s.index("            & $VenvPy $tmpPre | Tee-Object")
+        return s[i:s.index("            if ($preDlOk) {", i)]
+
+    def test_a_reranker_the_catalogue_does_not_pin_is_not_called_fetched(self):
+        p = self._ps(self._stub(["  reranker someone/else is NOT pinned in organs/embedders.lock.json -- not pre-cached"], 0),
+                     "$tmpPre = 'x.py'; $env:RERANKER_MODEL = 'someone/else'\n" + self._predl_lines() +
+                     "\nWrite-Host \"ok=$preDlOk env=[$env:RERANKER_MODEL] held=[$RerankerUnfetched]\"")
+        self.assertIn("ok=True env=[] held=[someone/else]", p.stdout, p.stdout + p.stderr)
+
+    def test_control_a_pinned_reranker_stays_named(self):
+        p = self._ps(self._stub(["  cached"], 0), "$tmpPre = 'x.py'; $env:RERANKER_MODEL = 'pinned/one'\n" + self._predl_lines() +
+                     "\nWrite-Host \"ok=$preDlOk env=[$env:RERANKER_MODEL]\"")
+        self.assertIn("ok=True env=[pinned/one]", p.stdout, p.stdout + p.stderr)
+
+    def test_a_failed_pre_download_reads_as_failed_through_the_tee(self):
+        p = self._ps(self._stub(["  ! model pre-download failed"], 4), "$tmpPre = 'x.py'\n" + self._predl_lines() +
+                     "\nWrite-Host \"ok=$preDlOk\"")
+        self.assertIn("ok=False", p.stdout, p.stdout + p.stderr)
+
+    def test_a_brain_that_exists_keeps_its_tier(self):
+        """The block `install.ps1` runs before it reads the engine's registry, with brain_is_new.py's own answer stood in."""
+        s = _src()
+        block = s[s.index("if (-not $BrainIsNew) {\n    $BrainTier"):s.index("function Get-EngineTier {")]
+        p = self._ps(self._stub(["jina"], 0), "$EmbedTier = 'nomic'; $PkgRoot = '.'; $BrainIsNew = $false\n" + block +
+                     "\nWrite-Host \"tier=$EmbedTier\"")
+        self.assertIn("tier=jina", p.stdout, p.stdout + p.stderr)
+        p = self._ps(self._stub(["jina"], 0), "$EmbedTier = 'nomic'; $PkgRoot = '.'; $BrainIsNew = $true\n" + block +
+                     "\nWrite-Host \"tier=$EmbedTier\"")
+        self.assertIn("tier=nomic", p.stdout, "a new brain takes this installer's tier")
 
     def test_a_typed_refusal_on_stderr_stops_and_is_shown(self):
         p = self._ps(self._stub(["noise", "WEIGHTS_MISMATCH: the lock names another tier"], 1, to_stderr=True),

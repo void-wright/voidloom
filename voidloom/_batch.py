@@ -92,7 +92,8 @@ def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
     [<memory>...]}`` on success — the matched memories live DIRECTLY on the record
     (the inner ``result.`` engine-dict wrapper is gone). A malformed item / engine
     failure yields ``{"index": i, "query": q, "top_k": k, "status": "error",
-    "message": ...}``. Per-item isolation: one bad item never aborts the rest.
+    "message": ...}``, with ``code`` and ``coverage`` beside the message when the
+    engine gave them. Per-item isolation: one bad item never aborts the rest.
 
     Why flatten: the single ``recall`` verb surfaces the engine dict's own
     ``.results`` (the memory list) directly under ``data.results`` in its
@@ -128,6 +129,9 @@ def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
                 rec = {"index": i, "query": q, "top_k": k, "status": "ok", "results": hits}
                 if isinstance(res.get("coverage"), dict):   # carried even when `results` is empty
                     rec["coverage"] = res["coverage"]
+                for key in ("degraded", "tier", "engine"):   # what kind of answer this item is
+                    if key in res:
+                        rec[key] = res[key]
                 # The side channels ride beside `results` (memories only); the batch-recall default verb used to
                 # lift `results` alone and would have silently dropped them (VAEL).
                 for ck in channel_keys(res):
@@ -137,8 +141,13 @@ def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
                 msg = (res.get("message") or res.get("error")
                        if isinstance(res, dict) else None) or \
                       "engine reported a non-ok recall result"
-                results.append({"index": i, "query": q, "top_k": k,
-                                "status": "error", "message": str(msg)})
+                rec = {"index": i, "query": q, "top_k": k, "status": "error", "message": str(msg)}
+                if isinstance(res, dict):
+                    if isinstance(res.get("error"), str):       # the typed code rides beside the words
+                        rec["code"] = res["error"]
+                    if isinstance(res.get("coverage"), dict):   # a refusal says what it could still measure
+                        rec["coverage"] = res["coverage"]
+                results.append(rec)
         except Exception as e:  # noqa: BLE001 — per-item isolation is the contract
             # `q`/`k` may be UNBOUND here (``_coerce_recall_item`` is the first
             # statement and can raise before they are assigned), so this record

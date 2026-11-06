@@ -471,12 +471,24 @@ PY_SYS="$(detect_python)"
 # A plain re-run of an attached install keeps its brain. The answer given at attach time lives in the install record, and
 # in the env file for a run whose record was never written. A brain that was attached and is not there now stops the run:
 # building a blank one in its place would answer every later recall from the wrong memories, with no error anywhere.
+# `readlink -f` does not exist before macOS 12.3; python3 is already required here, and this is what it answers.
+real_path() { "$PY_SYS" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
+if [ -L "$DB_PATH" ] && [ ! -e "$DB_PATH" ] && [ -z "$ATTACH_DB" ] && [ -z "$EXPLICIT_BRAIN_DB" ] && [ "$INIT_BLANK" -eq 0 ]; then
+    echo "[install] this install is attached to $(readlink "$DB_PATH"), and that file is not there. Nothing was touched. Bring it back (a disk that is not mounted?) and re-run, or pass --attach-db <path> to name another, or --init-blank to start a new brain." >&2
+    exit 2
+fi
 if [ -z "$ATTACH_DB" ] && [ -z "$EXPLICIT_BRAIN_DB" ] && [ "$INIT_BLANK" -eq 0 ]; then
     _prev_db="$(sed -n 's/^db=//p' "${BRAIN_DIR}/INSTALL_RECORD" 2>/dev/null | tail -1)"
+    _prev_attached="$(sed -n 's/^attached=//p' "${BRAIN_DIR}/INSTALL_RECORD" 2>/dev/null | tail -1)"
     [ -n "$_prev_db" ] || [ ! -d "${BRAIN_DIR}/organs" ] || _prev_db="$(sed -n -E "s/^(export +)?WIZARD_LIBRARY_DB=[\"']?([^\"']*)[\"']?\$/\2/p" "$ENV_FILE" 2>/dev/null | tail -1)"
+    # A record that says `attached=0` was written here and means it. One that does not say is older than the key: it was
+    # attached if no brain of its own sits here. A folder copied to a new home keeps its old `db=` and has its own brain.
+    if [ "$_prev_attached" = "0" ] || { [ -z "$_prev_attached" ] && [ -s "$DB_PATH" ] && [ ! -L "$DB_PATH" ]; }; then
+        _prev_db=""
+    fi
     if [ -n "$_prev_db" ] && [ "$_prev_db" != "$DB_PATH" ]; then
         if [ -f "$_prev_db" ]; then
-            if [ "$(readlink -f "$_prev_db")" != "$(readlink -f "$DB_PATH" 2>/dev/null)" ]; then
+            if [ "$(real_path "$_prev_db")" != "$(real_path "$DB_PATH")" ]; then
                 ATTACH_DB="$_prev_db"
                 echo "[install] keeping the attached brain ${_prev_db}"
             fi
@@ -597,7 +609,7 @@ SIDECAR_PY=""     # the interpreter the installer STARTED with (detect_python), 
 SIDECAR_BASE=""
 dryrun_sidecar_snapshot() {
     SIDECAR_PY="$PY_SYS"
-    SIDECAR_BASE="$(readlink -f "$DB_PATH" 2>/dev/null || printf '%s' "$DB_PATH")"; SIDECAR_BASE="${SIDECAR_BASE:-$DB_PATH}"
+    SIDECAR_BASE="$(real_path "$DB_PATH" 2>/dev/null || printf '%s' "$DB_PATH")"; SIDECAR_BASE="${SIDECAR_BASE:-$DB_PATH}"
     for _sfx in -wal -shm; do
         [ -e "${SIDECAR_BASE}${_sfx}" ] && SIDECARS_PREEXISTING="${SIDECARS_PREEXISTING} ${_sfx}"
     done
@@ -1177,8 +1189,18 @@ gpu_count() {
     fi
 }
 
+# The file this run's brain IS, for the reads below: the one in place, else the snapshot about to be copied into place (an
+# explicit --brain-db, or a brain the package carries). A brain arriving this way is an existing brain with its own tier,
+# and reading only the empty path makes it look new. A snapshot is opened immutable: it is not ours to leave sidecars beside.
+BRAIN_READ="$DB_PATH"; BRAIN_READ_Q=""
+if [ ! -f "$DB_PATH" ]; then
+    for _snap in "$EXPLICIT_BRAIN_DB" "${PKG_ROOT}/brain/claude_memory.db" "${PKG_ROOT}/claude_memory.db"; do
+        if [ -n "$_snap" ] && [ -f "$_snap" ]; then BRAIN_READ="$_snap"; BRAIN_READ_Q="&immutable=1"; break; fi
+    done
+fi
+export BRAIN_READ_Q
 hd_embed_model_from_db() {   # bash 3.2 (macOS /bin/bash) cannot parse a heredoc inside $( ): the command and its heredoc live here, called as $(hd_embed_model_from_db) (round 2, B2)
-    "$PY_SYS" - "$DB_PATH" <<'PYEOF' 2>/dev/null || true
+    "$PY_SYS" - "${BRAIN_READ:-$DB_PATH}" <<'PYEOF' 2>/dev/null || true
 import json, os, sqlite3, sys, urllib.request   # escaped URI (iteration 4, LOW 2)
 # THE INSTALL LOCK FIRST (owner decision D2): <brain-dir>/embedder.lock.json, beside the
 # database file with symlinks followed (the rule organs/embedder_lock.py applies). A lock
@@ -1195,7 +1217,7 @@ if os.path.exists(_lock):
     print({"memory_embeddings_v3": "qwen", "memory_embeddings": "nomic"}.get(_tab, "LOCK_MALFORMED"))
     sys.exit(0)
 try:
-    c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(sys.argv[1])), uri=True)
+    c = sqlite3.connect("file:%s?mode=ro%s" % (urllib.request.pathname2url(os.path.abspath(sys.argv[1])), os.environ.get("BRAIN_READ_Q", "")), uri=True)
     row = c.execute("SELECT value FROM metadata WHERE key='active_embedding_table'").fetchone()
     c.close()
 except Exception:
@@ -1210,14 +1232,14 @@ PYEOF
 # hd_brain_embedded TIER -- "yes" when this brain holds a promise to that tier: an install lock, or a row in its table
 # (read from vec0's own rowid table, so no extension is needed). A brain with neither has nothing a change could orphan.
 hd_brain_embedded() {
-    "$PY_SYS" - "$DB_PATH" "$1" <<'PYEOF' 2>/dev/null || true
+    "$PY_SYS" - "${BRAIN_READ:-$DB_PATH}" "$1" <<'PYEOF' 2>/dev/null || true
 import os, sqlite3, sys, urllib.request
 db, tier = sys.argv[1], sys.argv[2]
 if os.path.exists(os.path.join(os.path.dirname(os.path.realpath(os.path.abspath(db))), "embedder.lock.json")):
     print("yes"); sys.exit(0)
 table = {"qwen": "memory_embeddings_v3", "jina": "memory_embeddings_v2", "nomic": "memory_embeddings"}[tier]
 try:
-    c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db)), uri=True)
+    c = sqlite3.connect("file:%s?mode=ro%s" % (urllib.request.pathname2url(os.path.abspath(db)), os.environ.get("BRAIN_READ_Q", "")), uri=True)
     print("yes" if c.execute("SELECT 1 FROM %s_rowids LIMIT 1" % table).fetchone() else "no")
 except Exception:
     print("no")
@@ -1228,7 +1250,7 @@ PYEOF
 # vector (an install that stopped at Tier 0). Anything an owner has written is an existing brain. Read before anything
 # in this run writes to it.
 hd_brain_is_new() {
-    "$PY_SYS" -B "${PKG_ROOT}/install/brain_is_new.py" "$DB_PATH" 2>/dev/null || echo no
+    "$PY_SYS" -B "${PKG_ROOT}/install/brain_is_new.py" "${BRAIN_READ:-$DB_PATH}" 2>/dev/null || echo no
 }
 
 # ----------------------------------------------------------------------------
@@ -1253,7 +1275,7 @@ resolve_embed_model() {
     # THE BRAIN IS READ FIRST. A brain that already embeds under a tier keeps it: neither a shell variable nor a device
     # flag moves it, because moving it means re-embedding every memory, and `voidloom tier set` is the one verb that does.
     local m="" want=""
-    [ -f "$DB_PATH" ] && m="$(hd_embed_model_from_db)"
+    [ -f "${BRAIN_READ:-$DB_PATH}" ] && m="$(hd_embed_model_from_db)"
     if [ -n "${WIZARD_EMBED_MODEL:-}" ]; then want="$WIZARD_EMBED_MODEL"; elif [ "$FORCE_CPU" -eq 1 ]; then want="nomic"; fi
     case "$m" in
         LOCK_MALFORMED) echo "$m"; return ;;
@@ -1312,7 +1334,7 @@ if [ -z "$_tier_row" ]; then
     # An unknown model is REFUSED BY NAME (owner decision D2), never swapped for the CPU tier: installing a
     # tier the operator did not ask for and reporting success is the "success that changes the wrong thing".
     if [ "$EMBED_MODEL" = "LOCK_MALFORMED" ]; then
-        echo "[install] REFUSED: the install lock beside ${DB_PATH} (embedder.lock.json) is unreadable or names a tier this package does not ship. Nothing was touched. Restore it from a backup, or move it aside and re-run this installer, which writes it again from the tier the brain declares: mv '$(dirname "$(readlink -f "$DB_PATH")")/embedder.lock.json' '$(dirname "$(readlink -f "$DB_PATH")")/embedder.lock.json.malformed'" >&2
+        echo "[install] REFUSED: the install lock beside ${DB_PATH} (embedder.lock.json) is unreadable or names a tier this package does not ship. Nothing was touched. Restore it from a backup, or move it aside and re-run this installer without --tier0-only, which writes it again from the tier the brain declares: mv '$(dirname "$(real_path "$DB_PATH")")/embedder.lock.json' '$(dirname "$(real_path "$DB_PATH")")/embedder.lock.json.malformed'" >&2
     else
         echo "[install] REFUSED: unknown embedding model '${EMBED_MODEL}' (WIZARD_EMBED_MODEL). This engine's tiers are: $(printf '%s\n' "$ENGINE_REGISTRY" | cut -f1 | tr '\n' ' ')-- nothing was touched." >&2
     fi
@@ -2456,7 +2478,7 @@ build_env_block() {   # prints the managed block this run writes (write_env_file
         # guessing a location.
         local nodedir=""
         if command -v node >/dev/null 2>&1; then
-            nodedir="$(dirname "$(readlink -f "$(command -v node)")")"
+            nodedir="$(dirname "$(real_path "$(command -v node)")")"
         fi
         # SYSTEMD CANNOT READ `export KEY=value`, AND DROPS IT SILENTLY.
         # MEASURED on this host with a throwaway unit: an EnvironmentFile line
@@ -2499,7 +2521,7 @@ build_env_block() {   # prints the managed block this run writes (write_env_file
         # unit's did not -- so every dream-daytime run said "no GPUs visible -> cloud-claude-p".
         local smidir=""
         if [ -n "$NVSMI" ]; then
-            smidir="$(dirname "$(readlink -f "$NVSMI" 2>/dev/null || printf '%s' "$NVSMI")")"
+            smidir="$(dirname "$(real_path "$NVSMI" 2>/dev/null || printf '%s' "$NVSMI")")"
             case ":${sysdirs}:${pydir}:${nodedir}:" in *":${smidir}:"*) smidir="" ;; esac
         fi
         local _p="${LOCAL_BIN}:${pydir}"
@@ -2956,7 +2978,7 @@ write_install_record() {
     local _tmp="${INSTALL_RECORD}.tmp.$$"
     REC_WRITTEN_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" REC_SHAPE_V="$SHAPE" REC_PY="$PY_SYS" \
     REC_VENV_PY="$([ "$SHAPE" = "venv" ] && [ "${TIER1_OK:-0}" -eq 1 ] && [ -x "${BRAIN_DIR}/venv/bin/python3" ] && echo "${BRAIN_DIR}/venv/bin/python3")" \
-    REC_PKG_ROOT="$PKG_ROOT" REC_DB="$DB_PATH" REC_MODEL="$EMBED_MODEL" REC_DIM="$EMBED_DIM" \
+    REC_PKG_ROOT="$PKG_ROOT" REC_DB="$( { [ -L "$DB_PATH" ] && real_path "$DB_PATH"; } || printf '%s' "$DB_PATH")" REC_ATTACHED="$( { [ -n "$ATTACH_DB" ] || [ -L "$DB_PATH" ]; } && echo 1 || echo 0)" REC_MODEL="$EMBED_MODEL" REC_DIM="$EMBED_DIM" \
     REC_PIN="${AMBIENT_PIN:-${GPU_DEVICE:-}}" REC_PIN_SOURCE="${AMBIENT_PIN_SOURCE:-${_gpu_resolved#*|}}" REC_SHELL_PINS="${SHELL_PIN_VARS}" REC_STEPS="$STEPS_RUN" REC_PROBES="$AMBIENT_PROBES" \
     REC_TIER1="$([ "${TIER1_OK:-0}" -eq 1 ] && echo active || echo not-completed)" \
     REC_PREIMAGE="${UPGRADE_PREIMAGE:-${ATTACH_PREIMAGE:-}}" REC_PROBE_DIR="${PROBE_TMP:-}" \
@@ -2979,6 +3001,7 @@ try:
 except OSError:
     rec["lay_manifest_sha256"] = ""
 rec["db"] = e("REC_DB")
+rec["attached"] = e("REC_ATTACHED")
 try:
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(e("REC_DB"))), uri=True)
     sys.path.insert(0, os.path.join(pkg, "organs"))
@@ -3355,7 +3378,7 @@ else
         fi
         # The engine finds its brain beside its own organs: a link there is what makes every organ and every job act on
         # the attached file. The lock is read through it, so it lands beside the attached file.
-        if [ "$(readlink -f "${BRAIN_DIR}/claude_memory.db" 2>/dev/null)" != "$(readlink -f "$DB_PATH")" ]; then
+        if [ "$(real_path "${BRAIN_DIR}/claude_memory.db")" != "$(real_path "$DB_PATH")" ]; then
             [ -e "${BRAIN_DIR}/claude_memory.db" ] && die "${BRAIN_DIR}/claude_memory.db already exists and is not the attached brain ${DB_PATH}. Move it aside, then re-run."
             ln -sf "$DB_PATH" "${BRAIN_DIR}/claude_memory.db" || die "could not link ${BRAIN_DIR}/claude_memory.db to the attached brain."
         fi
@@ -3799,7 +3822,7 @@ HINT
   ----------------------------------------------------------------
   Tier 0 is ACTIVE — your brain answers keyword recall now.
   The optional SEMANTIC upgrade (Tier 1, ${EMBED_MODEL}-${EMBED_DIM}) was not completed:
-    reason: ${1:-unknown}
+    reason: ${1:-unknown}$(case "${1:-}" in *MODELS_ABSENT*) [ -f "$(dirname "$(real_path "$DB_PATH")")/embedder.lock.json" ] && printf '\n  This brain is locked to that model: until it is here a store refuses, and recall answers by keyword.' ;; esac)
   To add semantic recall later, $(case "${1:-}" in *MODELS_ABSENT*) echo "with the network up, re-run:" ;; *) echo "install Python >= 3.10, then re-run:" ;; esac)
     bash $(basename "${BASH_SOURCE[0]}")
   or build the venv by hand:
@@ -4089,6 +4112,19 @@ print(d.get("line") or d.get("error") or "")' 2>/dev/null)"
     return 0
 }
 
+# hd_lost_lock -- the way out, when this brain's records say a lock was written and the file is not here; else nothing.
+hd_lost_lock() {
+    "$PY_SYS" -B - "${BRAIN_DIR}/organs" "$DB_PATH" <<'PYEOF' 2>/dev/null || true
+import sys
+sys.path.insert(0, sys.argv[1])
+import embedder_lock as el
+try:
+    el.read_lock(el.lock_path_for(sys.argv[2]), brain=sys.argv[2])
+except el.EmbedderLockError as e:
+    if e.code == "LOCK_MISSING" and e.detail.get("was_locked"):
+        print((e.detail.get("retry") or ["claude_memory.py init --tier <cpu or gpu>"])[0])
+PYEOF
+}
 hd_t1_verify() {   # bash 3.2 (macOS /bin/bash) cannot parse a heredoc inside $( ): the command and its heredoc live here, called as $(hd_t1_verify) (round 2, B2)
     WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" \
         WIZARD_LIBRARY_HOME="$BRAIN_DIR" BRAIN_DIR="$BRAIN_DIR" ORGANS_DIR="${PKG_ROOT}/organs" "$VENV_PY" - <<'T1_VERIFY_PY'
@@ -4152,11 +4188,14 @@ if not tab:
 if cov_refusal:
     print(f"  Tier 1 NOT VERIFIED: the reader refuses this brain ({cov_refusal}): {vectors} vectors carry the lock's "
           f"stamp and {outside} in {tab} do not.", file=sys.stderr)
+    if vectors == 0 and legacy == 0 and outside == 0:
+        print("EMBED_OWED")
     sys.exit(1)
 if vectors == 0 and legacy == 0:
     print(f"  Tier 1 NOT VERIFIED: active embedding table {tab} holds 0 vectors -- "
           f"semantic recall cannot return anything the keyword arm would not.",
           file=sys.stderr)
+    print("EMBED_OWED")
     sys.exit(1)
 
 # Through the facade, with THIS interpreter -- the one the launcher runs on an install
@@ -4184,7 +4223,7 @@ if data.get("status") != "ok" or n == 0:
     sys.exit(1)
 if tier != 1 or data.get("degraded"):
     deg = data.get("degraded")
-    why = deg.get("tier1_error") if isinstance(deg, dict) else None
+    why = (deg.get("tier1_error") or deg.get("reason")) if isinstance(deg, dict) else None
     print(f"  Tier 1 NOT VERIFIED: recall answered at tier {tier} (mode {data.get('mode')})"
           f"{': ' + str(why) if why else ''}.", file=sys.stderr)
     sys.exit(1)
@@ -4248,6 +4287,7 @@ elif [ -n "$ACCEL_REFUSAL" ]; then
 elif [ "$DRY_RUN" -eq 1 ]; then
     if [ "$PRECACHE_FALLBACK" = "1" ]; then _rr_dry=" + ${RERANKER_FALLBACK_REPO}"; else _rr_dry=""; fi
     say "  DRY: would build venv, install torch (${ACCEL_SPEC}) from $([ -n "$ACCEL_INDEX" ] && echo "${ACCEL_INDEX}" || echo "PyPI") for ${ACCEL_BACKEND}, then pip install the version-pinned stack,"
+    [ "$BRAIN_IS_NEW" = "yes" ] || say "  DRY: this brain already holds memories of its own, so nothing in it would be embedded here"
     if [ "$ACCEL_RERANK" = "1" ]; then
         say "       pre-cache ${EMBED_REPO} + ${RERANKER_REPO}${_rr_dry} (backend ${RERANKER_BACKEND}; the reranker gate is ON: ${ACCEL_RERANK_WHY}),"
     else
@@ -4287,9 +4327,10 @@ else
         # reported "pip install of the semantic stack failed": a false failure about a path, not about pip
         if [ -f "$REQ_FILE" ]; then PIP_ARGS=(-r "$REQ_FILE"); else PIP_ARGS=(sentence-transformers sqlite_vec einops); fi
         say "  $(pip_expect_line)"
-        if "$VENV_PY" -m pip install --upgrade pip >/dev/null 2>&1 \
+        : > "${VENV_DIR}/pip-install.err"       # a reason from an earlier run is not this run's reason
+        if "$VENV_PY" -m pip install --upgrade pip >/dev/null 2>>"${VENV_DIR}/pip-install.err" \
            && torch_into_venv \
-           && "$VENV_PY" -m pip install "${PIP_ARGS[@]}" >/dev/null 2>"${VENV_DIR}/pip-install.err"; then
+           && "$VENV_PY" -m pip install "${PIP_ARGS[@]}" >/dev/null 2>>"${VENV_DIR}/pip-install.err"; then
             say "  semantic stack installed (sentence-transformers + sqlite_vec + einops)"
             case "$ACCEL_BUILD" in
                 cpu|rocm|xpu)
@@ -4332,9 +4373,9 @@ GATE
             # sqlite_vec the brain was built by schema_migrator and has NO
             # embedder.lock.json, and the pre-cache below fetches exactly the bytes the
             # lock names. init is idempotent: on a locked brain it never re-points the
-            # lock, and a tier the shipped catalogue does not carry (jina, a personal
-            # install) gets no lock -- the pre-cache then keeps its by-name path.
-            LOCK_DIR="$(dirname "$(readlink -f "$DB_PATH" 2>/dev/null || printf '%s' "$DB_PATH")")"
+            # lock, and a brain with no lock on a tier the catalogue does not ship (jina,
+            # a personal install) is fetched at the engine's pin.
+            LOCK_DIR="$(dirname "$(real_path "$DB_PATH" 2>/dev/null || printf '%s' "$DB_PATH")")"
             if [ ! -f "${LOCK_DIR}/embedder.lock.json" ]; then
                 say "  no install lock beside the brain; running init under the venv to write it..."
                 _init_log="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/tmp.voidloom_init.$$")"
@@ -4343,7 +4384,7 @@ GATE
                     if [ -f "${LOCK_DIR}/embedder.lock.json" ]; then
                         say "  install lock written: ${LOCK_DIR}/embedder.lock.json"
                     else
-                        say "  no install lock for the ${EMBED_MODEL} tier (the shipped catalogue does not carry it); the pre-cache fetches it by name."
+                        say "  no install lock for the ${EMBED_MODEL} tier (the shipped catalogue does not carry it); the pre-cache fetches it at the engine's pin."
                     fi
                 else
                     _init_cause="$(grep -v '^[[:space:]]*$' "$_init_log" | tail -n 1 | cut -c1-300)"
@@ -4414,15 +4455,15 @@ try:
     # THE LOCK, not a repo name: `init` (above) wrote <brain-dir>/embedder.lock.json;
     # fetch EXACTLY the bytes it names -- the model at lock.revision and its
     # remote-code repository at lock.code.revision -- checksum both against
-    # lock.weights_hash, and instantiate nothing. A brain with no lock (a tier the
-    # catalogue does not ship) keeps the by-name load.
+    # lock.weights_hash, and instantiate nothing. A brain with no lock on a tier the
+    # catalogue does not ship is fetched at the engine's pin.
     try:
         _lock = embedder_lock.resolve(os.environ["WIZARD_LIBRARY_DB"])
     except embedder_lock.EmbedderLockError as _e:
         if _e.code != "LOCK_MISSING":
             raise
         _lock = None
-    if _lock is None:           # a shipped tier still fetches by its pin; only a tier with none loads by name below
+    if _lock is None:           # a shipped tier still fetches by its pin; only a tier with none takes the engine's below
         import embedding_upgrade
         try:
             _lock = embedding_upgrade.brain_lock(os.environ["WIZARD_LIBRARY_DB"], tier=os.environ.get("WIZARD_EMBED_MODEL", ""))
@@ -4439,6 +4480,9 @@ try:
               + " (embedder; weights " + _computed[:12] + " == lock; " + format(_bytes_of(str(_snap)), ",") + " bytes)")
     else:
         import embedding_upgrade
+        if os.environ["EMBED_REPO"] != embedding_upgrade.JINA_MODEL_NAME:
+            raise RuntimeError("no install lock beside this brain, and %s has no pin to fetch at: `init` did not "
+                               "finish, so nothing is fetched" % os.environ["EMBED_REPO"])
         print("  cached " + os.environ["EMBED_REPO"] + "@" + embedding_upgrade.fetch_jina_at_pin()[:12]
               + " (embedder; the pin the engine loads, and no install lock for this tier)")
     # THE RERANKER, BY ITS PIN: the catalogue's `rerankers` entry names the
@@ -4663,7 +4707,9 @@ try:
 except Exception:
     print("")' 2>/dev/null)"
                 T1_WHY="semantic recall verification did not return ok"
-                if [ "$BRAIN_IS_NEW" != "yes" ] && [ -n "$T1_OWED" ]; then
+                # The gate says EMBED_OWED when the search has no vector to read. Any other failure is its own, printed
+                # above, whatever else is outstanding.
+                if [ "${T1_VERIFY_LINE:-}" = "EMBED_OWED" ] && [ "$BRAIN_IS_NEW" != "yes" ] && [ -n "$T1_OWED" ]; then
                     T1_EMBED_COMMAND="${T1_OWED#*$'\t'}"
                     T1_WHY="${T1_OWED%%$'\t'*} live memories have no vector, and an upgrade embeds nothing unasked (EMBED_OWED)"
                 fi
@@ -5041,6 +5087,10 @@ fi
 # FINAL — SUMMARY (install != onboard)
 # ----------------------------------------------------------------------------
 step "DONE"
+if [ "$TIER0_ONLY" -eq 1 ] && [ "$DRY_RUN" -ne 1 ]; then
+    _lost_fix="$(hd_lost_lock)"
+    [ -z "$_lost_fix" ] || warn "this brain was locked and its lock is not beside it, so \`voidloom doctor\` calls it unhealthy and a store refuses. A --tier0-only run does not write it: re-run this installer without --tier0-only, or run: ${_lost_fix}"
+fi
 say "Tier 0 (keyword recall over the brain):  $([ "$TIER0_OK" -eq 1 ] && echo 'ACTIVE' || echo 'CHECK ABOVE')"
 say "Tier 1 (${EMBED_MODEL}-${EMBED_DIM} SEMANTIC recall): $([ "${TIER1_OK:-0}" -eq 1 ] && echo 'ACTIVE' || echo 'not completed (Tier 0 still works; see hints above)')$([ "$SHAPE" = "ambient" ] && echo " -- ambient, through ${PY_SYS}")"
 [ -L "${LOCAL_BIN}/voidloom" ] && say "voidloom CLI:                            on PATH (${LOCAL_BIN}/voidloom) ✓"

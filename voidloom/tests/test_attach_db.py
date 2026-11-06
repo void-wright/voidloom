@@ -186,6 +186,127 @@ class TestAttachDb(unittest.TestCase):
         held = self._attached()
         self.assert_still_attached(self._run("--tier0-only"), held)
 
+    def test_saboteur_two_re_runs_then_a_missing_brain_still_stop_the_run(self):
+        """The first re-run used to rewrite the record to the link's own path, and the second then built a blank brain."""
+        held = self._attached()
+        here = self.home / ".claude" / "memory" / "claude_memory.db"
+        for _ in range(2):
+            self.assert_still_attached(self._run("--tier0-only"), held)
+            rec = (self.home / ".claude" / "memory" / "INSTALL_RECORD").read_text(encoding="utf-8")
+            self.assertIn("db=%s\n" % os.path.realpath(str(self.brain)), rec)
+            self.assertIn("attached=1\n", rec)
+        self.brain.rename(self.brain.with_suffix(".moved"))
+        p = self._run("--tier0-only")
+        self.assertEqual(p.returncode, 2, (p.stdout + p.stderr)[-2000:])
+        self.assertIn("is not there", p.stdout + p.stderr)
+        self.assertTrue(here.is_symlink(), "a regular file was built where the link was")
+        self.assertFalse(here.exists(), "nothing was built behind the link")
+
+    def snapshot(self, *, memories=0, table=None, lock_row=None):
+        snap = self.tmp / "snapshot.db"
+        shutil.copyfile(str(BLANK), str(snap))
+        c = sqlite3.connect(str(snap))
+        for i in range(memories):
+            c.execute("INSERT INTO memories (content, summary, category, importance) VALUES (?, 's', 'insight', 0.5)", ("own note %d" % i,))
+        if table:
+            c.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES ('active_embedding_table', ?)", (table,))
+        if lock_row:
+            c.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES ('embedder_lock_written', ?)", (lock_row,))
+        c.commit(); c.close()
+        return snap
+
+    def test_saboteur_a_snapshot_with_memories_of_its_own_reads_as_an_existing_brain(self):
+        p = self._run("--dry-run", "--brain-db", str(self.snapshot(memories=2)))
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+        self.assertIn("nothing in it would be embedded", p.stdout)
+
+    def test_control_a_snapshot_of_the_seed_alone_stays_new(self):
+        p = self._run("--dry-run", "--brain-db", str(self.snapshot()))
+        self.assertNotIn("nothing in it would be embedded", p.stdout)
+
+    def test_saboteur_a_snapshot_keeps_its_own_tier(self):
+        snap = self.snapshot(memories=2, table="memory_embeddings_v2")
+        c = sqlite3.connect(str(snap))
+        c.execute("CREATE TABLE IF NOT EXISTS memory_embeddings_v2_rowids (rowid INTEGER PRIMARY KEY)")
+        c.execute("INSERT INTO memory_embeddings_v2_rowids (rowid) VALUES (1)")
+        c.commit(); c.close()
+        self.env.pop("WIZARD_EMBED_MODEL")
+        p = self._run("--dry-run", "--brain-db", str(snap))
+        self.assertEqual(p.returncode, 2, (p.stdout + p.stderr)[-2000:])
+        self.assertIn("this brain embeds under jina, and --force-cpu does not change", p.stdout + p.stderr)
+
+    def test_saboteur_reading_a_snapshot_leaves_nothing_beside_it(self):
+        snap = self.snapshot(memories=1)
+        c = sqlite3.connect(str(snap)); c.execute("PRAGMA journal_mode=WAL"); c.commit(); c.close()
+        self.assertEqual(self._run("--dry-run", "--brain-db", str(snap)).returncode, 0)
+        self.assertEqual(sorted(p.name for p in self.tmp.iterdir() if p.name.startswith("snapshot")), ["snapshot.db"])
+
+    def test_saboteur_a_tier0_run_over_a_locked_brain_says_doctor_will_not_be_healthy(self):
+        p = self._run("--tier0-only", "--brain-db", str(self.snapshot(memories=2, lock_row="cpu")))
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+        self.assertIn("this brain was locked and its lock is not beside it", p.stdout + p.stderr)
+        self.assertIn("init --tier cpu", p.stdout + p.stderr)
+
+    def test_control_a_tier0_run_on_a_brain_never_locked_says_nothing(self):
+        p = self._run("--tier0-only", "--brain-db", str(self.snapshot(memories=2)))
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+        self.assertNotIn("its lock is not beside it", p.stdout + p.stderr)
+
+    def test_saboteur_a_record_that_names_the_link_itself_still_stops_the_run(self):
+        """What an earlier re-run left behind: the record names the link, so only the link can say the brain is gone."""
+        self._attached()
+        here = self.home / ".claude" / "memory"
+        rec = here / "INSTALL_RECORD"
+        text = re.sub(r"^attached=.*\n", "", rec.read_text(encoding="utf-8"), flags=re.M)
+        rec.write_text(re.sub(r"^db=.*$", "db=%s" % (here / "claude_memory.db"), text, flags=re.M), encoding="utf-8")
+        self.brain.rename(self.brain.with_suffix(".moved"))
+        p = self._run("--tier0-only")
+        self.assertEqual(p.returncode, 2, (p.stdout + p.stderr)[-2000:])
+        self.assertIn("is not there", p.stdout + p.stderr)
+        self.assertTrue((here / "claude_memory.db").is_symlink(), "a regular file was built where the link was")
+
+    def test_control_a_folder_copied_to_a_new_home_is_not_called_attached(self):
+        p = self._run("--tier0-only", "--init-blank")
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+        old = self.home / ".claude"
+        self.assertIn("attached=0\n", (old / "memory" / "INSTALL_RECORD").read_text(encoding="utf-8"))
+        moved = self.tmp / "newhome"
+        moved.mkdir()
+        shutil.copytree(str(old), str(moved / ".claude"), symlinks=True)
+        self.env.update(HOME=str(moved), WIZARD_CLAUDE_HOME=str(moved / ".claude"),
+                        WIZARD_ENV_FILE=str(moved / ".voidloom" / "wizard-library-env"), TMPDIR=str(moved))
+        p = self._run("--tier0-only")
+        self.assertNotIn("keeping the attached brain", p.stdout + p.stderr)
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+
+    def test_saboteur_a_record_older_than_the_key_with_no_brain_here_is_attached(self):
+        held = self._attached()
+        here = self.home / ".claude" / "memory"
+        rec = here / "INSTALL_RECORD"
+        rec.write_text(re.sub(r"^attached=.*\n", "", rec.read_text(encoding="utf-8"), flags=re.M), encoding="utf-8")
+        (here / "claude_memory.db").unlink()
+        p = self._run("--tier0-only")
+        self.assertIn("keeping the attached brain", p.stdout + p.stderr)
+        self.assert_still_attached(p, held)
+
+    def test_saboteur_no_install_step_needs_readlink_f(self):
+        """Absent before macOS 12.3: the keep-attached branch compared two empty strings there and skipped itself."""
+        stub = self.tmp / "bin"
+        stub.mkdir()
+        (stub / "readlink").write_text('#!/bin/sh\ncase "$1" in -f) echo "readlink: illegal option -- f" >&2; exit 1 ;; esac\n'
+                                       'exec /usr/bin/readlink "$@"\n')
+        (stub / "readlink").chmod(0o755)
+        held = self._attached()
+        self.env["PATH"] = str(stub) + os.pathsep + self.env["PATH"]
+        (self.home / ".claude" / "memory" / "claude_memory.db").unlink()
+        p = self._run("--tier0-only")
+        self.assertIn("keeping the attached brain", p.stdout + p.stderr)
+        self.assert_still_attached(p, held)
+        p = subprocess.run(["bash", str(ROOT / "uninstall.sh"), "--yes", "--remove-brain"], capture_output=True, text=True,
+                           env={**self.env, "VOIDLOOM_CONFIRM_REMOVE_BRAIN": "delete my memories"}, timeout=300)
+        self.assertEqual(p.returncode, 0, (p.stdout + p.stderr)[-2000:])
+        self.assertIn("KEPT     %s" % os.path.realpath(str(self.brain)), p.stdout)
+
     def test_saboteur_a_record_with_no_link_keeps_the_attached_brain(self):
         """The shape a v1.0 attached install leaves: the record names the brain, and nothing lies beside the organs."""
         held = self._attached()

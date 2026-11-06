@@ -43,26 +43,38 @@ All notable changes to Voidloom are recorded here. The format follows
 - **`doctor` reads the brain as recall does:** the lock's model absent from this disk, a lockless brain's own
   model absent while it holds vectors, a dropped keyword index and a metadata table nothing builds all read
   unhealthy, each with the fault named.
-- **A plain re-run of an attached install keeps its brain.** Before, it built a blank brain in a new file and
-  pointed everything at it. An attached file that is missing stops the run; nothing is built in its place.
+- **A plain re-run of an attached install keeps its brain, on every re-run.** Before, it built a blank brain in a new
+  file and pointed everything at it. An attached file that is missing stops the run, however many runs have passed
+  since the attach; nothing is built in its place. The record says `attached=1` and names the file itself, so a folder
+  copied to a new home is not taken for an attached one.
 - **Windows:** a fresh install completes (`Copy-Item` now lays folders), the semantic stack comes from
   `install\requirements.txt`, the cause of a refused embedding is printed, a failed run keeps its venv, a machine
   whose reranker gate is off fetches no reranker, models download one file at a time so a missing symlink privilege
-  cannot lose one, and every printed repair command is a PowerShell command.
-- **`maintain` recomputes a similarity link stamped under another model** when it compares the pair. A link it
-  does not revisit keeps its old strength, and `status` counts it.
+  cannot lose one, a brain on another tier keeps it instead of stopping the install, a re-run updates the `voidloom`
+  CLI, and every printed repair command runs in PowerShell as printed.
+- **`maintain` recomputes a similarity link stamped under another model** when it compares the pair, however far apart
+  the pair now reads and whichever way round the link was stored. A pair it cannot compare keeps its old strength, and
+  `status` counts it.
 - `model_fetch.py` fetches a jina brain's model at the revision the engine pins, and the installers do the same instead
   of loading it by name, so the printed fix works there and the hub's moving `main` is never what runs. Its remote code
   asks for its adapters with no revision, so the fetch also leaves a `refs/main` naming the pin when none is there.
-- **`doctor` exits 4 on an unhealthy brain.** `status` stays 0.
+- **`doctor` exits 4 on an unhealthy brain.** `status` stays 0. Its reason carries the refusal's way out, and a model
+  folder an interrupted download left no longer reads as a model.
+- **A degraded answer says so where a person reads it.** `recall`, `batch-recall` (per item), `status`, `stats` and
+  `anticipate` carry a top-level `degraded` block beside `coverage`, and the human output prints the banner. A failed
+  `batch-recall` item carries its typed `code` and `coverage` beside its message, and prints them.
+- **`--brain-db` embeds nothing unasked,** as a plain re-run does not: a snapshot with memories of its own reads as an
+  existing brain before it is copied, and keeps its own tier.
+- **Running an install twice leaves the brain byte-identical.** The lock's row in `metadata` is written only when its
+  value changes, and `init` on a brain with no memory keeps no `.pre-hybrid-retrieval.bak`.
 - **`--dry-run` on every armed unit:** it reads what the unit would work over, prints it and writes nothing.
 - **`voidloom tier set <nomic|qwen>`** moves a brain to another embedding model by re-embedding
   every memory under it while the old model keeps serving recall. It switches only when every
   memory has a vector under the new model, replacing the lock in one step and writing a
   receipt to `embedder.lock.history.jsonl`. `--plan` counts the work first and changes nothing.
   The old vectors are kept. **To roll back,** run `voidloom tier rollback`: it restores the
-  previous lock and table and reports how many memories written after the switch have no
-  vector there. When the old tier is shipped, `voidloom tier set <old tier>` fills that gap,
+  previous lock and table and reports how many memories have no vector there, whenever they
+  were written. When the old tier is shipped, `voidloom tier set <old tier>` fills that gap,
   reusing every vector already present; for a jina brain the rollback is the only way back.
   `voidloom tier cleanup --confirm <old table>` deletes the old vectors, writes its own receipt,
   and ends the rollback. A late write during the switch is embedded inside it, at most 32
@@ -218,7 +230,9 @@ All notable changes to Voidloom are recorded here. The format follows
   and no content, and says `compacted` and `wal_emptied`: another process on the brain can block
   either, and it says why. **What it does not reach:** a separate memory holding the same text is
   counted in `other_memories_sharing_text` and left alone, and rows unrelated to the deleted memory then
-  keep their copies too, because the text is not its alone (`unrelated_rows_left_as_shared_text`); a near
+  keep their copies of that text and only that text, because it is not the memory's alone
+  (`unrelated_rows_left_as_shared_text`): a summary two memories share does not protect the content only one
+  of them held; a near
   copy in an unrelated row, one character off, stays; words a model reworded are not a copy it can see; a consolidated memory's vector still averages the deleted one until its next rebuild; a vector
   replaced before this version may have left its old bytes in the table's storage; and copies are yours
   to handle: the receipt names any beside the brain in `other_copies_not_reached`. A hard delete under
@@ -234,9 +248,9 @@ All notable changes to Voidloom are recorded here. The format follows
   `LOCK_MALFORMED` instead of reading as absent.
 - **Only an install, `tier set` and `re-embed` reach the network for a model.** A recall or a store
   on a machine without the model's files used to download them at the pin. Encoding now runs with the
-  hub closed: a recall refuses `SNAPSHOT_ABSENT` with the command that fetches them, and the front door
-  answers by keyword and says why; a store on a locked brain refuses the same way, and stores nothing
-  it could not find again. An interrupted download counts as absent, not as a changed file, and the
+  hub closed: a recall answers by keyword, flagged `degraded` with `SNAPSHOT_ABSENT`, on the engine and the
+  front door alike, and `--vector-only` refuses with the command that fetches them; a store on a locked brain
+  refuses the same way, and stores nothing it could not find again. An interrupted download counts as absent, not as a changed file, and the
   same fetch completes it; `doctor` reads it as a fault. Recall no longer fetches a reranker either,
   and a recall with none says so in `coverage.reranker`.
 - **A recall's side channels read only the search set.** A dream or playbook row whose vector carries
@@ -305,9 +319,11 @@ All notable changes to Voidloom are recorded here. The format follows
   `search_rule`, `matched` of `total` active memories and, on a locked brain,
   `legacy_unverified`), plus `vector_arm` (`ran`, `refused`, `off` or `empty`) and `degraded`. It
   is on the `recall` envelope, on each `batch-recall` record (an empty one too) and on
-  `anticipate`. When the vector arm cannot run (the lock cannot be read, its table is gone, or
-  nothing in it can be searched), recall answers from keywords with `degraded: true` and the
-  refusal's code instead of failing or looking normal. In Python, `recall_hybrid_with_coverage`
+  `anticipate`. When the vector arm cannot run because its table is gone, or the brain holds no
+  vector yet, recall answers from keywords with `degraded: true` and the refusal's code instead of
+  failing or looking normal. A lock that cannot be read, that no row answers to or that names a
+  checksum the package does not ship is a refusal: typed, with its coverage and the way out, and
+  no keyword answer. In Python, `recall_hybrid_with_coverage`
   returns `(rows, coverage)`; `recall_hybrid` still returns the rows, each carrying `coverage`.
 - The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned
   HuggingFace commit, as nomic and jina already did. Results no longer depend on when the

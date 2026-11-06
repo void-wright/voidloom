@@ -51,6 +51,14 @@ import sys
 from pathlib import Path
 
 
+class _TierUnread(Exception):
+    """`tier_set`'s own typed refusal, passed through: it is not a lock refusal, so it is not one of the lock's codes."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
 def _lock_for(el, db: str) -> dict:
     """The brain's lock; for a brain that predates it, the shipped entry for the tier it embeds under."""
     try:
@@ -63,10 +71,11 @@ def _lock_for(el, db: str) -> dict:
     try:
         tier = tier_set._prelock_engine_tier(Path(db))
     except tier_set.TierRefused as e:
-        raise el.EmbedderLockError(e.code, e.message)
+        raise _TierUnread(e.code, e.message)
     if tier is None:
         raise el.EmbedderLockError("LOCK_NOT_SHIPPED", "this brain embeds under a tier the package catalogue does not "
-                                   "ship, so there is no pin to fetch at; its model is loaded by name")
+                                   "ship, so there is no catalogue pin to fetch at; the engine pins it in code",
+                                   engine_pin=True)
     return embedding_upgrade.brain_lock(db, tier=tier)
 
 
@@ -78,7 +87,7 @@ def _fetch_engine_pin(el, a, emit) -> int:
     doc = {"status": "ok", "action": "model-fetch", "model": model, "revision": revision,
            "basis": "the engine's pin: this tier is not in the catalogue, so its bytes are not checksummed",
            "hf_hub_cache": str(el.hf_hub_cache())}
-    present = el.snapshot_dir_for(model, revision) is not None
+    present = eu.jina_snapshot_whole()
     if a.plan:
         return emit({**doc, "mode": "plan", "present": present}, 0)
     if not present and (a.no_fetch or el.hf_offline()):
@@ -114,9 +123,11 @@ def main(argv=None) -> int:
     try:
         lock = _lock_for(el, a.db)
     except el.EmbedderLockError as e:
-        if e.code == "LOCK_NOT_SHIPPED" and "no pin to fetch" in str(e):
+        if e.detail.get("engine_pin"):
             return _fetch_engine_pin(el, a, emit)
         return emit({**e.as_dict(), "action": "model-fetch"}, 2)
+    except _TierUnread as e:
+        return emit({"status": "error", "error": e.code, "action": "model-fetch", "message": e.message}, 2)
     organs_dir = Path(__file__).resolve().parent
     gate_off = not _reranker_gate_on()
     if a.plan:

@@ -178,7 +178,8 @@ def _render_human(env: Dict[str, Any]) -> str:
                     return card
             except Exception:
                 pass
-        return f"[ok] {head} ({code})\n{_pretty(data)}"
+        _deg = _degrade_banner(data)
+        return f"[ok] {head} ({code})\n" + (f"{_deg}\n" if _deg else "") + _pretty(data)
     if status == STATUS_REFUSED:
         msg = data.get("message") if isinstance(data, dict) else data
         out = f"[refused:{code}] {head}\n  {msg}"
@@ -195,6 +196,13 @@ def _render_human(env: Dict[str, Any]) -> str:
                     + (f" ({_parts})" if _parts else "")
                     + (f" -- UNREAD: {', '.join(_un)}" if _un else ""))
         return out
+    if status == STATUS_INCOMPLETE:
+        # There is no one message: the answer is in the items, and each carries its own code and way out.
+        if code == "batch_recall_incomplete" and isinstance(data, dict):
+            card = _render_batch_recall_human(data, head)
+            if card is not None:
+                return f"[incomplete:{code}]" + card[len("[ok]"):]
+        return f"[incomplete:{code}] {head}\n{_pretty(data)}"
     msg = data.get("message") if isinstance(data, dict) else data
     out = f"[error:{code}] {head}\n  {msg}"
     # H7: a rich error carries a `detail.valid` enum (e.g. invalid_category lists
@@ -316,13 +324,23 @@ def _degrade_banner(data: Dict[str, Any]) -> Optional[str]:
     if not isinstance(data, dict):
         return None
     deg = data.get("degraded")
+    cov = data.get("coverage")
+    if not deg and isinstance(cov, dict) and cov.get("degraded") is True:
+        deg = {"reason": cov.get("refusal") or cov.get("error")}     # a flag left in the figures still reaches a person
     if not deg:
         return None
-    reason = (deg.get("reason") if isinstance(deg, dict) else None) or "Tier 1 unavailable"
-    means = (deg.get("means") if isinstance(deg, dict) else None) or ""
+    fix = deg.get("fix") if isinstance(deg, dict) else None
+    if isinstance(deg, dict):
+        reason, means = deg.get("reason") or "Tier 1 unavailable", deg.get("means") or ""
+    elif isinstance(deg, str):
+        reason, means = deg, data.get("degraded_detail") or ""
+    else:
+        gaps = data.get("schema_gaps")
+        reason, means = (f"this brain no longer holds {', '.join(gaps)}" if gaps else "Tier 1 unavailable"), ""
     eng = data.get("engine") or "tier-0 engine"
     return (f"  ⚠ DEGRADED — tier {data.get('tier', 0)} ({eng}): {reason}."
             + (f"\n     {means}" if means else "")
+            + (f"\n     Fix: {fix}" if fix else "")
             + "\n     (--json for the full degrade block)")
 
 
@@ -811,8 +829,9 @@ def _incomplete_model(models: Dict[str, Any]) -> Optional[str]:
 
 
 def _absent_model(models: Dict[str, Any], db: Optional[str], coherence: Dict[str, Any]) -> Optional[str]:
-    """The model this brain embeds under is not on this disk, so recall answers by keyword. A locked brain's store then
-    refuses; a brain with no lock stores keyword-only. A keyword-only brain, or one with no vector, needs no model."""
+    """The model this brain embeds under is not on this disk, so recall answers by keyword. A locked brain needs it
+    whatever it holds, because its store refuses without it, a first store included. A brain with no lock stores
+    keyword-only, so one holding no vector needs no model, and neither does a keyword-only install."""
     if coherence.get("tier0_only"):
         return None
     gone = [k for k, ok in (models.get("lock_snapshots") or {}).items() if not ok]
@@ -864,7 +883,9 @@ def _brain_fault(coherence: Dict[str, Any]) -> Optional[str]:
     """The one-line reason this brain is not sound, from its embedding check, or None. "Cannot tell" with nothing
     wrong named is not a fault: an empty table has no vector to measure, and that is not a defect."""
     if coherence.get("refusal"):
-        return f"embedder lock: {coherence['refusal'].get('error')}"
+        r = coherence["refusal"]
+        code, msg = str(r.get("error")), str(r.get("message") or "")
+        return f"embedder lock: {msg if msg.startswith(code) else f'{code}: {msg}' if msg else code}"
     if coherence.get("coverage_refusal"):
         return f"provenance reader: {coherence['coverage_refusal']}"
     if coherence.get("metadata_disagrees"):
@@ -950,7 +971,7 @@ def _render_batch_recall_human(data: Dict[str, Any], head: str) -> Optional[str]
             continue
         q = rec.get("query", "")
         if rec.get("status") == "error":
-            lines.append(f"  • {q!r}: error — {rec.get('message', 'failed')}")
+            lines.append(f"  • {q!r}: {rec.get('code') or 'error'} — {rec.get('message', 'failed')}")
             continue
         hits = rec.get("results")
         if not isinstance(hits, list):
@@ -958,6 +979,9 @@ def _render_batch_recall_human(data: Dict[str, Any], head: str) -> Optional[str]
             continue
         n = len(hits)
         lines.append(f"  • {q!r} — {n} match{'es' if n != 1 else ''}:")
+        _deg = _degrade_banner(rec)
+        if _deg:
+            lines.append(f"  {_deg}")
         for row in hits:
             lines.append(_render_memory_card(row, indent="    "))
         lines.extend(_render_channel_block(rec, indent="    "))
@@ -1958,8 +1982,10 @@ def verb_doctor(args) -> Dict[str, Any]:
         _reason = (_foreign_env_dir() or _incomplete_model(models) or _schema_gap(_db) or _brain_fault(_coh)
                    or _absent_model(models, _db, _coh))
         if not _reason and "peft" in (models.get("missing_modules") or []):
+            _organs_importable()
+            import embedder_lock
             _reason = (f"this brain's jina model needs peft, which {sys.executable} does not have: recall is answering "
-                       f"by keyword. Fix: {sys.executable} -m pip install peft")
+                       f"by keyword. Fix: {embedder_lock.shell_command(sys.executable, '-m', 'pip', 'install', 'peft')}")
     if _reason:
         brain_healthy = False
     # The ladder, read rather than printed. A platform that is NOT_INSTALLED is
@@ -2270,8 +2296,11 @@ def verb_status(args) -> Dict[str, Any]:
             seed = {"error": f"{type(e).__name__}: {e}"}
     finally:
         conn.close()
+    flag = memory_write.degrade_of(coverage, "the counts beside it are read straight from the brain; the search set "
+                                             "could not be built, so nothing here is covered by a search")
     return ok("status_ok", {"db_path": db, "lock": lock, "coverage": coverage, "derived_layer": derived,
-                            "seed": seed, "counts": counts, "line": derived.get("line"), "faults": _status_faults(db)},
+                            "seed": seed, "counts": counts, "line": derived.get("line"), "faults": _status_faults(db),
+                            **({"degraded": flag} if flag else {})},
               verb="status")
 
 
