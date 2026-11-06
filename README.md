@@ -426,8 +426,8 @@ keyword and say so, on the answer and as a banner. On a brain with an install lo
 `voidloom store` and the engine's `store` refuse and name the command that fetches it. A
 brain with no lock stores by keyword only through `voidloom` until the model is back.
 `claude_memory_lite.py` is the floor and keeps storing: Tier 0 cannot fail, so it writes
-the memory with no vector and a later embed picks it up. A lock that no row answers to, or
-that cannot be read, is a different case: recall refuses, typed, and prints the way out.
+the memory with no vector and a later embed picks it up. A lock that was lost, that no row
+answers to or that cannot be read is a different case: recall refuses, typed, and prints the way out.
 
 ---
 

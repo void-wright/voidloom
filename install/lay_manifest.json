@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "f4da277",
+  "derived_at_head": "699504d",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 511,
   "not_laid": {
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 37618,
+   "bytes": 37802,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "04fcf8107df26c9ee41261c451c2143f9b0ca9a35bad2c5cc7452774f54b705d",
+   "sha256": "3c2d395d6bc606875b25f0aee965470fc39fafe36f3c788e0652acecd640943b",
    "src": "CHANGELOG.md"
   },
   {
@@ -227,13 +227,13 @@
    "src": "NOTICE"
   },
   {
-   "bytes": 30786,
+   "bytes": 30799,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "716b82e0f9f7967bd8de936c1269faaf348c77a47590b9a45252715fc3c41c12",
+   "sha256": "a4f5c08ed5d40ef35f599b25a3996941c0f034307e39c087fab1af15ce2cd195",
    "src": "README.md"
   },
   {
@@ -1647,13 +1647,13 @@
    "src": "organs/calibration_memory.py"
   },
   {
-   "bytes": 222565,
+   "bytes": 223001,
    "component": "core",
    "dst": "organs/claude_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "0f88923a5c567050a6e0c588375ffd97b672cc5a6b81411d5caaa257d73d2c9a",
+   "sha256": "c870edca10ba19a9de81f0970fde2c8b4ea3aabc18dadff79c1eac2dba338928",
    "src": "organs/claude_memory.py"
   },
   {
@@ -2877,13 +2877,13 @@
    "src": "voidloom/_bootstrap.py"
   },
   {
-   "bytes": 42081,
+   "bytes": 42347,
    "component": "core",
    "dst": "voidloom/_facade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7ef0f9ef39ae829e74435da5324e24e5a1437bb9c064092516ef1b8fb2622a55",
+   "sha256": "5d86f3db5bef7de5bd3df54e18147601bc1653d19a8846d8caf52733cdb67fbc",
    "src": "voidloom/_facade.py"
   },
   {
@@ -4427,13 +4427,13 @@
    "src": "voidloom/tests/test_recall_topk_after_placement.py"
   },
   {
-   "bytes": 29520,
+   "bytes": 33432,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "1c401ec29c82d1c159085a2fce078734ffa31aafadcd140defd2cbf37265b557",
+   "sha256": "834121a28729f6e184e1ea49e300a1f4f4bb25a471c9593a058d6a6edf1f720f",
    "src": "voidloom/tests/test_refusals_name_the_way_out.py"
   },
   {

@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-06T03:50:27Z from the working tree whose HEAD was `f4da277`
+> Generated 2026-11-06T12:52:22Z from the working tree whose HEAD was `699504d`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,12 +14,12 @@
 |---|---|
 | files tracked | 511 |
 | files hashed | 511 |
-| total bytes | 11359211 |
+| total bytes | 11364022 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  78 files, 4822864 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  78 files, 4823300 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -33,7 +33,7 @@
 | `organs/belief_cli.py` | 19439 | `b9cd462cb7127977` |
 | `organs/belief_engine.py` | 74066 | `b312c857d174f333` |
 | `organs/calibration_memory.py` | 47193 | `00fea3a3d28f1ded` |
-| `organs/claude_memory.py` | 222565 | `0f88923a5c567050` |
+| `organs/claude_memory.py` | 223001 | `c870edca10ba19a9` |
 | `organs/claude_memory_lite.py` | 61203 | `b12cda4d85f420a1` |
 | `organs/cognitive_map.py` | 40561 | `33b52acc76aa6d9f` |
 | `organs/communities.py` | 46994 | `331522b97b374104` |
@@ -102,7 +102,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  237 files, 3424089 bytes
+### `voidloom` — The CLI facade  ·  237 files, 3428267 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -113,7 +113,7 @@
 | `voidloom/_approvals_faces.py` | 42385 | `ece04bc6d7c96606` |
 | `voidloom/_batch.py` | 14800 | `c8ed154e8a8fae1f` |
 | `voidloom/_bootstrap.py` | 22203 | `c0fb2cd4640595b7` |
-| `voidloom/_facade.py` | 42081 | `7ef0f9ef39ae829e` |
+| `voidloom/_facade.py` | 42347 | `5d86f3db5bef7de5` |
 | `voidloom/_guard.py` | 11713 | `11461a1e7bd1ef77` |
 | `voidloom/_paths.py` | 6956 | `5e32ae0a9515cb3c` |
 | `voidloom/cli.py` | 180753 | `5ab474c4892a664b` |
@@ -268,7 +268,7 @@
 | `voidloom/tests/test_readers_lock_first.py` | 8699 | `2c622570e4347fd4` |
 | `voidloom/tests/test_recall_carries_coverage.py` | 11053 | `24d4f4ba01deb761` |
 | `voidloom/tests/test_recall_topk_after_placement.py` | 3824 | `b697d7b65e0fd52a` |
-| `voidloom/tests/test_refusals_name_the_way_out.py` | 29520 | `1c401ec29c82d1c1` |
+| `voidloom/tests/test_refusals_name_the_way_out.py` | 33432 | `834121a28729f6e1` |
 | `voidloom/tests/test_release_check_reads_its_own_row.py` | 2414 | `8586fe740f8700fa` |
 | `voidloom/tests/test_release_gates_execute.py` | 3803 | `e8ae84f6b38ab25e` |
 | `voidloom/tests/test_reranker_gate.py` | 27921 | `77c41f4d1b428239` |
@@ -406,7 +406,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 140730 | `55fb1ad2409ba263` |
+| `install/lay_manifest.json` | 140730 | `be61638068cb3973` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -565,18 +565,18 @@
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 473518 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 473715 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 37618 | `04fcf8107df26c9e` |
+| `CHANGELOG.md` | 37802 | `3c2d395d6bc60687` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3050 | `fd1c349c71739b63` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
 | `NOTICE` | 4391 | `6608b4df230ab445` |
-| `README.md` | 30786 | `716b82e0f9f7967b` |
+| `README.md` | 30799 | `a4f5c08ed5d40ef3` |
 | `SECURITY.md` | 1930 | `384e3060f9d1866a` |
 | `install.sh` | 359474 | `1a1fe53ade42b381` |
 | `uninstall.sh` | 10531 | `2b6b2ab4e02a4c49` |

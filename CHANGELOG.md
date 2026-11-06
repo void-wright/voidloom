@@ -36,7 +36,8 @@ All notable changes to Voidloom are recorded here. The format follows
 - **Every repair command runs where it is printed:** absolute paths under the install's own interpreter.
 - **A lost lock is known only from what the lock left behind:** its receipt in `embedder.lock.history.jsonl`,
   and the row `embedder_lock_written` it writes into the brain's own `metadata`, so deleting both files is
-  still seen. A rollback to a brain with no lock clears that row. No record means no lock: a shipped checksum
+  still seen. On a brain that lost its lock, `recall` and `anticipate` refuse `LOCK_MISSING` with the way out, as a store
+  does; `claude_memory_lite.py` answers by keyword, flagged. A rollback to a brain with no lock clears that row. No record means no lock: a shipped checksum
   in a stamp proves nothing, because a `tier set` build, a website store and a plain store write them with no
   lock in sight, so a jina brain keeps serving through all three.
 - **A malformed lock prints its way out:** move it aside and write it again, under the tier the records name.
@@ -321,8 +322,8 @@ All notable changes to Voidloom are recorded here. The format follows
   is on the `recall` envelope, on each `batch-recall` record (an empty one too) and on
   `anticipate`. When the vector arm cannot run because its table is gone, or the brain holds no
   vector yet, recall answers from keywords with `degraded: true` and the refusal's code instead of
-  failing or looking normal. A lock that cannot be read, that no row answers to or that names a
-  checksum the package does not ship is a refusal: typed, with its coverage and the way out, and
+  failing or looking normal. A lock that was lost, that cannot be read, that no row answers to or
+  that names a checksum the package does not ship is a refusal: typed, with its coverage and the way out, and
   no keyword answer. In Python, `recall_hybrid_with_coverage`
   returns `(rows, coverage)`; `recall_hybrid` still returns the rows, each carrying `coverage`.
 - The GPU tier's two models, Qwen3-Embedding-0.6B and Qwen3-Reranker-0.6B, now load a pinned

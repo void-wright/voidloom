@@ -471,6 +471,9 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
                     payload["coverage"] = cov.as_dict()
                 for k, v in (getattr(te, "detail", None) or {}).items():
                     payload.setdefault(k, v)
+                if "coverage" not in payload and hasattr(engine, "_coverage_or_none"):
+                    with _engine_db(engine, db_path):       # what `main()` adds on the engine's own door
+                        payload["coverage"] = engine._coverage_or_none()
                 buf = io.StringIO(json.dumps(payload) + "\n")
                 raised_exit = 1
             else:

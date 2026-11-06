@@ -150,6 +150,38 @@ class AHalfDownloadedModel(_Room):
 
 @unittest.skipUnless(HAVE_VEC, "needs sqlite_vec")
 class ALostLock(_Room):
+    def test_saboteur_recall_refuses_on_every_read_surface_with_the_way_out(self):
+        (self.d / "embedder.lock.json").unlink()
+        out, p = self.engine("recall", "--query", "lantern")
+        self.assertEqual((p.returncode, out.get("status"), out.get("error")), (1, "error", "LOCK_MISSING"), (out, p.stderr[-400:]))
+        self.assertNotIn("results", out)
+        self.assertIn("matched", out["coverage"], out)
+        self.assertIn("init --tier cpu", out["retry"][0])
+        env, p = self.cli_json("recall", "--query", "lantern")
+        self.assertEqual((p.returncode, env["code"]), (1, "LOCK_MISSING"), env)
+        self.assertIn("coverage", env["data"]["detail"], env)
+        env, p = self.cli_json("batch-recall", "--items", '["lantern"]')
+        self.assertEqual((p.returncode, env["code"]), (4, "batch_recall_incomplete"), env)
+        item = env["data"]["results"][0]
+        self.assertEqual((item["status"], item["code"]), ("error", "LOCK_MISSING"), item)
+        self.assertIn("matched", item["coverage"], item)
+        self.assertIn("init --tier cpu", self.cli("recall", "--query", "lantern").stdout)
+
+    def test_saboteur_anticipate_refuses_as_it_does_for_a_malformed_lock(self):
+        (self.d / "embedder.lock.json").unlink()
+        out, p = self.engine("anticipate", "--top-k", "3")
+        self.assertEqual((p.returncode, out.get("error")), (1, "LOCK_MISSING"), (out, p.stderr[-400:]))
+        self.assertIn("coverage", out, out)
+
+    def test_control_the_floor_still_answers_by_keyword_and_says_so(self):
+        (self.d / "embedder.lock.json").unlink()
+        p = subprocess.run([sys.executable, str(self.d / "organs" / "claude_memory_lite.py"), "recall", "--query", "lantern"],
+                           capture_output=True, text=True, timeout=120, env=self.env(), cwd=str(self.d))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        out = json.loads(p.stdout.strip().splitlines()[-1])
+        self.assertTrue(out["results"], out)
+        self.assertEqual(out["degraded"]["reason"], "LOCK_MISSING", out)
+
     def test_a_store_refuses_lock_missing_with_the_fix(self):
         (self.d / "embedder.lock.json").unlink()
         out, p = self.engine("store", "--content", "a new fact worth keeping", "--category", "insight", "--summary", "s")
@@ -306,6 +338,10 @@ class RefusalsCarryCoverage(_Planted):
         out, p = self.engine("recall", "--query", "lantern")
         self.assert_refused(out, "LOCK_MALFORMED", p, "mv ")
         self.assertTrue(out["retry"], out)
+        env, p = self.cli_json("recall", "--query", "lantern")
+        self.assertEqual((p.returncode, env["code"]), (1, "LOCK_MALFORMED"), env)
+        self.assertIn("coverage", env["data"]["detail"], "the front door carries what the engine's door does")
+        self.assertIn("matched", env["data"]["detail"]["coverage"], env)
 
     def test_saboteur_a_hash_the_catalogue_does_not_ship_refuses(self):
         self.plant_vector("e" * 64)
@@ -409,6 +445,39 @@ class ADegradedAnswerReachesAPerson(_Planted):
                             "kept by the floor of the house", "--category", "insight"],
                            capture_output=True, text=True, timeout=120, env=self.env(), cwd=str(self.d))
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+
+@unittest.skipUnless(HAVE_VEC, "needs sqlite_vec")
+class ABrainWithNoLockKeepsServing(_Room):
+    """The same absent file with no record of a lock behind it: legal, and it answers. Only a lost lock refuses."""
+    LOCK = None
+
+    def assert_served(self):
+        out, p = self.engine("recall", "--query", "lantern")
+        self.assertEqual((p.returncode, out.get("status")), (0, "ok"), (out, p.stderr[-400:]))
+        self.assertTrue(out["results"], out)
+        self.assertNotEqual((out.get("degraded") or {}).get("reason"), "LOCK_MISSING", out)
+        env, p = self.cli_json("recall", "--query", "lantern")
+        self.assertEqual((p.returncode, env["status"]), (0, "ok"), env)
+
+    def test_control_a_brain_that_never_had_a_lock(self):
+        self.assert_served()
+
+    def test_control_a_rollback_to_no_lock(self):
+        c = sqlite3.connect(self.db)
+        c.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, '')", (el.BRAIN_LOCK_KEY,))
+        c.commit(); c.close()
+        self.assert_served()
+
+    def test_control_a_history_that_only_ever_re_embedded(self):
+        (self.d / el.LOCK_HISTORY_NAME).write_text(json.dumps({"action": "re-embed", "tier": "cpu"}) + "\n", encoding="utf-8")
+        self.assert_served()
+
+    def test_control_a_jina_brain_with_no_lock(self):
+        c = sqlite3.connect(self.db)
+        c.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES ('active_embedding_table', 'memory_embeddings_v2')")
+        c.commit(); c.close()
+        self.assert_served()
 
 
 @unittest.skipUnless(HAVE_VEC, "needs sqlite_vec")

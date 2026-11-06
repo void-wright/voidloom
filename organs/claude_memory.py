@@ -1818,7 +1818,9 @@ def cmd_recall(args):
             _code = getattr(_e, "code", None)
             # With no vectors at all there is nothing to refuse: the keyword arm answers, as for any unembedded brain.
             _none_held = _code == "NO_ROWS_FOR_LOCK" and not getattr(getattr(_e, "coverage", None), "vectors", 0)
-            if _code in ("NO_ROWS_FOR_LOCK", "STAMP_INCONSISTENT", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED") and not _none_held:
+            # A lost lock is one of these; a brain that never had a lock reads LOCK_MISSING too, and stays a legal brain.
+            _lost = _code == "LOCK_MISSING" and (getattr(_e, "detail", None) or {}).get("was_locked")
+            if _lost or (_code in ("NO_ROWS_FOR_LOCK", "STAMP_INCONSISTENT", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED") and not _none_held):
                 # An integrity refusal is the answer. A keyword answer here would read as a search under this lock.
                 conn.close()
                 raise
@@ -3764,6 +3766,9 @@ def cmd_anticipate(args):
                "Ensure pre_cognitive_recall.py is alongside claude_memory.py.")
 
     t0 = time.time()
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embedder_lock
+    embedder_lock.refuse_lost_lock(Path(DB_PATH).resolve())     # as a malformed lock refuses here, at the encoder
 
     # 1. Collect signals.
     project_root = getattr(args, 'project_root', None)
