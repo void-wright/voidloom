@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-13T20:10:14Z from the working tree whose HEAD was `6e53f54`
+> Generated 2026-11-13T20:56:42Z from the working tree whose HEAD was `427cbb7`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 517 |
 | files hashed | 517 |
-| total bytes | 11441030 |
+| total bytes | 11441017 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -394,7 +394,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 997243 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 997230 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -407,12 +407,12 @@
 | `install/fixtures/golden_vectors_nomic.json` | 144295 | `7ca287b27b7b7b91` |
 | `install/fixtures/golden_vectors_qwen.json` | 191567 | `4e9f3a72527ad86f` |
 | `install/golden_vectors.py` | 11068 | `2f4ba7883870528c` |
-| `install/install.ps1` | 74042 | `a0166bc7f9fa0557` |
+| `install/install.ps1` | 74029 | `5e3a039a160034d1` |
 | `install/install_council.sh` | 9233 | `7efe5c588226bf00` |
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 142318 | `0eba150e6d204fd2` |
+| `install/lay_manifest.json` | 142318 | `11bf1157be04eae8` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |

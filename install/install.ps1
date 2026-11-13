@@ -1062,6 +1062,9 @@ elseif ($PersonaForgeOk -and -not $DryRun) {
 # keeps one byte-format for every reader, the same as install.sh's record.
 function Write-InstallRecord {
     $rec = Join-Path $BrainDir "INSTALL_RECORD"
+    if (-not ($AcceptPass -or $DryRun -or $script:GateFails.Count -eq 0)) {
+        Warn "  $rec NOT written: the self-check did not pass. A run whose self-check passes writes it."; return
+    }
     if ($Tier1Ok -and (Test-Path $VenvPy)) { $interp = $VenvPy }
     else {
         $interp = ""
@@ -1092,8 +1095,7 @@ function Write-InstallRecord {
     Say "  install record: $rec (interpreter=$interp)"
 }
 Step "INSTALL RECORD"
-if ($AcceptPass -or $DryRun -or $script:GateFails.Count -eq 0) { Write-InstallRecord }
-else { Warn "  $(Join-Path $BrainDir 'INSTALL_RECORD') NOT written: the self-check did not pass. A run whose self-check passes writes it." }
+Write-InstallRecord
 
 # ---------------------------------------------------------------------------
 # DONE

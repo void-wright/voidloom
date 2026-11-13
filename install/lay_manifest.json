@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "6e53f54",
+  "derived_at_head": "427cbb7",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 517,
   "not_laid": {
@@ -1007,13 +1007,13 @@
    "src": "install/golden_vectors.py"
   },
   {
-   "bytes": 74042,
+   "bytes": 74029,
    "component": "core",
    "dst": "install/install.ps1",
    "exec": false,
    "platform": "windows",
    "root": "brain",
-   "sha256": "a0166bc7f9fa0557a5293e0c224c7bc119f88c890988c4c33f32264f0c690079",
+   "sha256": "5e3a039a160034d10d95f8c6e4b6927d9eff505d42c40dce2f9209fedf186f01",
    "src": "install/install.ps1"
   },
   {
