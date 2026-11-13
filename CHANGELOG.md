@@ -6,6 +6,8 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-13
+
 ### Added
 
 - `WIZARD_GAP_RESEARCH_FOCUS` (in the env file the scheduled jobs read) points gap research at
@@ -469,4 +471,6 @@ The first public release, under the Apache License 2.0.
 - Some schema fields and built-in labels carry names from the system's first
   installation; [`NOTICE`](./NOTICE) explains why they are kept.
 
+[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/void-wright/voidloom/releases/tag/v1.1.0
 [1.0.0]: https://github.com/void-wright/voidloom/releases/tag/v1.0.0

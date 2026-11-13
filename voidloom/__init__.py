@@ -24,7 +24,7 @@ Design spine (council-ruled — see plan memories #6042, #6044, #6047, #6105):
 v0.1 verbs: bootstrap, recall, store, context, approvals, agent-context, doctor.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # NOTE: keep this module stdlib-pure. Importing ``voidloom`` must NEVER drag in
 # torch / sentence_transformers / claude_memory. Submodules are imported lazily
