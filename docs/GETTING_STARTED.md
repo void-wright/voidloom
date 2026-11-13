@@ -188,7 +188,7 @@ Then run these checks in order.
 
 | # | Run | Success looks like |
 |---|---|---|
-| 1 | `python3 ~/.claude/memory/install/self_check.py` | Exit code 0 and `VERDICT: YOUR BRAIN IS ALIVE. Store + recall work end-to-end.` Any failure prints what broke and the command that fixes it. |
+| 1 | `python3 ~/.claude/memory/install/self_check.py` | Exit code 0 and `VERDICT: YOUR BRAIN IS ALIVE. Store + recall work end-to-end.` If the install could not fetch its model (offline, say), exit code 0 and `VERDICT: YOUR BRAIN IS ALIVE BY KEYWORD: recall answers by keyword, and a store refuses until the model is fetched: <command>`; run that command with the network up to finish. Any failure prints what broke and the command that fixes it. |
 | 2 | `voidloom doctor` | `"brain_healthy": true`. It also reports the session hook, the reranker (on or off, and why) and the compute in use. |
 | 3 | `voidloom persona status` | `persona: absent` until you run the Persona Forge — that is pending, not a failure. |
 | 4 | `voidloom hooks status` | Claude Code shows as installed if you answered yes to the hook question. |

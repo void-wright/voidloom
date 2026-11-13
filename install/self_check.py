@@ -49,6 +49,9 @@ WHAT IT CHECKS (all against the known seed memories, so results are deterministi
   8. The engine's recall gate: this brain is one `voidloom recall` answers, not one it refuses.
      The engine's own reader runs here, on any interpreter, so a refused brain fails naming the
      refusal, however well its keyword index reads.
+  9. The engine's recall model: past the gate a recall encodes the question under this brain's
+     model, and refuses where WIZARD_EMBED_MODEL disagrees with the brain or the model's files fail
+     the lock's hash. The engine's own pre-load check runs here; it loads nothing.
 
 SCHEMA NOTES (must match the full + lite CLI's DB)
   * `memories_fts` is an EXTERNAL-CONTENT FTS5 table (content='memories') kept in
@@ -340,6 +343,56 @@ def check_recall_gate(checks: Checks, db_path: Path) -> None:
     finally:
         if conn is not None:
             conn.close()
+
+
+def _keyword_engine_requested(db_path: Path) -> bool:
+    """The front door's own rule (voidloom/_facade._tier0_only_requested): VOIDLOOM_TIER0_ONLY, else metadata.tier0_only.
+    A brain under it is answered by the keyword engine, which reads no model."""
+    off = ("", "0", "false", "no", "off")
+    env = os.environ.get("VOIDLOOM_TIER0_ONLY")
+    if env is not None:
+        return env.strip().lower() not in off
+    try:
+        conn = _connect_ro(db_path)
+        try:
+            row = conn.execute("SELECT value FROM metadata WHERE key='tier0_only'").fetchone()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 -- the front door never decides by raising either
+        return False
+    return bool(row) and str(row[0]).strip().lower() not in off
+
+
+def check_recall_model(checks: Checks, db_path: Path) -> None:
+    """9. Does the engine's recall encode the question? Past the gate a recall loads this brain's model, and refuses
+    where WIZARD_EMBED_MODEL disagrees with the brain or the model's files fail the lock's hash. This runs the engine's
+    own pre-load check (claude_memory.query_encode_refusal), which instantiates nothing. A model that is absent is not a
+    refusal: recall answers by keyword, and the gate check says so."""
+    name = "recall model: the question is encoded under this brain's model"
+    means = "`voidloom recall` refuses this brain, so questions to it fail until it is repaired"
+    if _keyword_engine_requested(db_path):
+        checks.add(name, True, detail="keyword recall by request (tier0_only): that engine reads no model")
+        return
+    try:
+        organs = str(Path(__file__).resolve().parent.parent / "organs")
+        if organs not in sys.path:
+            sys.path.insert(0, organs)
+        import claude_memory as cm
+        import embedder_lock as el
+        found = cm.query_encode_refusal(str(db_path))
+    except Exception as e:  # noqa: BLE001 -- an unread check is a finding, never a pass
+        checks.add(name, False, detail=f"the engine's check could not run: {type(e).__name__}: {e}",
+                   fix="`voidloom doctor` names what is wrong; re-run the installer if organs/claude_memory.py is missing.",
+                   means="whether recall answers this brain is not known")
+        return
+    if found is None:
+        checks.add(name, True, detail="the model recall loads for this brain is the one it embeds under")
+        return
+    checks.refused = found["error"]
+    fix, cmd = found["fix"], found.get("command")
+    if cmd and cmd.startswith(el.shell_command(el.brain_python())):
+        fix = fix.replace(cmd, _repair_command(el, cmd))
+    checks.add(name, False, detail=found["message"], fix=fix, means=means)
 
 
 def check_schema(checks: Checks, db_path: Path):
@@ -1005,6 +1058,8 @@ def run_self_check(seed_optional: bool = False) -> Checks:
     conn = check_schema(checks, db_path)
     if conn is not None:
         check_recall_gate(checks, db_path)
+        if not getattr(checks, "refused", None):
+            check_recall_model(checks, db_path)
     no_pack_here = False
     plan = None
     if conn is not None and seeds and seed_optional:

@@ -704,7 +704,10 @@ python3 ~/.claude/memory/install/self_check.py
 REAL recall path against the guaranteed seed memories — keyword recall actually
 returning the right memory, tag-filtering via the `memory_tags` JOIN table, FTS
 index integrity, and that every seed classifies to its declared kind — and prints
-a plain PASS/FAIL report. **Exit 0 + "YOUR BRAIN IS ALIVE" = it works.** Any failure
+a plain PASS/FAIL report. **Exit 0 + "YOUR BRAIN IS ALIVE" = it works.** An install that could not
+fetch its model (offline, say) ends on exit 0 + "YOUR BRAIN IS ALIVE BY KEYWORD: recall answers by
+keyword, and a store refuses until the model is fetched: <command>" -- run that command with the
+network up to finish it. Any failure
 prints exactly what broke and the command to fix it. (`--json` for machine output,
 `--quiet` for just the verdict line.) The installer runs this same check as its
 Tier-0 acceptance gate, so a clean install means this already passed once -- except an
@@ -719,7 +722,8 @@ Then run through this checklist; when every box is checked you are fully self-su
 
 - [ ] **Brain alive (the headline check):** `python3 ~/.claude/memory/install/self_check.py`
       → all required checks PASS, exit 0, "YOUR BRAIN IS ALIVE" (on an ambient-upgraded brain:
-      `self_check.py --seed-optional`).
+      `self_check.py --seed-optional`), or "YOUR BRAIN IS ALIVE BY KEYWORD: ..." where the install
+      could not fetch its model: run the command that line names, with the network up.
 - [ ] **Brain exists + seeded:** `python3 ~/.claude/memory/organs/claude_memory_lite.py stats`
       → `total_memories` ≥ **82** — the exact size of `seed/seed_pack.json`, derived, not a loose floor. It read `≥ 36` against a pack of 66: a threshold slack enough to pass while being wrong by 30.
 - [ ] **Recall works:**

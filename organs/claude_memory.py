@@ -96,7 +96,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # rho-2: the pin is RESOLVED, never hardcoded. apply_cuda_pin() reads
 # WIZARD_CUDA_DEVICE (and the declaring env-file/config) and falls back to
@@ -860,6 +860,70 @@ def _encode_now(text: str, prefix: str, *, lock: Optional[Dict[str, Any]] = None
     import embedding_upgrade
     return embedding_upgrade.encode_locked(text, is_query=(prefix == "search_query"),
                                            lock=embedding_upgrade.brain_lock(DB_PATH, tier="nomic"))
+
+
+def query_encode_refusal(db: Optional[Union[str, Path]] = None) -> Optional[Dict[str, Any]]:
+    """What `_encode` refuses a recall's query on, for the brain at `db` (default DB_PATH) in this environment, found the
+    way `_encode` finds it with nothing instantiated: the tier (the lock, then a WIZARD_EMBED_MODEL that disagrees with it,
+    or with the vectors a brain without a lock holds), then the bytes against the lock or the shipped entry, by the
+    loader's own check. None when the encode goes on to load, and when the model is absent: SNAPSHOT_ABSENT is a recall
+    that answers by keyword. A jina brain's bytes are pinned in code and hashed by nothing, so only its tier is read.
+
+    Returns {"error", "message", "fix", "command"}: `command` is the step that repairs it, `fix` says it in words."""
+    global DB_PATH
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embedder_lock
+    import embedding_upgrade
+    held_path, held_cache = DB_PATH, dict(_active_model_cache)
+    if db is not None:
+        DB_PATH = Path(db)
+    _active_model_cache.clear()
+    lock = None
+    try:
+        tier = _active_embed_model()
+        if tier != "jina":
+            lock = embedding_upgrade.brain_lock(DB_PATH, tier=tier)
+            with embedder_lock.hub_closed():
+                embedder_lock.verify_snapshot_against_lock(lock, allow_fetch=False)
+        return None
+    except embedder_lock.EmbedderLockError as e:
+        if e.code == "SNAPSHOT_ABSENT":
+            return None
+        shipped = lock is not None and embedder_lock.is_shipped_hash(lock["weights_hash"])
+        return {"error": e.code, "message": str(e), **_encode_way_out(e, DB_PATH, shipped=shipped)}
+    finally:
+        DB_PATH = held_path
+        _active_model_cache.clear()
+        _active_model_cache.update(held_cache)
+
+
+def _encode_way_out(e: Exception, db: Path, *, shipped: bool) -> Dict[str, Optional[str]]:
+    """The repair for a refusal query_encode_refusal found. Each was run on a brain in that state. The fetch repairs bytes
+    only at a pin the package ships (`shipped`): against any other lock it fetches nothing, and the lock is the fault."""
+    import embedder_lock
+    det = getattr(e, "detail", None) or {}
+    if det.get("env"):
+        want = det.get("locked_tier") or det.get("declared_tier")
+        cmd = "Remove-Item Env:WIZARD_EMBED_MODEL" if sys.platform == "win32" else "unset WIZARD_EMBED_MODEL"
+        fix = (f"WIZARD_EMBED_MODEL={det['env']!r} names another model than the one this brain embeds under "
+               f"({want!r}). Unset it in this shell: {cmd}")
+        try:
+            import voidloom_env
+            pin = voidloom_env.embed_pin(db)
+            if pin.get("belongs") and pin.get("value") and \
+                    _EMBED_TIER_ALIASES.get(pin["value"].strip().lower(), pin["value"].strip().lower()) != want:
+                where = f"line {pin['owner_line']}" if pin.get("owner_line") else "its managed block"
+                fix += (f". {pin['path']} sets it too ({where}): change it there to {want!r} or delete it, or a shell "
+                        "that loads that file sets it again")
+        except Exception:  # noqa: BLE001 -- the file is a second place to look, never a reason to say nothing
+            pass
+        return {"fix": fix, "command": cmd}
+    if e.code == "WEIGHTS_MISMATCH" and shipped and (det.get("computed") or det.get("snapshot")):
+        cmd = embedder_lock.fetch_command(db)
+        return {"fix": "Fetch the damaged files again at their pins, with the network (it replaces only what fails the "
+                       f"pin's hash): {cmd}", "command": cmd}
+    return {"fix": "The lock beside this brain is refused before any model is read: repair the lock first (`voidloom "
+                   "doctor` and the self-check's recall gate name how).", "command": None}
 
 
 def _derived_hash(conn: sqlite3.Connection, table: str):

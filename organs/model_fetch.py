@@ -23,7 +23,10 @@ WHAT IT DOES (embedder_lock.fetch_models_needed, the one lane):
      files no pin named -- the number this bounds to 0), through the same
      `_fetch_pinned` the loader uses.
   3. HASHES every present model against its pin (the loader's own check), so
-     "present" means "the bytes the catalogue promised".
+     "present" means "the bytes the catalogue promised". A model whose bytes fail
+     its pin (a damaged file) is fetched again at that pin, over what is on disk,
+     and hashed again; a second failure refuses, WEIGHTS_MISMATCH. Without
+     fetching (`--no-fetch`, HF-offline) it refuses at once.
   4. Prints a census per repository: files on disk, files named, unnamed files
      and their bytes (the install's promise: unnamed_bytes_total == 0).
 
@@ -145,11 +148,16 @@ def main(argv=None) -> int:
         if gate_off and missing and set(missing) <= {"reranker"}:
             doc["recall_unaffected"] = ("only the reranker is absent, and this machine's gate does not load it: "
                                         "recall works here without it")
+        if e.code == "WEIGHTS_MISMATCH" and (a.no_fetch or el.hf_offline()) and not doc.get("retry"):
+            doc["retry"] = [el.fetch_command(a.db)]
+            doc["fix"] = ("this run may not fetch; with the network and without --no-fetch, the same command fetches "
+                          "the damaged files again at their pins: " + doc["retry"][0])
         return emit(doc, 3 if e.code == "MODELS_ABSENT" else 1)
     res = {"action": "model-fetch", **res}
     if not a.json:
         print(f"  needed {res['needed']}: fetched {res['fetched']}, present before {res['present_before']}, "
-              f"verified {res['verified']} of {res['verified_of']}; named bytes {res['bytes_named_total']:,}; "
+              f"verified {res['verified']} of {res['verified_of']}, replaced {res['replaced']}; "
+              f"named bytes {res['bytes_named_total']:,}; "
               f"unnamed files {res['unnamed_files_total']} ({res['unnamed_bytes_total']:,} B) under {res['hf_hub_cache']}",
               file=sys.stderr)
     return emit(res, 0)

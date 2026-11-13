@@ -147,6 +147,24 @@ function Invoke-PyOut {
     param([string]$Exe, [string[]]$ArgList)
     if ($Exe -eq "py -3") { & py -3 @ArgList } else { & $Exe @ArgList }
 }
+# self_check's verdict as install.sh's Step E reads it: the --json envelope, or $null when it printed nothing readable --
+# a check that could not run, never one that ran and failed. $script:SelfCheckRc holds its exit code.
+function Invoke-SelfCheck {
+    $env:WIZARD_LIBRARY_DB = $DbPath
+    $raw = (Invoke-PyOut $PySys @($SelfCheck, "--json") 2>$null | Out-String)
+    $script:SelfCheckRc = $LASTEXITCODE
+    try { $j = $raw | ConvertFrom-Json -ErrorAction Stop } catch { return $null }
+    if ($null -eq $j -or $null -eq $j.checks) { return $null }
+    return $j
+}
+# Every failed REQUIRED check, as install.sh's DONE says it: the name, what it means, the detail and the fix.
+function Get-GateFails ($sc) {
+    $f = @($sc.checks | Where-Object { $_.required -and -not $_.ok } | ForEach-Object {
+        "$($_.name): $(if ($_.means) { $_.means } else { 'a required check failed' })$(if ($_.detail) { " ($($_.detail))" })$(if ($_.fix) { ". Fix: $($_.fix)" })" })
+    if ($f.Count -eq 0) { $f = @("self_check.py exited $script:SelfCheckRc with no failed check named") }
+    return $f
+}
+function Show-GateFails { foreach ($x in $script:GateFails) { Warn "  - $x" } }
 
 # Read BEFORE anything is written, by the reader install.sh uses: a brain with no owner memory and no vector may be embedded
 # whole, as a fresh one is. Anything else is an existing brain, told what is outstanding and how.
@@ -386,6 +404,9 @@ $Seed = Join-Path $BrainDir "seed\seed_pack.json"
 Step "STEP B — Tier 0: create DB + load agnostic seed pack (stdlib-only)"
 $Tier0Ok = $false
 $AcceptPass = $false
+$SelfCheck = Join-Path $BrainDir "install\self_check.py"
+$script:GateFails = @()
+$script:GateSummary = ""
 if ($DryRun) {
     Say "  DRY: would create $DbPath (schema + FTS5 + kind), load $Seed, verify recall"
     $Tier0Ok = $true
@@ -456,20 +477,27 @@ print(f"  DB created. {res['brain_objects']} objects, "
 
     # VERIFY the brain is alive via the shipped self_check.py — the SAME command
     # the teammate runs — which exercises the real recall path against the seed
-    # memories. Stdlib-only (Tier 0). Falls back to a minimal recall gate.
-    $SelfCheck = Join-Path $BrainDir "install\self_check.py"
+    # memories. Stdlib-only (Tier 0). A self-check that ran and failed is the answer: its failed checks are shown, the
+    # run withholds what install.sh withholds, and it ends with install.sh's code. Only a self-check that could not run
+    # falls back to a minimal recall gate, and that gate verifies nothing.
     if (Test-Path $SelfCheck) {
         Say "  verifying the brain is alive (self_check.py against the seed pack)"
-        & { $env:WIZARD_LIBRARY_DB = $DbPath; & $PySys $SelfCheck --quiet }
-        if ($LASTEXITCODE -eq 0) {
+        $sc = Invoke-SelfCheck
+        if ($null -ne $sc -and $script:SelfCheckRc -eq 0 -and $sc.status -eq "ok") {
             Say "  Tier 0 VERIFIED — self-check passed; your keyword-recall brain is live."
             $Tier0Ok = $true
-            $AcceptPass = $true      # the ONLY place an explicit acceptance PASS is recorded (STEP P gates on it)
+            $AcceptPass = $true      # set here and by STEP B2 only: an explicit acceptance PASS (STEP P gates on it)
+        } elseif ($null -ne $sc) {
+            $script:GateFails = Get-GateFails $sc
+            $script:GateSummary = "$($sc.required_passed)/$($sc.required_total)"
+            Warn "self_check.py: $($script:GateFails.Count) REQUIRED check(s) FAILED (required passed: $script:GateSummary); this brain is NOT verified:"
+            Show-GateFails
         } else {
-            Warn "self_check.py reported failures; falling back to the minimal recall gate."
+            $script:GateFails = @("self_check.py printed no readable result (rc $script:SelfCheckRc): it could not run")
+            Warn "self_check.py could not run (rc $script:SelfCheckRc); trying the minimal keyword recall gate."
             $r = & { $env:WIZARD_LIBRARY_DB = $DbPath; (Invoke-Py $PySys @($Lite, "recall", "--query", "store discipline", "--top_k", "1")) } 2>&1 | Out-String
             if ($r -match '"status":\s*"ok"') {
-                Say "  minimal recall gate passed — brain is usable; investigate the self-check warnings."
+                Say "  minimal keyword recall answered, and that verifies nothing: run the self-check to know: $(Get-PyCommand) `"$SelfCheck`""
                 $Tier0Ok = $true
             } else {
                 Die "Tier 0 verification FAILED — neither self-check nor minimal recall returned ok. Check $Lite and $DbPath."
@@ -497,7 +525,7 @@ $Tier1Skip = ""
 function Tier1-Hint ($reason) {
     Write-Host @"
   ----------------------------------------------------------------
-  Tier 0 is ACTIVE — you have a working keyword-recall brain now.
+  $(if ($Tier0Ok) { "Tier 0 is ACTIVE — you have a working keyword-recall brain now." } else { "Tier 0 is NOT verified: the self-check above names what failed and how to repair it." })
   The optional SEMANTIC upgrade (Tier 1) was not completed:
     reason: $reason$(if ($script:ModelsAbsent -and (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $DbPath) "embedder.lock.json"))) { "`n  This brain is locked to that model: until it is here a store refuses, and recall answers by keyword." })
   $(if ($script:EmbedOwed) { "To add semantic recall, run this once, then re-run the installer to verify:`n    $($script:EmbedOwed)" } else { "To add semantic recall later, fix the reason above, then re-run:`n    powershell -ExecutionPolicy Bypass -File install.ps1" })
@@ -692,6 +720,22 @@ sys.exit({"ok": 0, "incomplete": 1, "refused": 3}.get(res.get("status"), 1))
 # ---------------------------------------------------------------------------
 # STEP D — WIRE THE SESSIONSTART HOOK (DEFENSIVE merge via merge_config.py)
 # ---------------------------------------------------------------------------
+# The acceptance verdict is the end state's, as install.sh's Step E reads it after Tier 1: a run whose self-check did not
+# pass asks again once Tier 1 has run, because Tier 1 (init, the model fetch) can repair what STEP B found.
+if (-not $DryRun -and -not $AcceptPass -and $script:GateFails.Count -gt 0 -and -not $Tier0Only -and (Test-Path $SelfCheck)) {
+    Step "STEP B2 — Self-check again, after Tier 1"
+    $sc = Invoke-SelfCheck
+    if ($null -ne $sc -and $script:SelfCheckRc -eq 0 -and $sc.status -eq "ok") {
+        Say "  self-check PASSED after Tier 1 — the brain is verified."
+        $Tier0Ok = $true; $AcceptPass = $true; $script:GateFails = @()
+    } elseif ($null -ne $sc) {
+        $script:GateFails = Get-GateFails $sc
+        $script:GateSummary = "$($sc.required_passed)/$($sc.required_total)"
+        Warn "self_check.py: $($script:GateFails.Count) REQUIRED check(s) still FAILED (required passed: $script:GateSummary)."
+        Show-GateFails
+    }
+}
+
 Step "STEP D — SessionStart hook: not wired here (STEP P asks; -WireHooks / -NoWireHooks)"
 $Merge = Join-Path $BrainDir "install\merge_config.py"   # STEP E's merger
 # This step used to wire the hook UNASKED (--yes). The only wiring path is now STEP P's question (or -WireHooks),
@@ -1048,7 +1092,8 @@ function Write-InstallRecord {
     Say "  install record: $rec (interpreter=$interp)"
 }
 Step "INSTALL RECORD"
-Write-InstallRecord
+if ($AcceptPass -or $DryRun -or $script:GateFails.Count -eq 0) { Write-InstallRecord }
+else { Warn "  $(Join-Path $BrainDir 'INSTALL_RECORD') NOT written: the self-check did not pass. A run whose self-check passes writes it." }
 
 # ---------------------------------------------------------------------------
 # DONE
@@ -1065,6 +1110,13 @@ if ($Tier1Ok) {
     if ($env:RERANKER_MODEL) { Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) + $RerankerRepo (reranker, backend '$RerankerBackend' — the one recall loads) — pre-downloaded, nothing lazy-loads on first recall." }
     elseif ($RerankerUnfetched) { Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) — pre-downloaded. Reranker $RerankerUnfetched is not pinned by this package, so it was not fetched: recall loads it only from a cache you populate." }
     else { Say "Models (in ~/.cache/huggingface): $EmbedRepo (embedder) — pre-downloaded. No reranker: this machine's gate is off." }
+}
+if (-not $AcceptPass -and -not $DryRun -and $script:GateFails.Count -gt 0) {
+    Write-Host ""
+    Warn "ACCEPTANCE GATE FAILED — $($script:GateFails.Count) required check(s) did not pass$(if ($script:GateSummary) { " (required passed: $script:GateSummary)" }), so this brain is NOT verified on these points:"
+    Show-GateFails
+    Warn "The files are laid and every check not named here passed (listed in STEP B). Fix the check(s) named above, then re-run; $(Join-Path $BrainDir 'INSTALL_RECORD') is written only by a run whose self-check passes."
+    exit 5
 }
 Write-Host ""
 Say "Your Claude Code now has a memory. Confirm your brain is alive:"

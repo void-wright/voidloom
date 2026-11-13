@@ -240,8 +240,11 @@ python3 ~/.claude/memory/install/self_check.py
 ```
 
 Success is exit code 0 and the line `VERDICT: YOUR BRAIN IS ALIVE. Store +
-recall work end-to-end.` Any failure names what broke and the command that
-fixes it. The installer runs this same check before it finishes.
+recall work end-to-end.` An install that could not fetch its model (offline,
+say) ends on exit code 0 and `VERDICT: YOUR BRAIN IS ALIVE BY KEYWORD: recall
+answers by keyword, and a store refuses until the model is fetched: <command>`
+instead; run that command with the network up to finish it. Any failure names
+what broke and the command that fixes it. The installer runs this same check before it finishes.
 
 **2. The health report.**
 

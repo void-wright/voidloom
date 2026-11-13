@@ -441,11 +441,21 @@ class TheModelIsAbsent(_Room):
             (snap / rel).parent.mkdir(parents=True, exist_ok=True)
             (snap / rel).write_bytes(b"x")
 
+    def link(self, pin):
+        """The host's own copy of `pin`, linked into this hub: bytes the lock describes, not just files it names."""
+        real = el.snapshot_dir_for(pin["model_id"], pin["revision"])
+        if real is None or not el.snapshot_complete(real, pin.get("files")):
+            self.skipTest("the cpu model is not on this host's disk")
+        snap = self.hub / ("models--" + pin["model_id"].replace("/", "--")) / "snapshots" / pin["revision"]
+        for rel in pin.get("files") or ():
+            (snap / rel).parent.mkdir(parents=True, exist_ok=True)
+            os.symlink(os.path.realpath(real / rel), snap / rel)
+
     def test_control_a_model_on_disk_keeps_the_verdict(self):
         self.note(whash=self.h)
-        self.place(self.lock)
+        self.link(self.lock)
         if self.lock.get("code"):
-            self.place(self.lock["code"])
+            self.link(self.lock["code"])
         p = self.run_check("--json", bare=True)
         self.assertEqual(json.loads(p.stdout)["verdict"], "brain alive")
         self.assertIn("VERDICT: " + ALIVE, self.run_check(bare=True).stdout)

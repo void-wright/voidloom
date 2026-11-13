@@ -1107,6 +1107,37 @@ def _fetch_pinned(model_id: str, revision: str, *, allow_fetch: bool, weights_ha
     return snap
 
 
+def _replace_pinned(entry: Dict[str, Any], *, what: str, catalogue: Optional[Union[str, Path]] = None,
+                    pin_kind: str = "tier") -> Tuple[Path, str]:
+    """Fetch again, over what is on disk, every file `entry` pins at its revision -- the model's files and, for a tier
+    that pins one, its remote-code repository's -- then hash the result against the pin. The bytes there failed the
+    pin's hash; a file the hub serves at a pinned revision does not change, so a second failure is not a download that
+    went wrong, and it refuses. Returns what verify_snapshot_against_lock returns."""
+    fix = fetch_command()
+    try:
+        from huggingface_hub import snapshot_download
+        for pin in (entry, entry.get("code")):
+            if pin:
+                snapshot_download(pin["model_id"], revision=pin["revision"], allow_patterns=list(pin["files"]),
+                                  force_download=True, **fetch_options())
+    except Exception as e:                          # the hub unreachable, a DNS failure, a 5xx
+        raise EmbedderLockError(
+            "WEIGHTS_MISMATCH",
+            f"the {what} {entry['model_id']}@{entry['revision'][:12]} on disk does not hash to its pin, and fetching it "
+            f"again failed: {type(e).__name__}: {e}. Retry with the network: `{fix}`",
+            weights_hash=entry["weights_hash"], retry=[fix])
+    try:
+        return verify_snapshot_against_lock(entry, allow_fetch=False, catalogue=catalogue, pin_kind=pin_kind)
+    except EmbedderLockError as e:
+        if e.code != "WEIGHTS_MISMATCH":
+            raise
+        raise EmbedderLockError(
+            "WEIGHTS_MISMATCH",
+            f"the {what} {entry['model_id']}@{entry['revision'][:12]} was fetched again at its pin and still does not "
+            f"hash to it ({e}). The bytes the hub serves there are not the bytes the package pinned: fetch nothing "
+            "more, and report it.", **e.detail)
+
+
 def verify_snapshot_against_lock(lock: Dict[str, Any], *, allow_fetch: Optional[bool] = None,
                                  catalogue: Optional[Union[str, Path]] = None,
                                  pin_kind: str = "tier") -> Tuple[Path, str]:
@@ -1296,7 +1327,7 @@ def fetch_models_needed(lock: Dict[str, Any], *, catalogue: Optional[Union[str, 
     out: Dict[str, Any] = {"status": "ok", "hf_hub_cache": str(hub), "offline": hf_offline(),
                            "derivation": plan["derivation"], "catalogue_hash": plan["catalogue_hash"],
                            "needed": plan["count"], "not_needed_loader_absent": plan["not_needed_loader_absent"],
-                           "models": [], "fetched": 0, "present_before": 0,
+                           "models": [], "fetched": 0, "present_before": 0, "replaced": 0,
                            "bytes_named_total": 0, "unnamed_bytes_total": 0, "unnamed_files_total": 0}
     absent: List[Dict[str, Any]] = []
     for m in plan["needed"]:
@@ -1350,8 +1381,19 @@ def fetch_models_needed(lock: Dict[str, Any], *, catalogue: Optional[Union[str, 
         if m["what"] == "remote-code":
             continue                                    # hashed together with its model below
         entry = dict(lock) if m["pin_kind"] == "tier" else catalogue_reranker(m["pin"].split(".", 1)[1], catalogue)
-        _snap, computed = verify_snapshot_against_lock(entry, allow_fetch=False, catalogue=catalogue,
-                                                       pin_kind=m["pin_kind"])
+        try:
+            _snap, computed = verify_snapshot_against_lock(entry, allow_fetch=False, catalogue=catalogue,
+                                                           pin_kind=m["pin_kind"])
+        except EmbedderLockError as e:
+            # Bytes that fail a shipped pin's hash are fetched again at that pin, over what is on disk, and hashed
+            # again: this command is the fix every refusal of them prints. A pin the catalogue does not ship is never
+            # fetched, and a run that may not fetch keeps the refusal.
+            shipped = m["pin_kind"] != "tier" or is_shipped_hash(entry["weights_hash"], catalogue)
+            if e.code != "WEIGHTS_MISMATCH" or not allow_fetch or hf_offline() or not shipped:
+                raise
+            _snap, computed = _replace_pinned(entry, what=m["what"], catalogue=catalogue, pin_kind=m["pin_kind"])
+            rec["replaced"] = True
+            out["replaced"] += 1
         rec["weights_hash_computed"] = computed
         rec["verified"] = (computed == m["weights_hash"])
     out["verified"] = sum(1 for r in out["models"] if r.get("verified"))

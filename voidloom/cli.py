@@ -850,6 +850,24 @@ def _absent_model(models: Dict[str, Any], db: Optional[str], coherence: Dict[str
             f"Fix: {embedder_lock.fetch_command(db)}")
 
 
+def _recall_model_refusal(db: Optional[str], coherence: Dict[str, Any]) -> Tuple[Optional[str], bool]:
+    """What a recall refuses when it encodes the question: a WIZARD_EMBED_MODEL that names another model than this
+    brain's, or model files that fail the lock's hash. Read by the engine's own pre-load check, which loads nothing, with
+    the repair the self-check prints. Returns (the reason or None, whether it carries a command that repairs it). A
+    keyword-only brain is answered by an engine that reads no model."""
+    if coherence.get("tier0_only") or not db:
+        return None, False
+    try:
+        _organs_importable()
+        import claude_memory  # type: ignore
+        found = claude_memory.query_encode_refusal(db)
+    except Exception as e:  # noqa: BLE001 -- a check that could not run says nothing good about the brain
+        return f"the recall model check could not run: {type(e).__name__}: {e}", False
+    if found is None:
+        return None, False
+    return f"{found['message']} Fix: {found['fix']}", bool(found.get("command"))
+
+
 def _holds_vectors(db: Optional[str], coherence: Dict[str, Any]) -> bool:
     table = coherence.get("recorded_table")
     if not table or not db:
@@ -1981,8 +1999,10 @@ def verb_doctor(args) -> Dict[str, Any]:
         _reason = f"engine not importable: {engine_health.get('error')}"
     else:
         _db = brain.get("db_path")
-        _reason = (_foreign_env_dir() or _incomplete_model(models) or _schema_gap(_db) or _brain_fault(_coh)
-                   or _absent_model(models, _db, _coh))
+        # A refusal with a printed repair is said in the self-check's own words; a lock defect keeps the lock's repairs.
+        _model, _repair = _recall_model_refusal(_db, _coh)
+        _reason = (_foreign_env_dir() or _incomplete_model(models) or _schema_gap(_db) or (_model if _repair else None)
+                   or _brain_fault(_coh) or _model or _absent_model(models, _db, _coh))
         if not _reason and "peft" in (models.get("missing_modules") or []):
             _organs_importable()
             import embedder_lock
