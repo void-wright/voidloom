@@ -38,7 +38,7 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -76,8 +76,26 @@ def _connect(db: str) -> sqlite3.Connection:
     return c
 
 
-def _ts(days_ago: float = 0.0) -> str:
-    return (datetime.utcnow() - timedelta(days=days_ago)).strftime("%Y-%m-%d %H:%M:%S")
+def _ts(days_ago: float = 0.0, at: datetime = None) -> str:
+    return ((at or datetime.utcnow()) - timedelta(days=days_ago)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+class _FixedClock(datetime):
+    """A `datetime` whose now() and utcnow() both answer one instant, `at` (naive UTC).
+
+    Patched over a reader module's `datetime` name so that two brains read at different wall-clock
+    moments still see the same "now". Local now() answers the same UTC instant on purpose: the rows
+    are stamped in UTC, so a reader's ages are then the same on every host, whatever its timezone."""
+
+    at: datetime = None
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls.at if tz is None else cls.at.replace(tzinfo=timezone.utc).astimezone(tz)
+
+    @classmethod
+    def utcnow(cls):
+        return cls.at
 
 
 class Brain:
@@ -85,7 +103,8 @@ class Brain:
 
     _cache: dict = {}
 
-    def __init__(self, tmp: Path):
+    def __init__(self, tmp: Path, at: datetime = None):
+        self.at = at                    # stamp planted rows from this instant instead of the wall clock
         src = Brain._cache.get("seed")
         if src is None or not Path(src).exists():
             seed_dir = Path(tempfile.mkdtemp(prefix="dfa-seed-", dir=os.environ.get("TMPDIR")))
@@ -109,7 +128,7 @@ class Brain:
                    derived_from, created_at, updated_at, last_accessed, is_archived)
                VALUES (?, ?, ?, 0.5, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (content, summary or content[:60], category, project, kind, confidence, derived_from,
-             _ts(days_ago), _ts(days_ago), _ts(days_ago), archived))
+             _ts(days_ago, self.at), _ts(days_ago, self.at), _ts(days_ago, self.at), archived))
         mid = cur.lastrowid
         if untrusted:
             self.c.execute("UPDATE memories SET untrusted_source=1 WHERE id=?", (mid,))
@@ -604,34 +623,43 @@ class TestTensionFadeEvidence(_TmpCase):
             self._differential(lead_type, dp, qk, gm, ar, mse)
 
     def _differential(self, lead_type, dp, qk, gm, ar, mse):
+        # ONE clock for both brains. The arms are built and read seconds apart, and the activity
+        # profile weights every row by its age, so a wall clock read at each insert and again by
+        # each reader made the two arms differ by the time between them (23.2614 vs 23.2613), not
+        # by the lead rows. Every planted stamp and every reader's "now" is this instant instead.
+        anchor = datetime.utcnow().replace(microsecond=0)
+        clock = type("_Anchored", (_FixedClock,), {"at": anchor})
         outs = []
         for with_leads in (False, True):
-            b = Brain(Path(tempfile.mkdtemp(dir=str(self.tmp))))
+            b = Brain(Path(tempfile.mkdtemp(dir=str(self.tmp))), at=anchor)
             ids = _plant_channel_brain(b, n_dreams=1)
             for i in range(6):
                 for m in (ids["m1"], ids["m2"]):
                     b.c.execute("INSERT INTO access_log (memory_id, access_type, query_text, relevance_score, "
                                 "accessed_at) VALUES (?, 'recall:hybrid', 'gradle build question', -0.9, ?)",
-                                (m, _ts(0.01 * i)))
+                                (m, _ts(0.01 * i, anchor)))
             if with_leads:
                 for i in range(30):
                     for m in (ids["d0"], ids["m1"]):
                         b.c.execute("INSERT INTO access_log (memory_id, access_type, query_text, relevance_score, "
                                     "accessed_at) VALUES (?, ?, 'a lead query here', NULL, ?)",
-                                    (m, lead_type, _ts(0.001 * i)))
+                                    (m, lead_type, _ts(0.001 * i, anchor)))
             b.c.commit()
             cfg = {**dp.DEFAULT_CONFIG}
             r = {}
-            r["nrem"] = dp.phase_nrem_consolidation(b.c, cfg, None)
-            r["edges"] = b.all("SELECT source_id, target_id, confidence FROM memory_edges ORDER BY 1, 2")
-            r["profile"] = dp.rebuild_activity_profile(b.c, cfg)
-            r["gaps"] = gm.detect_weak_recalls(b.c)
-            r["stability"] = ar._get_access_stability(b.c)
-            r["labels"] = dp._derive_probe_labels(b.c, cfg)
-            r["spike"] = qk.detect_recall_spike(b.c)
-            r["cadence"] = qk.compute_access_cadence(b.c)
-            r["self_eval_recall_count"] = mse._score_module_only_piece(
-                b.c, "hybrid_retrieval", datetime.utcnow().strftime("%Y-%m"), "recall")
+            with contextlib.ExitStack() as pinned:
+                for mod in (dp, qk, gm, ar, mse):
+                    pinned.enter_context(mock.patch.object(mod, "datetime", clock))
+                r["nrem"] = dp.phase_nrem_consolidation(b.c, cfg, None)
+                r["edges"] = b.all("SELECT source_id, target_id, confidence FROM memory_edges ORDER BY 1, 2")
+                r["profile"] = dp.rebuild_activity_profile(b.c, cfg)
+                r["gaps"] = gm.detect_weak_recalls(b.c)
+                r["stability"] = ar._get_access_stability(b.c)
+                r["labels"] = dp._derive_probe_labels(b.c, cfg)
+                r["spike"] = qk.detect_recall_spike(b.c)
+                r["cadence"] = qk.compute_access_cadence(b.c)
+                r["self_eval_recall_count"] = mse._score_module_only_piece(
+                    b.c, "hybrid_retrieval", anchor.strftime("%Y-%m"), "recall")
             outs.append(json.loads(json.dumps(r, default=str)))
         self.assertEqual(outs[0], outs[1], lead_type)
 

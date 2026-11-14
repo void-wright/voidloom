@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T03:11:48Z from the working tree whose HEAD was `4b40c80`
+> Generated 2026-11-14T03:23:01Z from the working tree whose HEAD was `3e66c34`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 517 |
 | files hashed | 517 |
-| total bytes | 11443753 |
+| total bytes | 11445622 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -102,7 +102,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  243 files, 3481150 bytes
+### `voidloom` — The CLI facade  ·  243 files, 3482741 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -188,7 +188,7 @@
 | `voidloom/tests/test_dream_units_do_not_race.py` | 4433 | `87671a0bae28d468` |
 | `voidloom/tests/test_dream_watch_unconfigured_r2.py` | 1498 | `bce1e4d75dce79ed` |
 | `voidloom/tests/test_dreamfix_r2w2a.py` | 38506 | `d1fc63957206abb3` |
-| `voidloom/tests/test_dreamfix_tranche_a.py` | 45850 | `860f29459691dcf9` |
+| `voidloom/tests/test_dreamfix_tranche_a.py` | 47441 | `9df9d9266057a3b6` |
 | `voidloom/tests/test_dreaming_starved_r1.py` | 7060 | `888848a8cc53e96a` |
 | `voidloom/tests/test_edge_decay_idempotent_r2.py` | 6853 | `0856a5cd52e0e2c0` |
 | `voidloom/tests/test_edge_decay_repair_r2d.py` | 12087 | `7bba65e209c0263e` |
@@ -412,7 +412,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 142319 | `9f686cce7c97578c` |
+| `install/lay_manifest.json` | 142319 | `6164df12e2558ced` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -571,12 +571,12 @@
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 474500 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 474778 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 38318 | `01197b4d28c6245c` |
+| `CHANGELOG.md` | 38596 | `47beb9da4ad76d8b` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3050 | `f954ccc6b225b273` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |

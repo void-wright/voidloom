@@ -12,6 +12,9 @@ All notable changes to Voidloom are recorded here. The format follows
   `WIZARD_LIBRARY_HOME` exported it wrote the seed pack into that brain, and with
   `WIZARD_LIBRARY_DB` exported it skipped without saying why. It now runs in its own box either
   way, and fails loudly if the seed pack does not land there.
+- The dream-lead differential test no longer fails at random on a slow or UTC host. Its two
+  brains were stamped and read by the wall clock seconds apart, so a time-weighted reader could
+  differ in the fourth decimal; both brains and every reader now share one fixed instant.
 
 ## [1.1.0] — 2026-11-13
 
