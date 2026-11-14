@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 499,
+    "core": 500,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 454,
+    "all": 455,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 241,
+    "null": 242,
     "skills": 18
    }
   },
-  "derived_at_head": "3f3d580",
+  "derived_at_head": "8dcad2f",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 517,
+  "entries": 518,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 230,
+     "count": 231,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 241
+   "total": 242
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "07c45210098318d5e1d64e7b77446793d8f6c1614443f27bf277f685ff38a5ce",
+   "sha256": "97bc32799d182c02df5fdb4ef3246230c7abcfb38caefe00decd31daabe72a40",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1657,13 +1657,13 @@
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 61203,
+   "bytes": 62951,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "b12cda4d85f420a117763e34ce023f3c4b191c044dee2806bd7959006a272956",
+   "sha256": "16f41e44f2518431df75040b317c5bf16b26ec20fe9cf7295197e8727114d809",
    "src": "organs/claude_memory_lite.py"
   },
   {
@@ -4585,6 +4585,16 @@
    "root": null,
    "sha256": "3da7084a2a2757cee315847962b47434ca56c29f1b149b3ca423422ded09b9ec",
    "src": "voidloom/tests/test_seed_doctrine_and_denylist.py"
+  },
+  {
+   "bytes": 11452,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "88b9ec8c64b8a50030ee752c3b510f0943ab904a3662566bb9b4a4b78a100744",
+   "src": "voidloom/tests/test_seed_load_is_one_transaction.py"
   },
   {
    "bytes": 4278,

@@ -720,13 +720,37 @@ def _seed_preflight(seed_path: Path, args: argparse.Namespace):
                                      4 if e.code == "SEED_DENYLIST_HIT" else 2)
 
 
-def _seed_write_failed(conn: sqlite3.Connection, e: Exception) -> int:
-    """A row the guarded writer refused (under --embed: no embedder, no vector): roll back the WHOLE load."""
+def _seed_begin(conn: sqlite3.Connection) -> int:
+    """Open the load's ONE transaction before its first write, and return the memory count inside it.
+
+    The writers under the loop (memory_write.write_memory and its vector helper) each take a SAVEPOINT. A
+    SAVEPOINT on a connection with no open transaction BEGINS one, and its outermost RELEASE COMMITS: without
+    this BEGIN every row would commit as it lands, and a refusal or a kill at row k would leave k-1 rows behind.
+    Inside this transaction those savepoints nest, so nothing reaches the file until the load's one commit."""
+    conn.execute("BEGIN IMMEDIATE")
+    return conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+
+
+def _seed_write_failed(conn: sqlite3.Connection, e: Exception, before=None) -> int:
+    """A row the load could not write (under --embed: no embedder, no vector): roll back the WHOLE load, then
+    count again, so the envelope states what the brain holds rather than what the load meant to leave."""
     conn.rollback()
+    try:
+        after = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+    except sqlite3.Error:
+        after = None
     conn.close()
-    return _seed_emit({"status": "error", "error": getattr(e, "code", None) or "SEED_EMBED_REFUSED",
+    code = getattr(e, "code", None) or ("SEED_EMBED_REFUSED" if type(e).__name__ == "EmbeddingUnavailable"
+                                        else "SEED_WRITE_FAILED")
+    if before is not None and after == before:
+        note = "nothing was written: the load is one transaction, rolled back whole; the brain is as it was"
+    elif before is None:
+        note = "the load stopped before its transaction opened; it wrote nothing"
+    else:
+        note = f"the rollback did not restore the brain: memories {before} before the load, {after} now"
+    return _seed_emit({"status": "error", "error": code,
                        "action": "load-seed", "message": f"{type(e).__name__}: {str(e)[:300]}",
-                       "note": "nothing was written: the load is one transaction, and the brain is as it was"}, 3)
+                       "memories_before": before, "memories_after": after, "note": note}, 3)
 
 
 def cmd_load_seed(args: argparse.Namespace) -> int:
@@ -765,7 +789,9 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
         written = {"new": [], "changed": [], "adopted": [], "superseded_ids": [], "columns_set": 0}
         deferred = []                                   # entries --limit left for a later load
         if not plan_only:
+            before = None
             try:
+                before = _seed_begin(conn)
                 if embed:
                     lib.enable_vec(conn)
                 for action, i, anchor, row_id in plan["actions"]:
@@ -796,7 +822,7 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
                     if action in ("adopted", "present") and lib is not None:
                         written["columns_set"] += int(lib.stamp_columns(conn, row_id, version, m.get("content", "")))
             except Exception as e:
-                return _seed_write_failed(conn, e)
+                return _seed_write_failed(conn, e, before)
             conn.commit()
         total = conn.execute("SELECT COUNT(*) FROM memories WHERE is_archived = 0").fetchone()[0]
         conn.close()
@@ -858,6 +884,11 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
 
     loaded = 0
     skipped = 0
+    before = None
+    try:
+        before = _seed_begin(conn)          # ONE transaction, as the anchored branch: a refused row rolls back all
+    except sqlite3.Error as e:
+        return _seed_write_failed(conn, e, before)
     for m in mems:
         if limit is not None and loaded >= limit:
             break
@@ -871,7 +902,7 @@ def cmd_load_seed(args: argparse.Namespace) -> int:
                 lib.enable_vec(conn)
             _insert_seed_entry(conn, m, common_tag, (), version, embed)
         except Exception as e:
-            return _seed_write_failed(conn, e)
+            return _seed_write_failed(conn, e, before)
         loaded += 1
     conn.commit()
     total = conn.execute("SELECT COUNT(*) FROM memories WHERE is_archived = 0").fetchone()[0]
