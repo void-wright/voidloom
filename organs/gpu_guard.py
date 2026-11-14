@@ -299,11 +299,55 @@ def _run_smi(args: List[str], timeout: float = 8.0) -> Optional[str]:
             text=True,
             timeout=timeout,
         )
-    except Exception:
+    except Exception as e:
+        _SMI_FAULT["last"] = "nvidia-smi could not be run (%s)" % type(e).__name__
         return None
     if proc.returncode != 0:
+        # A signal (the stale-shim SIGSEGV after a driver update) is a crashed TOOL, not a host without cards: the
+        # reasons must say which, or "no GPUs visible" reads as a healthy CPU machine.
+        _SMI_FAULT["last"] = ("nvidia-smi crashed (killed by signal %d)" % -proc.returncode if proc.returncode < 0
+                              else "nvidia-smi exited %d" % proc.returncode)
         return None
     return proc.stdout
+
+
+# The last nvidia-smi failure this process saw (a crash or a non-zero exit), for the verdict's reasons.
+_SMI_FAULT: dict = {}
+
+
+def _single_card_refusal(gpus: List[GpuInfo], policy: dict, display_active: dict,
+                         counted: Optional[int], listed_display: set) -> Optional[str]:
+    """Why a single-card plan must NOT be granted, else None.
+
+    "Single-card on the compute card is always safe" holds only when the visible card IS the compute card. Refused:
+      * the configured compute card is not among the visible cards (it dropped out of the driver), or
+      * the only visible card drives a display (the manifest's display pin, display_active, or the driver's own table)
+        while the host has another card: nvidia-smi counts more than it lists, the manifest pins a display (written
+        only on a host with two or more cards), or the configured compute index names another card.
+    A genuine one-card machine (count 1, nothing pinned or configured elsewhere) keeps its single plan."""
+    visible = {g.index for g in gpus}
+    compute = _compute_index_from_policy(policy)
+    if compute is not None and compute not in visible:
+        return ("the configured compute card %d is not visible (nvidia-smi lists %s)"
+                % (compute, " ".join(str(i) for i in sorted(visible))))
+    if len(gpus) != 1:
+        return None
+    only = gpus[0]
+    pinned = policy.get("display_uuid")
+    shows = (bool(pinned) and pinned == only.uuid) or bool((display_active or {}).get(only.uuid)) \
+        or only.index in (listed_display or set())
+    if not shows:
+        return None
+    more = []
+    if counted is not None and counted > 1:
+        more.append("nvidia-smi counts %d cards" % counted)
+    if pinned:
+        more.append("the manifest pins a display card")
+    if compute is not None and compute != only.index:
+        more.append("the configured compute index is %d" % compute)
+    if not more:
+        return None
+    return "the only visible card (%d) drives a display and %s" % (only.index, "; ".join(more))
 
 
 def _parse_int_mib(token: str) -> Optional[int]:
@@ -981,6 +1025,7 @@ def acquire(
     _free_text: Optional[str] = None,
     _now_hour: Optional[int] = None,
     _display_active: Optional[dict] = None,
+    _counted: Optional[int] = None,
 ) -> Verdict:
     """Walk the five BEND criteria + the degrade ladder and return a Verdict.
 
@@ -992,6 +1037,8 @@ def acquire(
       _free_text               -> canned `free -m` text for preflight_ram()
       _now_hour                -> local hour for the scheduling-window gate
       _display_active          -> canned {uuid: bool} for discover_display()
+      _counted                 -> canned nvidia-smi --query-gpu=count (only read when _gpus is given; a live
+                                  probe asks the driver)
 
     DEFAULT-REFUSE on ambiguity: any probe that returns None/[]/raises pushes the
     verdict DOWN the ladder (dual -> single -> cloud -> defer), never up. The
@@ -1018,11 +1065,15 @@ def acquire(
     )
 
     # --- Probe the topology (default-refuse on probe failure) ----------------
+    _SMI_FAULT.clear()
     gpus = _gpus if _gpus is not None else probe_gpus()
     if not gpus:
         # Cannot see ANY GPU -> we cannot even run single-card with confidence;
         # degrade to cloud (CPU-free path) rather than risk a bad local plan.
-        reasons.append("TOPOLOGY FAIL: no GPUs visible -> cloud-claude-p")
+        if _SMI_FAULT.get("last"):
+            reasons.append("TOPOLOGY FAIL: %s, so the cards cannot be listed -> cloud-claude-p" % _SMI_FAULT["last"])
+        else:
+            reasons.append("TOPOLOGY FAIL: no GPUs visible -> cloud-claude-p")
         return _degrade(reasons, profile, None, PLAN_CLOUD)
 
     device_count = len(gpus)
@@ -1084,6 +1135,20 @@ def acquire(
         # visible, single-card on the compute card is always safe (the doctrine
         # governs only the SECOND/display card; single-card never touches it).
         if device_count >= 1:
+            if _gpus is not None:
+                counted, listed_display = _counted, set()
+            else:
+                try:
+                    counted = voidloom_device._smi_count()
+                    listed_display = voidloom_device._display_cards(voidloom_device._card_table())
+                except Exception:
+                    counted, listed_display = None, set()
+            seen_active = _display_active if _display_active is not None else (
+                {} if _gpus is not None else probe_display_active())
+            why = _single_card_refusal(gpus, policy, seen_active, counted, listed_display)
+            if why is not None:
+                reasons.append("REFUSE-SINGLE: %s -> cloud-claude-p" % why)
+                return _degrade(reasons, profile, display_uuid, PLAN_CLOUD)
             reasons.append("PLAN: cuda:0-single (dual not possible by topology/config/identification)")
             return _degrade(reasons, profile, display_uuid, PLAN_SINGLE)
         # No cards usable -> cloud.

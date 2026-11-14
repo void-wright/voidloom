@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 505,
+    "core": 507,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 460,
+    "all": 462,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 247,
+    "null": 249,
     "skills": 18
    }
   },
-  "derived_at_head": "fcad90e",
+  "derived_at_head": "2818c58",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 523,
+  "entries": 525,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 236,
+     "count": 238,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 247
+   "total": 249
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "128d5119e7cde1237ba7c6ce8c0279c5fc08544d1bbd865baf813ede285cd0ce",
+   "sha256": "0d8115eff0484984fc5322000e30d9593ce4653227053ce35b1dea8dfb971bfb",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1817,13 +1817,13 @@
    "src": "organs/governance.py"
   },
   {
-   "bytes": 57313,
+   "bytes": 61054,
    "component": "core",
    "dst": "organs/gpu_guard.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "412bd1d077eab8464a993105b8d31adc40e2d93e87b53f349777161225cc3745",
+   "sha256": "cf4f73e60743669dff661e2db20f35ed23caa6e44aaa468e6ed552175d6f0964",
    "src": "organs/gpu_guard.py"
   },
   {
@@ -2997,6 +2997,16 @@
    "src": "voidloom/tests/fixtures/fakesmi_one_card/nvidia-smi"
   },
   {
+   "bytes": 129,
+   "component": "core",
+   "dst": null,
+   "exec": true,
+   "platform": "all",
+   "root": null,
+   "sha256": "563ac827abae59de4ba36f454b959fbeb41003964f7696ce0490e47628ff7287",
+   "src": "voidloom/tests/fixtures/fakesmi_segfault/nvidia-smi"
+  },
+  {
    "bytes": 3514,
    "component": "core",
    "dst": null,
@@ -3915,6 +3925,16 @@
    "root": null,
    "sha256": "4788f84581ed97bf4f18fde56206d00621141344770baeac1c74e847734dd6e1",
    "src": "voidloom/tests/test_gpu_display_declared.py"
+  },
+  {
+   "bytes": 6720,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "a726472005f76bd54a8135247bcf3aaa3c6b83ab85ec0cef2ebd2bc634358df4",
+   "src": "voidloom/tests/test_gpu_guard_single_card_is_never_the_display.py"
   },
   {
    "bytes": 14868,

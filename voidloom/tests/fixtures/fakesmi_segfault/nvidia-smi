@@ -1,0 +1,3 @@
+#!/bin/sh
+# Fake nvidia-smi: the tool itself crashes (SIGSEGV), as a stale driver shim does after a driver update.
+kill -SEGV $$

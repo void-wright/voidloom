@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T05:20:59Z from the working tree whose HEAD was `fcad90e`
+> Generated 2026-11-14T05:29:31Z from the working tree whose HEAD was `2818c58`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,14 +12,14 @@
 
 | | |
 |---|---|
-| files tracked | 523 |
-| files hashed | 523 |
-| total bytes | 11492544 |
+| files tracked | 525 |
+| files hashed | 525 |
+| total bytes | 11503778 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  78 files, 4837006 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  78 files, 4840747 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -50,7 +50,7 @@
 | `organs/embedding_upgrade.py` | 69669 | `ab04747a42289165` |
 | `organs/gap_mapping.py` | 107682 | `b72a0d6bd94c01d8` |
 | `organs/governance.py` | 46295 | `ea70b57a2ff92acf` |
-| `organs/gpu_guard.py` | 57313 | `412bd1d077eab846` |
+| `organs/gpu_guard.py` | 61054 | `cf4f73e60743669d` |
 | `organs/hybrid_retrieval.py` | 87501 | `2d5c66ca89d14cd4` |
 | `organs/kind_taxonomy.py` | 30780 | `042ae8556f4600df` |
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
@@ -102,7 +102,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  249 files, 3518510 bytes
+### `voidloom` — The CLI facade  ·  251 files, 3525359 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -125,6 +125,7 @@
 | `voidloom/tests/fixtures/claude_2_1_287_tool_call_unparsed.json` | 3665 | `8fc8387ca64a6711` |
 | `voidloom/tests/fixtures/fakesmi_card_dropped/nvidia-smi` | 752 | `517fe6d7900c1d3d` |
 | `voidloom/tests/fixtures/fakesmi_one_card/nvidia-smi` | 649 | `ed339e740adfc7d9` |
+| `voidloom/tests/fixtures/fakesmi_segfault/nvidia-smi` | 129 | `563ac827abae59de` |
 | `voidloom/tests/harness/README.md` | 3514 | `9d572f2f3792cb87` |
 | `voidloom/tests/harness/c2_install_schema_suite.py` | 19152 | `48cf8c6741611e64` |
 | `voidloom/tests/harness/c3_one_installer_suite.py` | 11688 | `ad6dd04d661309fd` |
@@ -217,6 +218,7 @@
 | `voidloom/tests/test_generic_naming_r1.py` | 24267 | `82246f9f4c18361b` |
 | `voidloom/tests/test_generic_personas.py` | 9644 | `441cc0f36796410d` |
 | `voidloom/tests/test_gpu_display_declared.py` | 6998 | `4788f84581ed97bf` |
+| `voidloom/tests/test_gpu_guard_single_card_is_never_the_display.py` | 6720 | `a726472005f76bd5` |
 | `voidloom/tests/test_hard_delete_finishes.py` | 14868 | `1ebee4590eb415a7` |
 | `voidloom/tests/test_hard_delete_leaves_nothing.py` | 8248 | `8e8b7fc8c2849701` |
 | `voidloom/tests/test_hard_delete_touches_only_copies.py` | 15130 | `906aff96d2fbf9d2` |
@@ -400,7 +402,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1000101 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1000651 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -418,7 +420,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 143949 | `245b40178472de40` |
+| `install/lay_manifest.json` | 144499 | `ff230995fd76ef78` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -560,7 +562,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 225362 bytes
+### `docs` — Documentation  ·  12 files, 225456 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -568,10 +570,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19726 | `ec03c0e4f27ea7fa` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `128d5119e7cde123` |
+| `docs/LAYOUT.md` | 8372 | `0d8115eff0484984` |
 | `docs/ONBOARDING_GUIDE.md` | 57892 | `cf15b2fba65108df` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 40211 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 40305 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
