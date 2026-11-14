@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 500,
+    "core": 501,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 455,
+    "all": 456,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 242,
+    "null": 243,
     "skills": 18
    }
   },
-  "derived_at_head": "8dcad2f",
+  "derived_at_head": "523b8f3",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 518,
+  "entries": 519,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 231,
+     "count": 232,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 242
+   "total": 243
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "97bc32799d182c02df5fdb4ef3246230c7abcfb38caefe00decd31daabe72a40",
+   "sha256": "c690140e5b088899a24a35bbcad8420906331e696500ab6ce6e946c4fa92a574",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1887,13 +1887,13 @@
    "src": "organs/model_fetch.py"
   },
   {
-   "bytes": 41524,
+   "bytes": 41693,
    "component": "core",
    "dst": "organs/model_garden.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "2d9a94aeda067d5ee2c7d39a28ed4c9d83e34dc170db814621a4913644ecb32b",
+   "sha256": "0488ab4dc8113db41d7e907b2d4f3571980d7e22cf284bf621e5d896c4970d4e",
    "src": "organs/model_garden.py"
   },
   {
@@ -3845,6 +3845,16 @@
    "root": null,
    "sha256": "d13acb6dcd505e6cb2259dbd659c4a5e4096488a049d671963dd3b20339c70a2",
    "src": "voidloom/tests/test_gap_research_non_answer_r1.py"
+  },
+  {
+   "bytes": 2332,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "8888ec9ef8cc1f98dddfc2300caf5b7959aa1a7606b2e6a42e8e114742bdda66",
+   "src": "voidloom/tests/test_garden_loads_from_the_local_cache.py"
   },
   {
    "bytes": 24267,

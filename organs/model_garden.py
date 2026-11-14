@@ -496,7 +496,8 @@ def _load_cross_encoder(spec: ModelSpec) -> Any:
     from sentence_transformers import CrossEncoder
     device = _resolve_device(spec)
     logger.info("model_garden: loading CrossEncoder %s on %s", spec.repo_id, device)
-    return CrossEncoder(spec.repo_id, device=device)
+    # From the local cache only: a load never reaches the network for bytes it does not already hold.
+    return CrossEncoder(spec.repo_id, device=device, local_files_only=True)
 
 
 def _load_gliner(spec: ModelSpec) -> Any:
@@ -505,7 +506,7 @@ def _load_gliner(spec: ModelSpec) -> Any:
     from gliner import GLiNER
     device = _resolve_device(spec)
     logger.info("model_garden: loading GLiNER %s on %s", spec.repo_id, device)
-    model = GLiNER.from_pretrained(spec.repo_id, map_location=device)
+    model = GLiNER.from_pretrained(spec.repo_id, map_location=device, local_files_only=True)   # local cache only
     # GLiNER.from_pretrained's map_location places weights; move the wrapper too
     # so .predict_entities runs on the resident device.
     try:
