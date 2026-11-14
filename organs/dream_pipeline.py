@@ -1920,6 +1920,7 @@ def phase_raptor_synthesis(conn: sqlite3.Connection, cfg: Dict[str, Any],
             if summary_text and syn_id:
                 conn.execute("UPDATE memories SET content=?, updated_at=datetime('now') WHERE id=?",
                              (summary_text, syn_id))
+                _embed_synthesis_node(conn, cfg, syn_id, summary_text, replace=True)
             # Anti-laundering on CHURN: a synthesis node created when the cluster
             # was clean would otherwise be washed clean here once a freshly
             # untrusted member joins. Re-evaluate taint every churn and inherit
@@ -1965,8 +1966,9 @@ def phase_raptor_synthesis(conn: sqlite3.Connection, cfg: Dict[str, Any],
 def _compute_clusters(conn: sqlite3.Connection, cfg: Dict[str, Any]) -> List[Tuple[str, List[int], str]]:
     """Cluster the graph using the EXISTING community structure: group active
     memories by source_project (the cheapest stable community signal), keep
-    clusters >= min size. Signature is content-free (a hash of sorted member ids).
-    Label is the GROUP key -- a computed structural key, never a hardcoded topic.
+    clusters >= min size. Signature is content-free and stable per group (a hash of the group key).
+    Label is the GROUP key -- a computed structural key, never a hardcoded topic. RAPTOR's own nodes
+    (source_project 'dream-pipeline', or derived_from 'raptor_synthesis') are never members.
     """
     out: List[Tuple[str, List[int], str]] = []
     min_size = int(cfg["raptor_min_cluster_size"])
@@ -1978,7 +1980,8 @@ def _compute_clusters(conn: sqlite3.Connection, cfg: Dict[str, Any]) -> List[Tup
         rows = conn.execute(
             """SELECT source_project, GROUP_CONCAT(id) ids, COUNT(*) n
                FROM memories WHERE is_archived=0 AND source_project IS NOT NULL
-                 AND COALESCE(derived_from, '') NOT IN ('dream_synthesis', 'playbook_synthesis')
+                 AND COALESCE(derived_from, '') NOT IN ('dream_synthesis', 'playbook_synthesis', 'raptor_synthesis')
+                 AND source_project <> 'dream-pipeline'
                GROUP BY source_project HAVING n >= ? ORDER BY n DESC""",
             (min_size,),
         ).fetchall()
@@ -1987,7 +1990,10 @@ def _compute_clusters(conn: sqlite3.Connection, cfg: Dict[str, Any]) -> List[Tup
     import hashlib
     for project, ids_csv, _n in rows:
         members = sorted(int(x) for x in ids_csv.split(",") if x)
-        sig = hashlib.sha1(("|".join(map(str, members))).encode()).hexdigest()[:16]
+        # ONE signature per GROUP, stable as its membership changes: the churn branch above then decides whether to
+        # re-summarise the group's one node in place. A hash of the member ids made every new member a new cluster,
+        # so every run created a node and none was ever updated.
+        sig = hashlib.sha1(("raptor:" + str(project)).encode()).hexdigest()[:16]
         out.append((sig, members, str(project)))
     return out
 
@@ -1999,7 +2005,9 @@ def _raptor_summarize(conn, cfg, label, members) -> Optional[str]:
     """
     mouth = cfg.get("_synthesis_mouth")
     snippets = []
-    for mid in members[:8]:
+    # The NEWEST eight (member ids ascend with time): a churned group is re-summarised for what changed, not for the
+    # same oldest eight every night.
+    for mid in members[-8:]:
         row = conn.execute("SELECT summary FROM memories WHERE id=?", (mid,)).fetchone()
         if row and row[0]:
             snippets.append(str(row[0])[:120])
@@ -2093,6 +2101,29 @@ def _stamp_synthesis_taint(conn, mid, derived_from: str) -> None:
         logger.debug("stamp synthesis taint failed for id=%s: %s", mid, e)
 
 
+def _embed_synthesis_node(conn, cfg, mid, text, replace: bool = False) -> bool:
+    """Give a RAPTOR node its vector the moment it is written (or rewritten), so the vector lanes see it that night,
+    not after the next morning's backfill. On a rewrite the new vector is computed FIRST and the old one is cleared
+    only once it exists -- a failed encode leaves the previous vector rather than none. Never raises: a failure is
+    attach_embedding's own 'embedding-missing' mark, which the backfill finds."""
+    try:
+        mw = _mw()
+        enc = cfg.get("_encoder")
+        if not replace:
+            res = mw.attach_embedding(conn, mid, text, encoder=enc, organ="dream_pipeline.raptor")
+            return bool(res.get("embedded"))
+        vec = enc(text) if enc else mw.default_encoder(text, conn)
+        if vec is None:
+            return False
+        table, _dim = mw._resolve_tier(conn)
+        mw.clear_vector(conn, table, mid)
+        res = mw.attach_embedding(conn, mid, text, embedding=bytes(vec), organ="dream_pipeline.raptor")
+        return bool(res.get("embedded"))
+    except Exception as e:
+        logger.debug("embed synthesis node failed for id=%s: %s", mid, e)
+        return False
+
+
 def _store_synthesis_node(conn, cfg, label, text, members) -> Optional[int]:
     """Store the RAPTOR distillation as kind='semantic' tag='synthesis-node'.
 
@@ -2121,6 +2152,7 @@ def _store_synthesis_node(conn, cfg, label, text, members) -> Optional[int]:
                 (text, summary),
             )
         mid = cur.lastrowid
+        _embed_synthesis_node(conn, cfg, mid, text)
         for tag in ("synthesis-node", "raptor", "dream-synthesis"):
             conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
                          (mid, tag))

@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 511,
+    "core": 512,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 466,
+    "all": 467,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 253,
+    "null": 254,
     "skills": 18
    }
   },
-  "derived_at_head": "3f1ebe7",
+  "derived_at_head": "0505a6e",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 529,
+  "entries": 530,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 242,
+     "count": 243,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 253
+   "total": 254
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "fa954f7ef7b88a9abc511d2fb785ca036e26696d56603a913a2f88fa2a9ae7d4",
+   "sha256": "fa7d836e03df6fec809fd26700466193cd28e669c88699e35f030c3ef7c340b3",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1727,13 +1727,13 @@
    "src": "organs/dream_ledger.py"
   },
   {
-   "bytes": 129378,
+   "bytes": 131381,
    "component": "core",
    "dst": "organs/dream_pipeline.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "bc3ec6a7df7e6b7af9eff9f014b36fec1146c83efd484aa3b3bd71fba6038b12",
+   "sha256": "15942583a2865e925896423fb406ac5b361ac5fe9f7eb1696e496dcabc3c01cc",
    "src": "organs/dream_pipeline.py"
   },
   {
@@ -4515,6 +4515,16 @@
    "root": null,
    "sha256": "ad2c57e0c5c3551a8c707f397e910c4bb4cdb3b5888e5d1d9696d1be38bfa49a",
    "src": "voidloom/tests/test_qwen_revision_pinned.py"
+  },
+  {
+   "bytes": 5604,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "37b166735e6aed331faae18cf57300edce64e74cf2de3dab67f7696bd1b04e9d",
+   "src": "voidloom/tests/test_raptor_one_node_per_group.py"
   },
   {
    "bytes": 15805,
