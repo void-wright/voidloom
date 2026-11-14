@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T21:34:59Z from the working tree whose HEAD was `260c8d5`
+> Generated 2026-11-14T22:07:59Z from the working tree whose HEAD was `f6dec5d`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 539 |
 | files hashed | 539 |
-| total bytes | 11638497 |
+| total bytes | 11640407 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  264 files, 3617637 bytes
+### `voidloom` — The CLI facade  ·  264 files, 3619461 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -234,7 +234,7 @@
 | `voidloom/tests/test_hidden_cuda_probe_r1.py` | 3921 | `c2a70343a42ff847` |
 | `voidloom/tests/test_hook_counts_tokens_offline.py` | 3918 | `f531c3a77bb5a384` |
 | `voidloom/tests/test_init_applies_skill_graduation.py` | 3693 | `67fe70dd8f43b0f3` |
-| `voidloom/tests/test_init_prelock_snapshot.py` | 5338 | `0dfb477d2d9a3d76` |
+| `voidloom/tests/test_init_prelock_snapshot.py` | 5715 | `20bbad9132d47a79` |
 | `voidloom/tests/test_install_stops_and_says_why.py` | 23227 | `474ccf96583a5fbf` |
 | `voidloom/tests/test_installer_accelerator.py` | 40526 | `9a64dfb7b1d3d16b` |
 | `voidloom/tests/test_installer_counts_an_unreadable_card.py` | 5518 | `9d2ac671b1affb40` |
@@ -257,7 +257,7 @@
 | `voidloom/tests/test_locked_reads_stay_cheap.py` | 3991 | `d40cddc8b2ee26ef` |
 | `voidloom/tests/test_lockless_coverage_counts_reach.py` | 3522 | `f09973179c0334df` |
 | `voidloom/tests/test_lost_lock.py` | 7250 | `1e18703bdc47e06f` |
-| `voidloom/tests/test_lost_lock_every_reader.py` | 16706 | `099638a86a878583` |
+| `voidloom/tests/test_lost_lock_every_reader.py` | 18153 | `2c57fad02d75dbff` |
 | `voidloom/tests/test_manifest_lays_no_tests.py` | 5030 | `9ab8c613bb1645a3` |
 | `voidloom/tests/test_migration_041_plain_sql_release_r2.py` | 4209 | `fc4edf7319aaea4a` |
 | `voidloom/tests/test_migrations_042_045.py` | 12164 | `d533e837d338f13d` |
@@ -434,7 +434,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 148225 | `27c8c5fc536c3e22` |
+| `install/lay_manifest.json` | 148225 | `0be72da1451b91dc` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -576,7 +576,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 226788 bytes
+### `docs` — Documentation  ·  12 files, 226874 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -587,7 +587,7 @@
 | `docs/LAYOUT.md` | 8372 | `1c0d93d601f491d0` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 41546 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 41632 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

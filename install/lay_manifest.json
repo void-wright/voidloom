@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "260c8d5",
+  "derived_at_head": "f6dec5d",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 539,
   "not_laid": {
@@ -4087,13 +4087,13 @@
    "src": "voidloom/tests/test_init_applies_skill_graduation.py"
   },
   {
-   "bytes": 5338,
+   "bytes": 5715,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "0dfb477d2d9a3d76c154fbf946aaba57be997ad7ee2781fed1ae4f5c6c744ecd",
+   "sha256": "20bbad9132d47a7941dc6a5e3a1ba3c5b9a2fa10c3cab4a429e57e507649176e",
    "src": "voidloom/tests/test_init_prelock_snapshot.py"
   },
   {
@@ -4317,13 +4317,13 @@
    "src": "voidloom/tests/test_lost_lock.py"
   },
   {
-   "bytes": 16706,
+   "bytes": 18153,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "099638a86a878583b7f05752952d4464257f99e152ccfe67c93eaf3a4408e7d0",
+   "sha256": "2c57fad02d75dbff9dfc90eb6ad0a014890f3a60de2da6b487c0fe04e2278302",
    "src": "voidloom/tests/test_lost_lock_every_reader.py"
   },
   {

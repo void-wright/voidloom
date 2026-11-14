@@ -146,6 +146,29 @@ class ALostLock(_Three):
             env = dream_ledger.run([*verb, "--db", str(self.db)])
             self.assertEqual((env["status"], env.get("code")), ("error", "LOCK_MISSING"), env)
 
+    def test_saboteur_a_plain_init_refuses_and_names_the_repair_and_the_repair_works(self):
+        for part in ("organs", "migrations"):            # the engine reads the brain beside its own organs/
+            shutil.copytree(ROOT / part, self.d / part, ignore=shutil.ignore_patterns("__pycache__"))
+
+        def init(*extra):
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(self.d), "HF_HUB_OFFLINE": "1",
+                   "WIZARD_ACCELERATOR": "cpu", "PYTHONDONTWRITEBYTECODE": "1"}
+            if os.environ.get("CUDA_VISIBLE_DEVICES"):
+                env["CUDA_VISIBLE_DEVICES"] = os.environ["CUDA_VISIBLE_DEVICES"]
+            return subprocess.run([sys.executable, str(self.d / "organs" / "claude_memory.py"), "init", *extra],
+                                  capture_output=True, text=True, timeout=300, env=env, cwd=str(self.d))
+        r = init()
+        self.assertEqual(r.returncode, 1, r.stdout[-400:] + r.stderr[-400:])
+        self.assertIn("LOCK_MISSING", r.stdout)
+        self.assertIn("init --tier cpu", r.stdout)
+        self.assertFalse((self.d / el.LOCK_NAME).exists(), "a refused init wrote a lock")
+        r = init("--tier", "cpu")
+        self.assertEqual(r.returncode, 0, r.stderr[-800:])
+        self.conn.close()
+        self.conn = self.connect()
+        self.assertEqual(er.resolve(self.conn), (NOMIC, NOMIC_DIM))
+        self.assertEqual(el.resolve(self.conn)["tier"], "cpu")
+
     def test_saboteur_backfill_is_an_error_not_the_declared_success_refusal(self):
         import embed_backfill
         res = embed_backfill.backfill(str(self.db), only_missing=True)

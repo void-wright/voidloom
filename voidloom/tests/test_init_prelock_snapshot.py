@@ -73,7 +73,15 @@ class InitOnAPreLockBrain(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr[-1500:])
         for f in list(self.box.iterdir()):
             if f.name.startswith("embedder.lock"):
-                f.unlink()                       # the brain now predates the lock, as every older install does
+                f.unlink()
+        # and the row the lock writer leaves in the brain: without it the brain predates the lock, as every older
+        # install does; with it, it is a brain whose lock was lost, which `init` refuses until a tier is named
+        import sqlite3
+        import embedder_lock as el
+        c = sqlite3.connect(str(self.box / "claude_memory.db"))
+        c.execute("DELETE FROM metadata WHERE key = ?", (el.BRAIN_LOCK_KEY,))
+        c.commit()
+        c.close()
         self.assertFalse((self.box / "embedder.lock.json").exists())
 
     def test_absent_init_locks_and_the_first_embed_names_the_public_fetch_verb(self):
