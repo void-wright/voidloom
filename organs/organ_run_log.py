@@ -180,6 +180,50 @@ def classify_result(result: Optional[str], exec_main_status: Optional[str]) -> O
     return result
 
 
+# A run the ledger saw IN FLIGHT is written RUNNING and settled on a later look; a run superseded by the next trigger
+# before any look saw it end is ENDED_UNOBSERVED -- never filed as a success it was not seen to be.
+RUNNING = "running"
+ENDED_UNOBSERVED = "ended-unobserved"
+_IN_FLIGHT_STATES = ("activating", "active", "deactivating", "reloading")
+
+
+def run_outcome(shown: Dict[str, List[str]], trigger: datetime) -> Tuple[str, Optional[datetime]]:
+    """(result, ended_at) for the run `trigger` started, from `systemctl show` of its service.
+
+    systemd keeps only the LATEST run's Result. While that run is still going -- ActiveState activating/active/
+    deactivating, or an exit stamp older than the trigger -- the Result on show belongs to the PREVIOUS run, so the
+    answer is RUNNING with no end. Otherwise the run's own Result, refined by its exit status, and its exit stamp."""
+    first = lambda k: (shown.get(k) or [None])[0]
+    active = (first("ActiveState") or "").strip()
+    if not active:
+        # a manager that did not say the unit's state cannot say whether the run is still going (systemd always
+        # does): its Result is all there is, read as before in-flight runs were told apart
+        return classify_result(first("Result"), first("ExecMainStatus")), None
+    exit_ts = _parse_systemd_ts(first("ExecMainExitTimestamp"))
+    if active in _IN_FLIGHT_STATES or exit_ts is None or exit_ts < trigger:
+        return RUNNING, None
+    return classify_result(first("Result"), first("ExecMainStatus")), exit_ts
+
+
+def failed_runs(conn: sqlite3.Connection, days: float = 7.0,
+                services: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """The ledger's FAILED runs in the last `days`, newest first: a final result that is not a success and not a
+    skip (exit-code, timeout, signal, core-dump, ...). ONE definition for the doctor and the organ-yield sentinel.
+    Raises sqlite3.Error when the ledger cannot be read; the caller says so rather than reporting "no failures"."""
+    not_failed = ["success", RUNNING, ENDED_UNOBSERVED] + sorted(set(SKIP_STATUSES.values()))
+    sql = ("SELECT unit_name, service_name, run_started_at, run_ended_at, result FROM organ_run_log "
+           "WHERE result IS NOT NULL AND result NOT IN (%s) AND run_started_at >= datetime('now', ?)"
+           % ",".join("?" * len(not_failed)))
+    args: List[Any] = list(not_failed) + ["-%s days" % float(days)]
+    if services:
+        sql += " AND service_name IN (%s)" % ",".join("?" * len(services))
+        args += list(services)
+    sql += " ORDER BY run_started_at DESC"
+    cur = conn.execute(sql, args)
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
 # Every organ entry point that can find its lock held exits 75 on that skip (Round 3): sleep_loop.py --run,
 # claude_memory.py sleep (the sleep-loop unit), dream_pipeline.py run (both dream units), memory_dreaming.py run.
 SKIP_NOTE = ("a skip: the organ found its brain's lock held (exit 75), so nothing ran and nothing failed; "
@@ -402,20 +446,33 @@ def observe(db: Optional[str] = None, *, unit_dir: str = DEFAULT_UNIT_DIR,
                     sched = None
                     print(f"[organ_run_log] schedule probe failed for {u.unit_name}: "
                           f"{type(e).__name__}: {e}", file=sys.stderr)
-            result = None
+            result, ended = None, None
             try:
-                shown = _show(u.service_name, ["Result", "ExecMainStatus"])
-                result = classify_result((shown.get("Result") or [None])[0],
-                                         (shown.get("ExecMainStatus") or [None])[0])
+                shown = _show(u.service_name, ["Result", "ExecMainStatus", "ActiveState",
+                                               "ExecMainStartTimestamp", "ExecMainExitTimestamp"])
+                result, ended = run_outcome(shown, u.last_trigger)
             except (ProbeError, subprocess.SubprocessError, OSError):
-                result = None
-            cur = conn.execute(
-                "INSERT OR IGNORE INTO organ_run_log "
-                "(unit_name, service_name, run_started_at, result, scheduled_for, "
-                " lateness_seconds, observation_source) VALUES (?,?,?,?,?,?, 'systemctl-show')",
-                (u.unit_name, u.service_name, _utc_stamp(u.last_trigger),
-                 result, sched, lateness))
-            runs_added += cur.rowcount if cur.rowcount > 0 else 0
+                result, ended = None, None
+            started = _utc_stamp(u.last_trigger)
+            # A run of this unit still open from an EARLIER trigger was superseded before any look saw it end: its
+            # result is unknown, and the ledger says so instead of leaving it running or calling it a success.
+            conn.execute(
+                "UPDATE organ_run_log SET result = ? WHERE unit_name = ? AND result = ? AND run_started_at < ?",
+                (ENDED_UNOBSERVED, u.unit_name, RUNNING, started))
+            known = conn.execute("SELECT 1 FROM organ_run_log WHERE unit_name = ? AND run_started_at = ?",
+                                 (u.unit_name, started)).fetchone() is not None
+            # Insert the run, or SETTLE the row an earlier look wrote while it was in flight (or could not read):
+            # a row moves from running/unknown to its own result once, and a final result is never rewritten.
+            conn.execute(
+                "INSERT INTO organ_run_log "
+                "(unit_name, service_name, run_started_at, run_ended_at, result, scheduled_for, "
+                " lateness_seconds, observation_source) VALUES (?,?,?,?,?,?,?, 'systemctl-show') "
+                "ON CONFLICT(unit_name, run_started_at) DO UPDATE SET "
+                "  result = excluded.result, run_ended_at = excluded.run_ended_at, observed_at = datetime('now') "
+                "WHERE organ_run_log.result IS NULL OR organ_run_log.result = ?",
+                (u.unit_name, u.service_name, started, _utc_stamp(ended) if ended else None,
+                 result, sched, lateness, RUNNING))
+            runs_added += 0 if known else 1
         conn.commit()
         return {"status": "ok", "declared_units": declared, "runs_recorded": runs_added,
                 "observed_at": _utc_stamp(now)}

@@ -2068,6 +2068,10 @@ def verb_doctor(args) -> Dict[str, Any]:
     if _acc.get("degraded"):
         _warnings = _warnings + ["accelerator: %s -- %s" % (
             "unavailable" if _acc.get("unavailable") else "degraded", _acc.get("line") or _acc.get("basis") or "")]
+    # A unit that FAILED is a warning, never a quiet line: the ledger records each run's own result.
+    _runs = _doctor_organ_runs(brain.get("db_path") or db)
+    if _runs.get("failed"):
+        _warnings = _warnings + [_runs["line"]]
     _coh = _embedding_coherence(brain.get("db_path"))
     _reason: Optional[str] = None
     if not guard.ok:
@@ -2135,7 +2139,7 @@ def verb_doctor(args) -> Dict[str, Any]:
         # timer, so doctor says BROKEN / STARVED / HEALTHY itself
         "dreams": _doctor_dreams(brain.get("db_path") or db),
         # Round 3 G3: a SKIPPED night (an organ found its brain's lock held, exit 75) is named, never read as success
-        "organ_runs": _doctor_organ_runs(brain.get("db_path") or db),
+        "organ_runs": _runs,
         # the Persona Forge: is there a persona yet? absent/declined is PENDING, never a failure -- it does not touch
         # brain_healthy (a brain with no persona is the shipped default, not a broken machine)
         "persona": _doctor_persona(_explicit_db),
@@ -2199,20 +2203,32 @@ def _doctor_organ_runs(db: Optional[str], days: float = 7.0) -> Dict[str, Any]:
         conn = _sq.connect("file:%s?mode=ro" % db, uri=True)
         try:
             rows = orl.skipped_runs(conn, days=days)
+            failed = orl.failed_runs(conn, days=days) if hasattr(orl, "failed_runs") else []
         finally:
             conn.close()
     except Exception as e:  # noqa: BLE001 - doctor never crashes on one check
-        return {"skips": None, "line": "organ runs: UNMEASURABLE -- the run ledger could not be read (%s: %s)"
-                % (type(e).__name__, e)}
+        return {"skips": None, "failed": None,
+                "line": "organ runs: UNMEASURABLE -- the run ledger could not be read (%s: %s)" % (type(e).__name__, e)}
+
+    def _per(rs):
+        per: Dict[str, int] = {}
+        for r in rs:
+            per[r["service_name"] or r["unit_name"]] = per.get(r["service_name"] or r["unit_name"], 0) + 1
+        return ", ".join("%s x%d" % kv for kv in sorted(per.items()))
+    fail_line = ""
+    if failed:
+        nf = failed[0]
+        fail_line = "%d FAILED run%s in the last %d days (%s; newest %s at %s: %s); " % (
+            len(failed), "" if len(failed) == 1 else "s", days, _per(failed), nf["service_name"] or nf["unit_name"],
+            nf["run_started_at"], nf["result"])
     if not rows:
-        return {"skips": [], "line": "organ runs: no SKIPPED run in the last %d days" % days}
-    per: Dict[str, int] = {}
-    for r in rows:
-        per[r["service_name"] or r["unit_name"]] = per.get(r["service_name"] or r["unit_name"], 0) + 1
+        return {"skips": [], "failed": failed,
+                "line": "organ runs: %sno SKIPPED run in the last %d days" % (fail_line, days)}
     newest = rows[0]
-    return {"skips": rows, "line": "organ runs: %d SKIPPED run%s in the last %d days (%s; newest %s at %s) -- %s" % (
-        len(rows), "" if len(rows) == 1 else "s", days, ", ".join("%s x%d" % kv for kv in sorted(per.items())),
-        newest["service_name"] or newest["unit_name"], newest["run_started_at"], orl.SKIP_NOTE)}
+    return {"skips": rows, "failed": failed,
+            "line": "organ runs: %s%d SKIPPED run%s in the last %d days (%s; newest %s at %s) -- %s" % (
+                fail_line, len(rows), "" if len(rows) == 1 else "s", days, _per(rows),
+                newest["service_name"] or newest["unit_name"], newest["run_started_at"], orl.SKIP_NOTE)}
 
 
 def _doctor_dreams(db: Optional[str]) -> Dict[str, Any]:

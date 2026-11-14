@@ -352,15 +352,23 @@ def _skip_note(con: sqlite3.Connection, invoker: Optional[str], stale: int) -> s
         if _here not in sys.path:
             sys.path.insert(0, _here)
         import organ_run_log
-        rows = organ_run_log.skipped_runs(con, days=stale, services=[u.strip() for u in invoker.split(",")])
+        services = [u.strip() for u in invoker.split(",")]
+        rows = organ_run_log.skipped_runs(con, days=stale, services=services)
+        failed = organ_run_log.failed_runs(con, days=stale, services=services)
     except Exception as e:  # noqa: BLE001 - the note is the ledger's; an unreadable ledger is said, never "no skips"
         return " -- skipped runs UNMEASURED (the run ledger could not be read: %s)" % type(e).__name__
+    note = ""
+    if failed:
+        nf = failed[0]
+        note += (" -- and %d FAILED run%s in the last %dd (newest %s at %s: %s)"
+                 % (len(failed), "" if len(failed) == 1 else "s", stale, nf["service_name"], nf["run_started_at"],
+                    nf["result"]))
     if not rows:
-        return ""
+        return note
     n, newest = len(rows), rows[0]
-    return (" -- and %d SKIPPED run%s in the last %dd (newest %s at %s, %s): a skipped night produced no output and "
-            "is not counted as one" % (n, "" if n == 1 else "s", stale, newest["service_name"],
-                                       newest["run_started_at"], newest["result"]))
+    return note + (" -- and %d SKIPPED run%s in the last %dd (newest %s at %s, %s): a skipped night produced no "
+                   "output and is not counted as one" % (n, "" if n == 1 else "s", stale, newest["service_name"],
+                                                         newest["run_started_at"], newest["result"]))
 
 
 def _one(con: sqlite3.Connection, spec: dict, units: Dict[str, str],
