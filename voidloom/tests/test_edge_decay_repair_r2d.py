@@ -217,7 +217,7 @@ def test_cli_dry_run_by_default(tmp_path, monkeypatch):
     c.close()
     fp = hashlib.sha256((tmp_path / "b.db").read_bytes()).hexdigest()
     p = subprocess.run([sys.executable, str(ORGANS / "temporal_edges.py"), "repair-decay", str(tmp_path / "b.db")],
-                       capture_output=True, text=True, env={**os.environ, "CUDA_VISIBLE_DEVICES": ""})
+                       capture_output=True, text=True, env={**os.environ, "WIZARD_ACCELERATOR": "cpu"})
     assert p.returncode == 0, p.stderr
     assert json.loads(p.stdout)["status"] == "dry-run"
     assert hashlib.sha256((tmp_path / "b.db").read_bytes()).hexdigest() == fp

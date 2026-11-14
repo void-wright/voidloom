@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T06:13:31Z from the working tree whose HEAD was `a371cb3`
+> Generated 2026-11-14T06:19:05Z from the working tree whose HEAD was `59a7367`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 533 |
 | files hashed | 533 |
-| total bytes | 11568770 |
+| total bytes | 11568848 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  258 files, 3569693 bytes
+### `voidloom` — The CLI facade  ·  258 files, 3569696 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -198,7 +198,7 @@
 | `voidloom/tests/test_dreamfix_tranche_a.py` | 47441 | `9df9d9266057a3b6` |
 | `voidloom/tests/test_dreaming_starved_r1.py` | 7060 | `888848a8cc53e96a` |
 | `voidloom/tests/test_edge_decay_idempotent_r2.py` | 6853 | `0856a5cd52e0e2c0` |
-| `voidloom/tests/test_edge_decay_repair_r2d.py` | 12087 | `7bba65e209c0263e` |
+| `voidloom/tests/test_edge_decay_repair_r2d.py` | 12088 | `f11bcc716ead2301` |
 | `voidloom/tests/test_edge_decay_retires_r2d.py` | 8536 | `e02347b289a12a4c` |
 | `voidloom/tests/test_edge_retire_readers_writers_r2d.py` | 12353 | `d6752d4b2e2d7720` |
 | `voidloom/tests/test_embedder_lock.py` | 41160 | `ad6e499277de4122` |
@@ -232,7 +232,7 @@
 | `voidloom/tests/test_hidden_cuda_probe_r1.py` | 3921 | `c2a70343a42ff847` |
 | `voidloom/tests/test_hook_counts_tokens_offline.py` | 3918 | `f531c3a77bb5a384` |
 | `voidloom/tests/test_init_applies_skill_graduation.py` | 3693 | `67fe70dd8f43b0f3` |
-| `voidloom/tests/test_init_prelock_snapshot.py` | 5337 | `a9f05439e115fc3c` |
+| `voidloom/tests/test_init_prelock_snapshot.py` | 5338 | `0dfb477d2d9a3d76` |
 | `voidloom/tests/test_install_stops_and_says_why.py` | 23227 | `474ccf96583a5fbf` |
 | `voidloom/tests/test_installer_accelerator.py` | 40526 | `9a64dfb7b1d3d16b` |
 | `voidloom/tests/test_installer_counts_an_unreadable_card.py` | 4659 | `c1b57303929b8591` |
@@ -297,7 +297,7 @@
 | `voidloom/tests/test_seed_anchor_delta.py` | 19453 | `6b97c55bff94c3ad` |
 | `voidloom/tests/test_seed_delete_and_lock_read.py` | 4790 | `ff332b527c29a64e` |
 | `voidloom/tests/test_seed_delete_stays_deleted.py` | 2406 | `2b4d6431006cae5d` |
-| `voidloom/tests/test_seed_doctrine_and_denylist.py` | 12191 | `3da7084a2a2757ce` |
+| `voidloom/tests/test_seed_doctrine_and_denylist.py` | 12192 | `aee753312feb6a74` |
 | `voidloom/tests/test_seed_load_is_one_transaction.py` | 11452 | `88b9ec8c64b8a500` |
 | `voidloom/tests/test_self_check_models_lock.py` | 4278 | `40ce1e1805941fda` |
 | `voidloom/tests/test_self_check_recall_gate.py` | 19142 | `fe8da6376a20c5cb` |
@@ -428,7 +428,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 146626 | `72b047c76dda649c` |
+| `install/lay_manifest.json` | 146626 | `f811f2d9fa7769b4` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -570,7 +570,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 226298 bytes
+### `docs` — Documentation  ·  12 files, 226373 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -581,7 +581,7 @@
 | `docs/LAYOUT.md` | 8372 | `20921f9210771beb` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 41056 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 41131 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

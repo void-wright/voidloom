@@ -235,7 +235,7 @@ class WriterFlagsColumns(_Brains):
         empty = self.tmp / "empty_home"
         empty.mkdir(exist_ok=True)
         r = self.run_lite(db, "load-seed", "--file", str(PACK), "--embed", HOME=str(empty), HF_HOME=str(empty / "hf"),
-                          HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", CUDA_VISIBLE_DEVICES="")
+                          HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", WIZARD_ACCELERATOR="cpu")
         self.assertEqual(r.returncode, 3, r.stdout[-600:] + r.stderr[-600:])
         self.assertIn("nothing was written", _envelope(r.stdout).get("note", ""))
         self.assertEqual(self.rows(db), [])

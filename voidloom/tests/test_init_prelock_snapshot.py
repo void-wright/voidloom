@@ -50,7 +50,7 @@ class InitOnAPreLockBrain(unittest.TestCase):
 
     def env(self, absent):
         e = {k: v for k, v in os.environ.items() if k not in ("WIZARD_EMBED_MODEL", "WIZARD_LIBRARY_DB")}
-        e.update({"CUDA_VISIBLE_DEVICES": "", "PYTHONDONTWRITEBYTECODE": "1", "HF_HUB_OFFLINE": "1",
+        e.update({"WIZARD_ACCELERATOR": "cpu", "PYTHONDONTWRITEBYTECODE": "1", "HF_HUB_OFFLINE": "1",
                   "TRANSFORMERS_OFFLINE": "1"})
         if absent:
             e.update({"HOME": str(self.empty), "HF_HOME": str(self.empty / "hf")})
