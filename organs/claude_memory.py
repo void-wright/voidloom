@@ -212,7 +212,7 @@ def _install_lock() -> Optional[Dict[str, Any]]:
     try:
         return embedder_lock.resolve(Path(DB_PATH).resolve())
     except embedder_lock.EmbedderLockError as e:
-        if e.code == "LOCK_MISSING":
+        if e.code == "LOCK_MISSING" and not (getattr(e, "detail", None) or {}).get("was_locked"):
             return None
         raise
 

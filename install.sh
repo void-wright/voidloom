@@ -4479,7 +4479,7 @@ try:
     try:
         _lock = embedder_lock.resolve(os.environ["WIZARD_LIBRARY_DB"])
     except embedder_lock.EmbedderLockError as _e:
-        if _e.code != "LOCK_MISSING":
+        if _e.code != "LOCK_MISSING" or (getattr(_e, "detail", None) or {}).get("was_locked"):
             raise
         _lock = None
     if _lock is None:           # a shipped tier still fetches by its pin; only a tier with none takes the engine's below

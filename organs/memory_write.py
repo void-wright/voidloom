@@ -852,7 +852,7 @@ def _weights_hash_for(conn: sqlite3.Connection, table: str, dim: int) -> Tuple[s
     try:
         lock = el.resolve(conn)
     except el.EmbedderLockError as e:
-        if e.code != "LOCK_MISSING":
+        if e.code != "LOCK_MISSING" or (getattr(e, "detail", None) or {}).get("was_locked"):
             raise
         lock = None
     if lock is not None:
@@ -1013,7 +1013,7 @@ def stamp_centroid(conn: sqlite3.Connection, memory_id: int, table: str, dim: in
     try:
         lock = el.resolve(conn)
     except el.EmbedderLockError as e:
-        if e.code != "LOCK_MISSING":
+        if e.code != "LOCK_MISSING" or (getattr(e, "detail", None) or {}).get("was_locked"):
             raise
         lock = None
     if lock is not None and (table != lock["vec_table"] or int(dim) != int(lock["dim"])):

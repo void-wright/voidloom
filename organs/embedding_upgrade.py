@@ -439,7 +439,7 @@ def brain_lock(target, *, tier: str) -> Dict[str, Any]:
     try:
         return el.resolve(target)
     except el.EmbedderLockError as e:
-        if e.code != "LOCK_MISSING":
+        if e.code != "LOCK_MISSING" or (getattr(e, "detail", None) or {}).get("was_locked"):
             raise
     cat_tier = _TIER_KEY_TO_CATALOGUE.get((tier or "").strip().lower())
     entry = el.catalogue_tiers().get(cat_tier) if cat_tier else None
@@ -1220,7 +1220,9 @@ def cmd_stats(args) -> Dict[str, Any]:
                           "weights_hash": _lock["weights_hash"], "code": _lock.get("code")}
     except (_er.EmbedTierUnresolved, _el.EmbedderLockError) as e:
         lock_error = f"{e.code}: {e}"
-        lock_state = {"present": True, "error": e.code, "message": str(e)}
+        # LOCK_MISSING here is a lock that was written and is gone (one never written is the lockless note above)
+        lock_state = {"present": e.code != "LOCK_MISSING", "error": e.code, "message": str(e),
+                      "was_locked": bool((getattr(e, "detail", None) or {}).get("was_locked"))}
 
     coverage = memory_write.coverage_envelope(conn)
     raw_vectors = None
@@ -1306,7 +1308,11 @@ def cmd_full(args) -> Dict[str, Any]:
     cc-by-nc model, so on any other brain it refuses before touching the network."""
     import tier_set
     db = Path(args.db_path).resolve()
-    if tier_set._installed_lock(db) is not None or tier_set._prelock_engine_tier(db) is not None:
+    try:
+        not_jina = tier_set._installed_lock(db) is not None or tier_set._prelock_engine_tier(db) is not None
+    except tier_set.TierRefused as e:           # a lost lock, an unreadable tier: typed, before any fetch
+        raise VerbRefused(e.code, e.message, **e.detail)
+    if not_jina:
         raise VerbRefused(
             "JINA_PIPELINE_ONLY",
             "`full` fetches and compares the jina tier, and this brain does not embed under it. "

@@ -2500,6 +2500,11 @@ def run_dream_cycle(db_path: str, config: Optional[dict] = None,
     try:
         if not is_migration_027_applied(conn):
             return {"status": "error", "message": "migration_027 not applied"}
+        lost = _lost_lock(conn)
+        if lost is not None:
+            # a brain that had a lock and lost it is broken: the night refuses whole, and loudly (exit 1)
+            return {"status": "error", "code": lost.code, "message": str(lost),
+                    "duration_seconds": round(time.time() - t0, 2)}
 
         batch_id = _open_batch(conn, cfg)
         phase_outcomes: List[Dict[str, Any]] = []
@@ -2596,6 +2601,20 @@ def run_dream_cycle(db_path: str, config: Optional[dict] = None,
                 memory_dreaming._release_lock(lock_path)
             except Exception:
                 pass
+
+
+def _lost_lock(conn: sqlite3.Connection):
+    """The refusal of a brain whose install lock was written and is gone, else None (a locked brain, or one that never
+    had a lock). Read before any phase: each phase is fail-soft, so a refusal inside one would leave the night ok."""
+    _d = os.path.dirname(os.path.abspath(__file__))
+    if _d not in sys.path:
+        sys.path.insert(0, _d)
+    import embedder_lock
+    try:
+        embedder_lock.refuse_lost_lock(conn)
+    except embedder_lock.EmbedderLockError as e:
+        return e
+    return None
 
 
 def _maybe_check_burst(cfg: Dict[str, Any], daytime: bool) -> Optional[dict]:

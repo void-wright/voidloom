@@ -589,10 +589,14 @@ def _has_vector(conn: sqlite3.Connection, table: Optional[str], ids: Sequence[in
 
 
 def _active_table(conn: sqlite3.Connection) -> Optional[str]:
+    """The brain's active table; None when it declares none. A brain whose lock was written and is gone refuses:
+    planning against no table would call every vector absent."""
     try:
         import embed_resolver
         return embed_resolver.resolve(conn)[0]
-    except Exception:
+    except Exception as e:
+        if (getattr(e, "detail", None) or {}).get("was_locked"):
+            raise
         return None
 
 
@@ -1029,6 +1033,10 @@ def run(argv: Optional[Sequence[str]] = None) -> Dict[str, Any]:
             conn = _connect(db, ro=True)
             try:
                 p = plan(conn, days=a.days)
+            except Exception as e:
+                if not getattr(e, "code", None):
+                    raise
+                return _env("error", {}, str(e), e.code)      # a typed refusal (a lost lock) stays typed
             finally:
                 conn.close()
             return _env("ok", p if a.full else _summarise_plan(p))
@@ -1047,6 +1055,10 @@ def run(argv: Optional[Sequence[str]] = None) -> Dict[str, Any]:
         try:
             p = plan(conn, days=a.days)
             r = apply(conn, p, parts, pre_path)
+        except Exception as e:
+            if not getattr(e, "code", None):
+                raise
+            return _env("error", {}, str(e), e.code)          # a typed refusal (a lost lock) stays typed
         finally:
             conn.close()
         r["plan"] = _summarise_plan(p)

@@ -219,6 +219,12 @@ def backfill(db_path: str, limit: Optional[int] = None,
     conn.row_factory = sqlite3.Row
     try:
         try:
+            embedder_lock.refuse_lost_lock(conn)
+        except embedder_lock.EmbedderLockError as e:
+            # a brain that HAD a lock and lost it is broken, not keyword-only: never the declared-success 3
+            out.update({"status": "error", "code": e.code, "message": str(e)})
+            return out
+        try:
             table, dim = embed_resolver.resolve(conn)
         except Exception as e:
             # UNKNOWN, NOT ZERO. Defaulting here means writing into whichever

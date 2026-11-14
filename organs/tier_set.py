@@ -219,7 +219,7 @@ def _installed_lock(db: Path) -> Optional[Dict[str, Any]]:
     try:
         return embedder_lock.resolve(db)
     except embedder_lock.EmbedderLockError as e:
-        if e.code == "LOCK_MISSING":
+        if e.code == "LOCK_MISSING" and not (getattr(e, "detail", None) or {}).get("was_locked"):
             return None
         raise TierRefused(e.code, str(e), **{k: v for k, v in e.detail.items()})
 

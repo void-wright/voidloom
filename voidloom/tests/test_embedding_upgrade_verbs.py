@@ -16,6 +16,7 @@ import contextlib
 import io
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -82,17 +83,25 @@ class ExitStatus(unittest.TestCase):
             self.assertEqual(rc, 0, result)
 
     def test_saboteur_full_refuses_before_any_fetch_on_a_brain_that_is_not_jina(self):
+        import embedder_lock as el
         for tier in ("nomic", "qwen"):
             d = Path(tempfile.mkdtemp(dir=self.dir))
             db = make_brain(d, tier)
-            for locked in (True, False):
-                if not locked:
+            # locked; then the lock lost (its file gone, the brain's own record of it kept); then never locked
+            for state, want in (("locked", "JINA_PIPELINE_ONLY"), ("lost", "LOCK_MISSING"),
+                                ("never", "JINA_PIPELINE_ONLY")):
+                if state == "lost":
                     (d / "embedder.lock.json").unlink()
                     (d / "embedder.lock.history.jsonl").unlink()
+                if state == "never":
+                    c = sqlite3.connect(str(db))
+                    c.execute("DELETE FROM metadata WHERE key = ?", (el.BRAIN_LOCK_KEY,))
+                    c.commit()
+                    c.close()
                 with mock.patch.object(self.eu, "cmd_download", side_effect=AssertionError("it fetched")):
                     with self.assertRaises(self.eu.VerbRefused) as cm:
                         self.eu.cmd_full(type("A", (), {"db_path": str(db), "batch_size": 2})())
-                self.assertEqual(cm.exception.code, "JINA_PIPELINE_ONLY")
+                self.assertEqual(cm.exception.code, want, state)
 
     def test_saboteur_full_stops_when_the_comparison_errors(self):
         db = make_brain(self.dir, "jina")

@@ -65,20 +65,23 @@ class EmbedTierUnresolved(RuntimeError):
     """Raised instead of guessing. Loud beats a silent wrong table.
     `.code` carries the embedder_lock refusal when there is one."""
 
-    def __init__(self, message: str, code: str = "LOCK_MISSING"):
+    def __init__(self, message: str, code: str = "LOCK_MISSING", detail: dict = None):
         super().__init__(message)
         self.code = code
+        self.detail = dict(detail or {})
 
 
 def _from_lock(conn: sqlite3.Connection):
     """(table, dim) from the install lock beside `conn`'s database; None when there
-    is NO lock (a pre-lock brain). Any other lock defect refuses, typed."""
+    is NO lock and none was ever written (a pre-lock brain). A lock that was written
+    and is gone refuses LOCK_MISSING with `detail['was_locked']`, as does every other
+    lock defect: nothing vouches for the table then, and the metadata row is not asked."""
     try:
         lock = embedder_lock.resolve(conn)
     except embedder_lock.EmbedderLockError as e:
-        if e.code == "LOCK_MISSING":
+        if e.code == "LOCK_MISSING" and not (getattr(e, "detail", None) or {}).get("was_locked"):
             return None
-        raise EmbedTierUnresolved(str(e), code=e.code) from e
+        raise EmbedTierUnresolved(str(e), code=e.code, detail=getattr(e, "detail", None)) from e
     table = str(lock["vec_table"]).strip()
     dim = int(lock["dim"])
     if table not in _DIM_FOR:
@@ -96,7 +99,8 @@ def _from_lock(conn: sqlite3.Connection):
 
 def resolve(conn: sqlite3.Connection) -> tuple[str, int]:
     """Return (table, dim) for the database `conn` is attached to: from the install
-    lock beside it when there is one, else (a pre-lock brain) from metadata.
+    lock beside it when there is one, else (a brain that never had a lock) from metadata.
+    A brain whose lock was written and is gone refuses LOCK_MISSING: it is not a pre-lock brain.
 
     Raises EmbedTierUnresolved rather than falling back to the dormant table.
     """

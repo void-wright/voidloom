@@ -617,7 +617,7 @@ try:
     try:
         lock = embedder_lock.resolve(os.environ["WIZARD_LIBRARY_DB"])
     except embedder_lock.EmbedderLockError as e:
-        if e.code != "LOCK_MISSING":
+        if e.code != "LOCK_MISSING" or (getattr(e, "detail", None) or {}).get("was_locked"):
             raise
         lock = None
     if lock is not None:

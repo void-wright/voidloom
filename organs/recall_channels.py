@@ -300,11 +300,16 @@ def _cosines(conn: sqlite3.Connection, table: str, query_vec: bytes, ids: Sequen
 
 
 def _active_table(conn: sqlite3.Connection) -> Optional[str]:
+    return _active_table_why(conn)[0]
+
+
+def _active_table_why(conn: sqlite3.Connection) -> Tuple[Optional[str], Optional[str]]:
+    """(table, None), or (None, the resolver's refusal): a vector arm turned off by a refusal says which."""
     try:
         import embed_resolver
-        return embed_resolver.resolve(conn)[0]
-    except Exception:
-        return None
+        return embed_resolver.resolve(conn)[0], None
+    except Exception as e:
+        return None, f"{getattr(e, 'code', None) or type(e).__name__}: {e}"
 
 
 def _channel_rows(conn: sqlite3.Connection, spec: Dict[str, Any]) -> List[Tuple[int, Any, Any]]:
@@ -405,7 +410,7 @@ def build(conn: sqlite3.Connection, *, query: str, query_vec: Optional[bytes], r
     if not leads_on:
         diag["off"] = "--leads 0"
         return out, diag
-    table = _active_table(conn)
+    table, table_refused = _active_table_why(conn)
     # the top 5 BY RANK (score), never positions [:5] of the Lost-in-the-Middle-placed list (R1-L12)
     lane1_ids = [int(r["id"]) for r in sorted((r for r in results if isinstance(r, dict) and "id" in r),
                                               key=lambda r: -float(r.get("score", 0.0) or 0.0))][:5]
@@ -431,6 +436,8 @@ def build(conn: sqlite3.Connection, *, query: str, query_vec: Optional[bytes], r
                 continue
             eids = sorted(elig)
             cand: Dict[int, Set[str]] = {}
+            if "vector_subset" in spec.get("recipe", ()) and table is None and table_refused and query_vec is not None:
+                d["vector_error"] = table_refused[:200]
             if "vector_subset" in spec.get("recipe", ()) and table and query_vec is not None:
                 try:
                     vids = _searchable(conn, eids)
