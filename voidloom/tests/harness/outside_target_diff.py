@@ -144,7 +144,7 @@ WIZARD_READ_ONLY = {"WIZARD_PYTHON_BIN": "an interpreter: executed, never a writ
 #   CITE install/install_crons.sh:123 WIZARD_LIBRARY_HOME
 #   CITE install/install_crons.sh:124 WIZARD_LIBRARY_DB
 #   CITE install/install_crons.sh:143 WIZARD_ENV_FILE
-#   CITE organs/voidloom_device.py:367 WIZARD_CONFIG_PATH
+#   CITE organs/voidloom_device.py:478 WIZARD_CONFIG_PATH
 #   CITE organs/wizard_config.py:396 _env_key   -> WIZARD_DB_PATH, WIZARD_MODULE_DIR (WIZARD_<KEY> for db_path, module_dir)
 #   CITE organs/voidloom_env.py:153 VOIDLOOM_ENV_DIR   -> the thinker's credential home (<VOIDLOOM_ENV_DIR>/thinker): OTHER_PATH_VARS
 # Any value of these is a path whatever its spelling: a relative value, `~/x` inside a quoted variable (bash does
