@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 518,
+    "core": 519,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 473,
+    "all": 474,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 259,
+    "null": 260,
     "skills": 18
    }
   },
-  "derived_at_head": "eba7944",
+  "derived_at_head": "8b5680d",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 536,
+  "entries": 537,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 248,
+     "count": 249,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 259
+   "total": 260
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "4a0b83bdc58caf3673320d1f2c3d38a9a4e22e452a887e68584cef1e5681920d",
+   "sha256": "7232da0433a978e90b08f0cda2d23fa6b94b7c46b5e26f01c6c10674d709c105",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1667,13 +1667,13 @@
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 62951,
+   "bytes": 63971,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "16f41e44f2518431df75040b317c5bf16b26ec20fe9cf7295197e8727114d809",
+   "sha256": "c0daf169224efa6b648f2dc448396b8b698d4c7bc03d8fae4848884d7126ddfc",
    "src": "organs/claude_memory_lite.py"
   },
   {
@@ -1877,13 +1877,13 @@
    "src": "organs/memory_dreaming.py"
   },
   {
-   "bytes": 140320,
+   "bytes": 142285,
    "component": "core",
    "dst": "organs/memory_write.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "bc70efe933f34aa2b04ca25b7922853e27503e512ec63fcfc9e765a034a8e0ff",
+   "sha256": "2a3b490fceebc2d29ed041ab7fd11f0de3eaa0810566bbde4d71c9682167fdd5",
    "src": "organs/memory_write.py"
   },
   {
@@ -4715,6 +4715,16 @@
    "root": null,
    "sha256": "6aa0410c65f897ea485ef9f60b812b6b5f6ae8e92fe1b45555f451fba3f87450",
    "src": "voidloom/tests/test_schema_migrator.py"
+  },
+  {
+   "bytes": 7488,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "a972fec6ebd0ee0d6b448c4752b9b061338b3f893eae08711aa0d03937d421a7",
+   "src": "voidloom/tests/test_search_set_foreign_stamps.py"
   },
   {
    "bytes": 19453,

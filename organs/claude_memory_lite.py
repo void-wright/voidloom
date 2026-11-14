@@ -282,12 +282,24 @@ def _lock_coverage(conn: sqlite3.Connection) -> dict:
                       verified=int(verified), legacy_unverified=None, **named)
     verified = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active} AND m.id IN ({ids}) "
                             f"AND m.id IN ({stamped})", (vt, wh, dim)).fetchone()[0]
+    # an unstamped vector is legacy only in the lock's own table: one carrying a stamp under the lock's checksum or
+    # 'unresolved', or on a brain with no stamp under another checksum (the reader's rule, memory_write.member_sql)
+    # -- two scalar reads, once per call (never per row)
+    owned = conn.execute("SELECT 1 FROM embedding_provenance WHERE vec_table = ? AND weights_hash IN (?, ?) LIMIT 1",
+                         (vt, _UNRESOLVED_STAMP, wh)).fetchone() is not None
+    others = conn.execute("SELECT 1 FROM embedding_provenance WHERE weights_hash NOT IN (?, ?) LIMIT 1",
+                          (_UNRESOLVED_STAMP, wh)).fetchone() is not None
+    unstamped_ok = owned or not others
     matched = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active} AND m.id IN ({ids}) "
-                           f"AND m.id NOT IN ({foreign})", (vt, wh, dim, _UNRESOLVED_STAMP)).fetchone()[0]
+                           f"AND m.id NOT IN ({foreign})"
+                           + ("" if unstamped_ok else " AND m.id IN (SELECT memory_id FROM embedding_provenance "
+                                                      "WHERE vec_table = ?)"),
+                           (vt, wh, dim, _UNRESOLVED_STAMP) + (() if unstamped_ok else (vt,))).fetchone()[0]
     if not matched and conn.execute(f"SELECT 1 FROM memories m WHERE {active} AND m.id IN ({ids}) LIMIT 1").fetchone():
         named.update(degraded=True, error="NO_ROWS_FOR_LOCK")
     return settle(matched, "active memories with a vector in the lock's table and no stamp naming another "
-                           "checksum (derived on this connection)", measured=True,
+                           "checksum; an unstamped one only in the lock's own table (derived on this connection)",
+                  measured=True,
                   search_rule="lock: verified + legacy", verified=int(verified), legacy_unverified=int(matched) - int(verified), **named)
 
 

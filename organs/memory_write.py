@@ -1124,7 +1124,12 @@ def attach_under_lock(conn: sqlite3.Connection, memory_id: int, text: str, vec: 
 # parts, both in the lock's own vector table:
 #   VERIFIED  rows whose stamp carries the lock's computed checksum at its width;
 #   LEGACY    rows whose stamp is the declared absence 'unresolved', and rows with
-#             no stamp on that table at all.
+#             no stamp on that table at all. An unstamped row is legacy in the lock's
+#             OWN table: one that carries a stamp under the lock's checksum or
+#             'unresolved', or any table of a brain that holds no stamp under another
+#             checksum. A brain that holds such stamps and none for this table has not
+#             made this table its own: a lock re-pointed there without re-embedding
+#             finds no rows and refuses, rather than serving its unstamped vectors.
 # A stamp naming a DIFFERENT checksum is outside the set, and so is every vector
 # in another table. Legacy rows exist because `init` pins a brain that already
 # has vectors (written before any lock); dropping them would silently empty that
@@ -1138,6 +1143,11 @@ def attach_under_lock(conn: sqlite3.Connection, memory_id: int, text: str, vec: 
 # --------------------------------------------------------------------------
 
 SEARCH_RULE_LOCKED = "lock: verified + legacy"
+
+
+def _sql_text(value: Any) -> str:
+    """`value` as an SQL string literal (quotes doubled), for a predicate whose `?` count is fixed by its callers."""
+    return "'" + str(value).replace("'", "''") + "'"
 SEARCH_RULE_LOCKLESS = "lockless: whole table"
 
 def lock_identity(conn: sqlite3.Connection) -> Dict[str, Any]:
@@ -1182,13 +1192,28 @@ class ProvenanceFilter:
         """A predicate over `memories {mem_alias}` that is true when the memory's
         vector, if it has one in this table, is in the search set. Locked: no stamp
         on the lock's table names anything but the lock's checksum at its width or
-        'unresolved' (one stamp per memory per table: the sidecar's key). Bind
-        `search_set_params` for its three `?`. Lockless: always true."""
+        'unresolved' (one stamp per memory per table: the sidecar's key), and a vector
+        with NO stamp there counts only when the table is the lock's own
+        (unstamped_admitted_sql). Bind `search_set_params` for its three `?`.
+        Lockless: always true."""
         if not self.locked:
             return "1"
         return (f"NOT EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p WHERE p.memory_id = {mem_alias}.id "
                 f"AND p.vec_table = ? AND NOT ((p.weights_hash = ? AND p.dim = ?) "
-                f"OR p.weights_hash = '{WEIGHTS_HASH_UNRESOLVED}'))")
+                f"OR p.weights_hash = '{WEIGHTS_HASH_UNRESOLVED}')) "
+                f"AND ({self.unstamped_admitted_sql()} OR EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p2 "
+                f"WHERE p2.memory_id = {mem_alias}.id AND p2.vec_table = {_sql_text(self.vec_table)}))")
+
+    def unstamped_admitted_sql(self) -> str:
+        """True when an unstamped vector in the lock's table may be legacy: the table carries a stamp under the lock's
+        checksum or 'unresolved' (it is the lock's own), or the brain holds no stamp under any other checksum (it kept
+        none to say otherwise). Uncorrelated, so it is evaluated once per statement. Binds nothing. Locked only."""
+        if not self.locked:
+            raise ValueError("unstamped_admitted_sql needs a locked filter")
+        own = f"('{WEIGHTS_HASH_UNRESOLVED}', {_sql_text(self.weights_hash)})"
+        return (f"(EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p4 WHERE p4.vec_table = {_sql_text(self.vec_table)} "
+                f"AND p4.weights_hash IN {own}) "
+                f"OR NOT EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p3 WHERE p3.weights_hash NOT IN {own}))")
 
     def verified_sql(self, vec_alias: str = "v") -> str:
         """True when the vector row `{vec_alias}` is VERIFIED (its stamp carries the
@@ -1766,7 +1791,7 @@ def _lock_coverage(conn: sqlite3.Connection, flt: ProvenanceFilter, *, detail: b
     if cov.matched == 0:
         raise ProvenanceUnmatched(
             f"REFUSED: no active memory has a vector in {table!r} that the lock's search set "
-            f"admits (stamped {whash[:12]}…, 'unresolved', or unstamped) while "
+            f"admits (stamped {whash[:12]}…, 'unresolved', or unstamped in a table the lock has made its own) while "
             f"{cov.active_memories} active memories exist ({cov.vectors} vector(s), "
             f"{cov.stamped_foreign_hash} stamped under a different checksum; present: {histogram}). "
             f"A search filtered on this lock would search nothing; `{re_embed_command(cov.db_path)}` "
@@ -1874,7 +1899,7 @@ def legacy_episodics_held(conn: sqlite3.Connection, flt: ProvenanceFilter,
             LEFT JOIN {PROVENANCE_TABLE} p ON p.memory_id = m.id AND p.vec_table = ?
             WHERE m.kind = 'episodic' AND m.is_archived = 0
               AND m.id IN (SELECT memory_id FROM {flt.vec_table}) {done}
-              AND (p.memory_id IS NULL OR p.weights_hash = ?)""",
+              AND ((p.memory_id IS NULL AND {flt.unstamped_admitted_sql()}) OR p.weights_hash = ?)""",
         (cutoff, flt.vec_table, WEIGHTS_HASH_UNRESOLVED)).fetchone()
     return int(total), int(recent)
 

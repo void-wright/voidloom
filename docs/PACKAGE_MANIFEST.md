@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T20:54:53Z from the working tree whose HEAD was `eba7944`
+> Generated 2026-11-14T21:31:28Z from the working tree whose HEAD was `8b5680d`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,14 +12,14 @@
 
 | | |
 |---|---|
-| files tracked | 536 |
-| files hashed | 536 |
-| total bytes | 11617518 |
+| files tracked | 537 |
+| files hashed | 537 |
+| total bytes | 11628338 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4869474 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4872459 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -35,7 +35,7 @@
 | `organs/brain_clock.py` | 1944 | `62be8c0542fae70f` |
 | `organs/calibration_memory.py` | 47528 | `c619e8c1ad72f77c` |
 | `organs/claude_memory.py` | 227741 | `293c1cf02f17b114` |
-| `organs/claude_memory_lite.py` | 62951 | `16f41e44f2518431` |
+| `organs/claude_memory_lite.py` | 63971 | `c0daf169224efa6b` |
 | `organs/cognitive_map.py` | 40561 | `33b52acc76aa6d9f` |
 | `organs/communities.py` | 50195 | `bd94f5c4c5fe74a6` |
 | `organs/council.py` | 50065 | `570feac66706d322` |
@@ -56,7 +56,7 @@
 | `organs/kind_taxonomy.py` | 30780 | `042ae8556f4600df` |
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
 | `organs/memory_dreaming.py` | 107507 | `fa52e4a89424b500` |
-| `organs/memory_write.py` | 140320 | `bc70efe933f34aa2` |
+| `organs/memory_write.py` | 142285 | `2a3b490fceebc2d2` |
 | `organs/model_fetch.py` | 8995 | `faf76bcf1a2b2418` |
 | `organs/model_garden.py` | 42154 | `a1278c6297f38640` |
 | `organs/monthly_self_eval.py` | 204854 | `47fb5420d97a52a2` |
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  261 files, 3600675 bytes
+### `voidloom` — The CLI facade  ·  262 files, 3608163 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -297,6 +297,7 @@
 | `voidloom/tests/test_run_ledger_settles_in_flight_runs.py` | 6940 | `804eb968bbad79ef` |
 | `voidloom/tests/test_run_log_follows_the_writer.py` | 4515 | `68ae69676126998d` |
 | `voidloom/tests/test_schema_migrator.py` | 8188 | `6aa0410c65f897ea` |
+| `voidloom/tests/test_search_set_foreign_stamps.py` | 7488 | `a972fec6ebd0ee0d` |
 | `voidloom/tests/test_seed_anchor_delta.py` | 19453 | `6b97c55bff94c3ad` |
 | `voidloom/tests/test_seed_delete_and_lock_read.py` | 4790 | `ff332b527c29a64e` |
 | `voidloom/tests/test_seed_delete_stays_deleted.py` | 2406 | `2b4d6431006cae5d` |
@@ -413,7 +414,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1004193 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1004459 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -431,7 +432,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 147432 | `e43e1a0c1dfaa2bf` |
+| `install/lay_manifest.json` | 147698 | `1adf812dbf94398e` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -573,7 +574,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 226549 bytes
+### `docs` — Documentation  ·  12 files, 226630 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -581,10 +582,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19765 | `f22116939a3af066` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `4a0b83bdc58caf36` |
+| `docs/LAYOUT.md` | 8372 | `7232da0433a978e9` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 41307 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 41388 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
