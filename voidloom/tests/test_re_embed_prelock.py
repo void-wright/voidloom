@@ -29,10 +29,16 @@ def _args(db, batch=4):
 
 
 def _strip_lock(db: Path) -> None:
+    """The brain as it was before the lock: no lock file, no history, and none of the row the lock writer leaves in
+    the brain (which alone would make it a brain whose lock was lost)."""
+    import embedder_lock as el
     (db.parent / "embedder.lock.json").unlink()
     h = db.parent / "embedder.lock.history.jsonl"
     if h.exists():
         h.unlink()
+    c = _connect(db)
+    c.execute("DELETE FROM metadata WHERE key = ?", (el.BRAIN_LOCK_KEY,))
+    c.commit(); c.close()
 
 
 def _make_prelock(d: Path, tier: str) -> Path:

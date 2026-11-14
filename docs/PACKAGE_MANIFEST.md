@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T22:07:59Z from the working tree whose HEAD was `f6dec5d`
+> Generated 2026-11-14T22:47:37Z from the working tree whose HEAD was `4e94355`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 539 |
 | files hashed | 539 |
-| total bytes | 11640407 |
+| total bytes | 11640749 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  264 files, 3619461 bytes
+### `voidloom` — The CLI facade  ·  264 files, 3619803 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -284,7 +284,7 @@
 | `voidloom/tests/test_ps1_stops_and_says_why.py` | 9876 | `2c6be7468e2559cf` |
 | `voidloom/tests/test_qwen_revision_pinned.py` | 3887 | `ad2c57e0c5c3551a` |
 | `voidloom/tests/test_raptor_one_node_per_group.py` | 5604 | `37b166735e6aed33` |
-| `voidloom/tests/test_re_embed_prelock.py` | 15805 | `1a06253ff45b4738` |
+| `voidloom/tests/test_re_embed_prelock.py` | 16147 | `61a6585956c3fe6f` |
 | `voidloom/tests/test_read_never_fetches.py` | 7232 | `74534555cb0f5a40` |
 | `voidloom/tests/test_readers_count_the_brains_table.py` | 7747 | `1bec17ce2bc31b16` |
 | `voidloom/tests/test_readers_lock_first.py` | 8699 | `2c622570e4347fd4` |
@@ -434,7 +434,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 148225 | `0be72da1451b91dc` |
+| `install/lay_manifest.json` | 148225 | `03bedbc08724ce8a` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
