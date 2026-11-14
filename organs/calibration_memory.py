@@ -58,6 +58,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 logger = logging.getLogger(__name__)
 
 # Valid enum values — must match migration_014 CHECK constraints.
@@ -185,7 +194,7 @@ def log_prediction(
     if not domain or not domain.strip():
         raise ValueError("domain must be a non-empty string")
 
-    ts = predicted_at or datetime.now().isoformat()
+    ts = predicted_at or brain_clock.utc_stamp()
 
     cursor = conn.execute(
         """INSERT INTO calibration_log
@@ -255,7 +264,7 @@ def log_outcome(
         raise ValueError(f"actual_value must be positive, got {actual_value}")
 
     ratio = actual_value / prediction_value
-    ts = actual_at or datetime.now().isoformat()
+    ts = actual_at or brain_clock.utc_stamp()
 
     # Append notes if both old and new exist.
     combined_notes = existing_notes or ""
@@ -332,7 +341,7 @@ def compute_correction_factor(
         correction_factor, confidence, sample_size, weighted_median,
         p25, p75, domain, prediction_kind.
     """
-    cutoff = (datetime.now() - timedelta(days=lookback_days)).isoformat()
+    cutoff = brain_clock.utc_cutoff(lookback_days)   # the writers above stamp the brain's clock
     half_life_days = max(lookback_days / 3, 7)
 
     # Fetch all resolved predictions in the lookback window.
@@ -361,7 +370,7 @@ def compute_correction_factor(
             "note": f"Insufficient data ({len(rows)} < {min_samples} samples)",
         }
 
-    now = datetime.now()
+    now = brain_clock.utc_now()
     weighted_ratios = []
 
     for ratio, predicted_at_str in rows:
@@ -490,7 +499,7 @@ def get_calibration_stats(
 
     Returns per-domain and per-kind breakdowns, with overall health metrics.
     """
-    cutoff = (datetime.now() - timedelta(days=lookback_days)).isoformat()
+    cutoff = brain_clock.utc_cutoff(lookback_days)
 
     # Base counts.
     total_predictions = conn.execute(

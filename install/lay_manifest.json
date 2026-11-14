@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 514,
+    "core": 515,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 469,
+    "all": 470,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 255,
+    "null": 256,
     "skills": 18
    }
   },
-  "derived_at_head": "83c6ce6",
+  "derived_at_head": "a371cb3",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 532,
+  "entries": 533,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 244,
+     "count": 245,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 255
+   "total": 256
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "d33e9d6414801f6aa5955922149c013a6c668bff134d639ba587a20800f4a0d6",
+   "sha256": "20921f9210771beb909b1cc2578655ca788ca92c81c0a48d16e13f2d09b92eb9",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1627,13 +1627,13 @@
    "src": "organs/belief_cli.py"
   },
   {
-   "bytes": 74066,
+   "bytes": 74397,
    "component": "core",
    "dst": "organs/belief_engine.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "b312c857d174f33305b1169ddcbf026b101839ba2bc6c828e78229689d99fb62",
+   "sha256": "e443a0bb2ed2310eb61cf7f98e1ddc2e4bc5a328343509537b689242e8e89ecb",
    "src": "organs/belief_engine.py"
   },
   {
@@ -1647,13 +1647,13 @@
    "src": "organs/brain_clock.py"
   },
   {
-   "bytes": 47193,
+   "bytes": 47528,
    "component": "core",
    "dst": "organs/calibration_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "00fea3a3d28f1dedcbb97282d47c5d315aa74696d3250f87bf8770dee8a087b1",
+   "sha256": "c619e8c1ad72f77cc2e0b2f6c9ae61e8057cf6425563aa6c757ae3d0fddff852",
    "src": "organs/calibration_memory.py"
   },
   {
@@ -1717,13 +1717,13 @@
    "src": "organs/counterfactual_memory.py"
   },
   {
-   "bytes": 120605,
+   "bytes": 121199,
    "component": "core",
    "dst": "organs/decision_units.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "50d50e784f0651120b5a1ef983c2196fddd3efca394258e8d80ecbefc2674ef0",
+   "sha256": "c133b3d99fc4de0fd69e4e93c24807371d1c3d7abc3087d20817ab333f673c3e",
    "src": "organs/decision_units.py"
   },
   {
@@ -1907,13 +1907,13 @@
    "src": "organs/model_garden.py"
   },
   {
-   "bytes": 204378,
+   "bytes": 204854,
    "component": "core",
    "dst": "organs/monthly_self_eval.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "d6d74ae6eab5781bc4702b76a5492aa61a79ad368ba8ec4a325548e68b6bc9f2",
+   "sha256": "47fb5420d97a52a23b59f5041cce86f05bf0ca9d4618bb6d135edcd3a644fbe0",
    "src": "organs/monthly_self_eval.py"
   },
   {
@@ -2077,13 +2077,13 @@
    "src": "organs/skill_graduation.py"
   },
   {
-   "bytes": 115849,
+   "bytes": 116214,
    "component": "core",
    "dst": "organs/sleep_loop.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "dead122ddbac16564386ce51bf8574908749efae133e4e725ef7950dd70fe9e7",
+   "sha256": "6bafd6e29b17cb722c27815b2af868c5a471f2fbde49c8bea712b12bc6e113fd",
    "src": "organs/sleep_loop.py"
   },
   {
@@ -2177,13 +2177,13 @@
    "src": "organs/void_render.py"
   },
   {
-   "bytes": 120545,
+   "bytes": 120984,
    "component": "core",
    "dst": "organs/voidloom_approvals.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "49b44835dd162330ab639c9d02dbb863f004944daf00f6b6d2f52ec414dcd722",
+   "sha256": "58173ead8b82beb508a643f9f3f45580a562f5fa3dac065fac146a78144c5e25",
    "src": "organs/voidloom_approvals.py"
   },
   {
@@ -5365,6 +5365,16 @@
    "root": null,
    "sha256": "7407c0787dd07272f1385dd9d2e64fb33a508e375519581bd4e22be2dbe5aad7",
    "src": "voidloom/tests/test_windows_scripts_encoding.py"
+  },
+  {
+   "bytes": 6404,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "7c096f5dd2e0ed3a8145ec610e6aa479d6bdbd80b9ff996e9eda137a8d345a83",
+   "src": "voidloom/tests/test_writers_stamp_utc.py"
   },
   {
    "bytes": 3353,

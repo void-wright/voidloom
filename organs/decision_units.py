@@ -50,6 +50,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 __all__ = [
     "SURFACE_SELF_EVAL", "SURFACE_BELIEF", "SURFACE_GOVERNANCE",
     "OUTCOMES", "CLOSING_OUTCOMES",
@@ -1284,6 +1293,9 @@ def attention_signal(db: Optional[str] = None, *,
     the old reading the envelope-bug failure would have been hidden for a month.
     """
     db_path = resolve_db(db)
+    # The global snooze row is written by voidloom_approvals.set_snooze on the brain's clock (UTC); its expiry is read
+    # on the same clock. The per-unit attention columns below are still written and read on the local clock.
+    snooze_now = now or brain_clock.utc_now()
     now = now or datetime.now()
     counts = unified_open_count(db_path)
     open_keys = list(counts.open_unit_keys)
@@ -1362,7 +1374,7 @@ def attention_signal(db: Optional[str] = None, *,
         # not creation. It is implemented because the criterion's own traced
         # harm ("had the banner obeyed it, the envelope-bug failure would have
         # been hidden for a month") is precisely what the letter would cause here.
-        if (legacy_snooze_until is not None and legacy_snooze_until > now
+        if (legacy_snooze_until is not None and legacy_snooze_until > snooze_now
                 and legacy_snooze_set_at is not None):
             seen_at = presentable.get(k, first_seen.get(k))
             if seen_at is not None and seen_at <= legacy_snooze_set_at:
@@ -1566,7 +1578,7 @@ def record_decision(unit: str, outcome: str, db: Optional[str] = None, *,
     if actor is None:
         actor = _default_actor()
     db_path = resolve_db(db)
-    ts = decided_at or datetime.now().isoformat(timespec="seconds")
+    ts = decided_at or brain_clock.utc_stamp()
     conn = _open_rw(db_path)
     try:
         row = conn.execute("SELECT id FROM decision_units WHERE unit_key=?", (unit,)).fetchone()

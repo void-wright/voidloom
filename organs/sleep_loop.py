@@ -76,6 +76,15 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 # rho-1: the ONE env-directory resolver. Hard import by design -- it is
 # stdlib-only and is laid by the same `cp -f "${PKG_ROOT}"/*.py` loop that
 # lays this module, so its absence means an incomplete install, and an
@@ -239,8 +248,9 @@ _clock = time.monotonic
 
 
 def _utc_now() -> datetime:
-    """Now, in UTC, naive -- the same frame as every timestamp SQLite's datetime('now') writes into this brain."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    """Now, in UTC, naive -- the same frame as every timestamp SQLite's datetime('now') writes into this brain. The
+    brain's one clock (brain_clock) answers it."""
+    return brain_clock.utc_now()
 
 
 def _utc_stamp(dt: Optional[datetime] = None) -> str:
@@ -250,7 +260,7 @@ def _utc_stamp(dt: Optional[datetime] = None) -> str:
     sleep_loop_runs and compared it with memories.created_at (UTC, a space). A string compare of the two mixes a 4-hour
     offset (EDT) with a 'T' > ' ' collation, so the Stage-1 window and the Stage-2 cutoff were both off.
     """
-    return (dt or _utc_now()).strftime('%Y-%m-%d %H:%M:%S')
+    return (dt or _utc_now()).strftime(brain_clock.STAMP_FORMAT)
 
 
 def _to_utc_db(ts: str) -> Optional[str]:

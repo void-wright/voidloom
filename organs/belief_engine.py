@@ -60,6 +60,15 @@ import struct
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 logger = logging.getLogger("voidloom.belief_engine")
 
 # ============================================================================
@@ -1104,7 +1113,7 @@ def nightly_scan(
         )
 
     # Advance the watermark.
-    _state_set(conn, "last_belief_scan_at", datetime.now().isoformat())
+    _state_set(conn, "last_belief_scan_at", brain_clock.utc_stamp())
     conn.commit()
 
     return {

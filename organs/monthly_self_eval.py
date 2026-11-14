@@ -60,6 +60,15 @@ import sys
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
+
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
 from pathlib import Path
 
 # rho-1: the ONE env-directory resolver. Hard import by design -- it is
@@ -2997,7 +3006,7 @@ def _record_decisions(conn, report_id: int, *, approved, declined,
         print(f"[monthly_self_eval] migration 030 absent; decisions on report "
               f"{report_id} are recorded in drew_approved only", file=sys.stderr)
         return
-    now = datetime.now().isoformat()
+    now = brain_clock.utc_stamp()      # decision_events.decided_at: the brain's clock (UTC, stored format)
     # decision_events carries UNIQUE (unit_id, evidence_source, evidence_rowid,
     # outcome). With evidence_rowid = report_id and evidence_source = 'live', a
     # unit could carry only ONE live event per outcome, EVER, and any second one
@@ -3112,7 +3121,7 @@ def _record_enactments(conn, report_id: int, titles, actor: str | None = None) -
               f"{report_id} is recorded in self_eval_enacted_proposals only",
               file=sys.stderr)
         return 0
-    now = datetime.now().isoformat()
+    now = brain_clock.utc_stamp()      # decision_events.decided_at: the brain's clock (UTC, stored format)
     _seq = (conn.execute("SELECT COALESCE(MAX(evidence_rowid), 0) FROM decision_events "
                          " WHERE evidence_source = 'live'").fetchone()[0] or 0)
     written = 0

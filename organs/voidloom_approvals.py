@@ -52,6 +52,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
@@ -630,7 +639,7 @@ def should_ping(db: Optional[str] = None, scope: str = "global",
     is computed without mutating (used by tests / dry reads). NEVER raises.
     """
     db_path = resolve_db(db)
-    now = now or datetime.now()
+    now = now or brain_clock.utc_now()     # snooze_until and last_pinged_at are stamped on the brain's clock
 
     # R12 — THE SIGNAL IS A SET DIFFERENCE OVER OPEN UNIT IDS, NEVER A DELTA OVER
     # THEIR CARDINALITY. `changed = (total != last)` is invariant under a swap:
@@ -805,8 +814,8 @@ def set_snooze(hours: float, db: Optional[str] = None, scope: str = "global",
     CLEARS the snooze. Persists snooze_until without disturbing last_seen_count.
     NEVER raises."""
     db_path = resolve_db(db)
-    now = now or datetime.now()
-    until = None if hours is None or hours <= 0 else (now + timedelta(hours=float(hours))).isoformat()
+    now = now or brain_clock.utc_now()
+    until = None if hours is None or hours <= 0 else brain_clock.utc_stamp(now + timedelta(hours=float(hours)))
     try:
         conn = _open_rw(db_path)
         try:
@@ -848,7 +857,7 @@ def _persist_ping(db_path: str, scope: str, count: int, *, pinged: bool,
                     "  last_seen_count = excluded.last_seen_count, "
                     "  last_pinged_at = excluded.last_pinged_at, "
                     "  updated_at = datetime('now')",
-                    (scope, int(count), now.isoformat()),
+                    (scope, int(count), brain_clock.utc_stamp(now)),
                 )
             else:
                 conn.execute(
