@@ -143,7 +143,7 @@ class TestQwenTierEmbedsAtItsOwnWidth(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if k not in cls._RESOLVERS}
         env["WIZARD_EMBED_MODEL"] = "qwen"
         env["PYTHONDONTWRITEBYTECODE"] = "1"
-        env["CUDA_VISIBLE_DEVICES"] = "1"   # FORCED, never setdefault (#15708): GPU 0 drives the display
+        env["CUDA_VISIBLE_DEVICES"] = "1"   # FORCED, never setdefault: GPU 0 may drive the display
         cls.env = env
         # With the resolvers gone, nothing in the environment can make `init` refuse, and the
         # model's absence is the class-level skip above. A failure here is a defect: say so.
