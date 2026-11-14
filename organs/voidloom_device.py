@@ -110,6 +110,8 @@ __all__ = [
     "cuda_selects_a_device",
     "cuda_available",
     "declared_display",
+    "smi_fault",
+    "accelerator_unavailable",
 ]
 
 # The package-safe default.  0 is correct for ~99% of machines: one GPU, index
@@ -196,6 +198,7 @@ def _listed_indices() -> Optional[Tuple[int, ...]]:
         try:
             p = subprocess.run([exe, "--query-gpu=index", "--format=csv,noheader,nounits"], capture_output=True,
                                text=True, timeout=15, stdin=subprocess.DEVNULL)
+            _note_smi_exit(p.returncode)
             if p.returncode == 0:
                 vals = [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
                 if vals and all(v.isdigit() for v in vals):
@@ -245,6 +248,7 @@ def _card_table() -> Optional[List[Tuple[int, str, str]]]:
         try:
             p = subprocess.run([exe, "--query-gpu=index,uuid,display_active", "--format=csv,noheader"],
                                capture_output=True, text=True, timeout=15, stdin=subprocess.DEVNULL)
+            _note_smi_exit(p.returncode)
             if p.returncode == 0:
                 rows = []
                 for ln in p.stdout.splitlines():
@@ -256,6 +260,44 @@ def _card_table() -> Optional[List[Tuple[int, str, str]]]:
             out = None
     _cards_cache["v"] = out
     return out
+
+
+def _note_smi_exit(rc: int) -> None:
+    """Remember the first way nvidia-smi failed in this process: a signal (a crashed tool -- the stale-shim SIGSEGV
+    seen after a driver update) or a non-zero exit. "Cannot be asked" is not "no card"."""
+    if rc == 0 or "fault" in _cards_cache:
+        return
+    _cards_cache["fault"] = (("signal", "nvidia-smi was killed by signal %d" % -rc) if rc < 0
+                             else ("exit", "nvidia-smi exited %d" % rc))
+
+
+def smi_fault() -> Optional[str]:
+    """Why nvidia-smi could not answer in this process, when that makes the accelerator UNAVAILABLE rather than
+    absent: always for a crash (a signal), and for a non-zero exit when a compute card is declared (the owner said
+    there is a card; a driver-less machine whose nvidia-smi exits non-zero declares none). None otherwise."""
+    f = _cards_cache.get("fault")
+    if not f:
+        return None
+    kind, text = f
+    if kind == "signal":
+        return text
+    value, basis = _declared_layers()
+    declared = bool(value) and not basis.endswith("default") and not is_degraded(basis)
+    amb = _cuda_reading(os.environ.get(_ENV_KEY) or "")
+    if declared or (amb and amb[0].isdigit()):
+        return text
+    return None
+
+
+def accelerator_unavailable(basis: str) -> Optional[str]:
+    """The reason a CPU answer means the accelerator is UNAVAILABLE -- damaged, refused, unreadable, not listed, a
+    crashed tool, or not confirmed by torch -- rather than a machine that has none or an owner who chose the CPU.
+    None for those. doctor, the session banner and the reranker gate read this one predicate."""
+    b = basis or ""
+    if ("degraded:" in b or "refused" in b or "is not one nvidia-smi lists" in b or "cannot validate the index" in b
+            or "unconfirmed:" in b):
+        return b
+    return None
 
 
 def _smi_count() -> Optional[int]:
@@ -274,6 +316,7 @@ def _smi_count() -> Optional[int]:
         try:
             p = subprocess.run([exe, "--query-gpu=count", "--format=csv,noheader"], capture_output=True, text=True,
                                timeout=15, stdin=subprocess.DEVNULL)
+            _note_smi_exit(p.returncode)
             if p.returncode == 0:
                 first = (p.stdout.strip().splitlines() or [""])[0].strip()
                 out = int(first) if first.isdigit() else None
@@ -309,6 +352,10 @@ def _fallback_reaches_display(value: str) -> Optional[str]:
     host with more than one card -- listed, or counted but unreadable -- card 0 is the card most likely to drive the
     display, and nobody chose it. When it does drive one, no device is the answer: never the display by default."""
     table = _card_table()
+    if table is None and value.isdigit():
+        fault = smi_fault()
+        if fault:
+            return "%s, so whether card %s drives a display cannot be told" % (fault, value)
     if not table or not value.isdigit() or int(value) not in _display_cards(table):
         return None
     missing = _unlisted_cards(table)
@@ -346,6 +393,9 @@ def cuda_selects_a_device(environ=None) -> Tuple[bool, str]:
     if first.startswith(("GPU-", "MIG-")):
         return True, "CUDA_VISIBLE_DEVICES names a device UUID (%s)" % first[:12]
     listed = _listed_indices()
+    if listed is None and smi_fault():
+        return False, ("CUDA_VISIBLE_DEVICES=%s: nvidia-smi cannot validate the index (%s): CUDA is not initialised"
+                       % (first, smi_fault()))
     if listed is None:
         return True, "CUDA_VISIBLE_DEVICES=%s (nvidia-smi could not be asked; the index is trusted)" % first
     if int(first) not in listed:
@@ -1250,6 +1300,9 @@ def _observe() -> Tuple[str, str, List[str]]:
     listed = _listed_indices()
     if listed:
         return "cuda", "auto:nvidia-smi lists card(s) %s" % " ".join(str(i) for i in listed), ["cuda"]
+    fault = smi_fault()
+    if fault:
+        return "cpu", "degraded:nvidia-smi-fault: %s, so no card can be listed" % fault, []
     if system == "Darwin":
         if machine in ("arm64", "aarch64"):
             return "mps", "auto:Apple Silicon", ["mps"]
@@ -1287,8 +1340,9 @@ def _resolve_stdlib() -> dict:
         backend, why, cands = _observe()
         if backend == "cpu":
             # The ONE promotable answer: nothing declared, nothing refused, nothing observed that torch must not
-            # override. Every other CPU answer is final (a no-device pin is never second-guessed).
-            return dict(_cpu(why, candidates=cands, **kw), promotable=True)
+            # override. Every other CPU answer is final (a no-device pin is never second-guessed), and so is a crashed
+            # nvidia-smi.
+            return dict(_cpu(why, candidates=cands, **kw), promotable=not why.startswith("degraded:"))
         return _plan(backend, why, dict(kw, candidates=cands))
     return _plan(decl, "declared:%s (%s)" % (decl, dbasis), dict(kw, candidates=[decl]))
 

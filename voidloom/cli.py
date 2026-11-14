@@ -437,20 +437,35 @@ def _doctor_accelerator() -> Dict[str, Any]:
         # visible -- peft & co. would still open a CUDA context there (round 2 reflection N2).
         hidden = (getattr(_vd, "cpu_declaration", lambda: None)() is not None
                   or getattr(_vd, "hides_every_cuda_card", lambda: False)())
-        degraded = bool(getattr(_vd, "is_degraded", lambda b: False)(r.get("basis") or ""))
+        basis = r.get("basis") or ""
+        # The accelerator is UNAVAILABLE (a crashed nvidia-smi, a declared card it does not list, a refused or damaged
+        # pin) -- not a machine without one, and not the owner's CPU choice. One predicate, read by the reranker too.
+        unavailable = getattr(_vd, "accelerator_unavailable", lambda b: None)(basis) if backend == "cpu" else None
+        # A card can stay visible to library loaders only where there is an NVIDIA tool to have one: on a machine
+        # without one, an unhidden CPU answer is plain CPU, not a degradation.
+        _smi = getattr(_vd, "nvidia_smi", None)
+        nvidia_stack = True if _smi is None else (_smi() is not None)
+        visible = backend == "cpu" and not hidden and nvidia_stack
+        degraded = bool(getattr(_vd, "is_degraded", lambda b: False)(basis) or unavailable or visible)
         rec = str(_paths.brain_dir() / "INSTALL_RECORD")
         label, source = _hr.accelerator_proof_label(backend, rec if os.path.isfile(rec) else None)
         declared = r.get("declared") or {}
-        return {"backend": backend, "torch_device": r.get("torch_device"), "basis": r.get("basis"),
+        if backend != "cpu":
+            tail = ""
+        elif unavailable:
+            tail = "; DEGRADED: the accelerator is unavailable, so this brain computes on the CPU and the reranker is off"
+        elif hidden:
+            tail = "; CPU only: no job of this brain uses a card"
+        elif visible:
+            tail = ("; DEGRADED: the resolver answers CPU, but CUDA_VISIBLE_DEVICES=%s stays visible to library "
+                    "loaders -- repair the env file" % os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"))
+        else:
+            tail = "; CPU only: this machine has no NVIDIA tool and no card to use"
+        return {"backend": backend, "torch_device": r.get("torch_device"), "basis": basis,
                 "declared": declared, "cpu_only": backend == "cpu" and hidden, "degraded": degraded,
-                "cpu_declared": declared.get("value") == "cpu",
+                "unavailable": unavailable, "cpu_declared": declared.get("value") == "cpu",
                 "label": label, "label_source": source,
-                "line": "%s [%s] -- %s%s" % (backend, label or "?", r.get("basis") or "",
-                                             "; CPU only: no job of this brain uses a card" if backend == "cpu" and hidden
-                                             else ("; DEGRADED: the resolver answers CPU, but CUDA_VISIBLE_DEVICES=%s "
-                                                   "stays visible to library loaders -- repair the env file"
-                                                   % os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"))
-                                             if backend == "cpu" else "")}
+                "line": "%s [%s] -- %s%s" % (backend, label or "?", basis, tail)}
     except Exception as e:  # noqa: BLE001 - never break doctor
         return {"error": f"{type(e).__name__}: {e}"}
 
@@ -2019,6 +2034,12 @@ def verb_doctor(args) -> Dict[str, Any]:
     # state, and the brain beneath it may be perfectly sound. What decides the brain is the brain's own checks, and
     # `reason` names the first one that failed.
     host_healthy = not _warnings
+    # The accelerator is the host's too, and its own warning: a brain that lost its card still recalls (healthy), but
+    # it does so on the CPU with the reranker off, and doctor says so rather than read clean.
+    _acc = _doctor_accelerator()
+    if _acc.get("degraded"):
+        _warnings = _warnings + ["accelerator: %s -- %s" % (
+            "unavailable" if _acc.get("unavailable") else "degraded", _acc.get("line") or _acc.get("basis") or "")]
     _coh = _embedding_coherence(brain.get("db_path"))
     _reason: Optional[str] = None
     if not guard.ok:
@@ -2070,7 +2091,7 @@ def verb_doctor(args) -> Dict[str, Any]:
             "gpu_declaration": _gpu_decl,
             "gpu_pin": _doctor_gpu_pin(),
             # round 2, M5: the backend, cpu_only and the proof label, beside the pin
-            "accelerator": _doctor_accelerator(),
+            "accelerator": _acc,
             # handoff round 1 (L2): the accelerator and the reranker decision WITH its reason and proof label
             "reranker": _doctor_reranker(),
         },

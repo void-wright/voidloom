@@ -267,6 +267,14 @@ def _resolve_accelerator(confirm: bool, torch_mod=None):
     return _organ("voidloom_device").resolve_accelerator(confirm=confirm, torch_mod=torch_mod)
 
 
+def _accelerator_unavailable(basis: str) -> Optional[str]:
+    """voidloom_device.accelerator_unavailable(basis), or None when that organ cannot say (the gate never breaks)."""
+    try:
+        return _organ("voidloom_device").accelerator_unavailable(basis)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _config_reranker_enabled() -> Tuple[Optional[bool], str]:
     """(reranker_enabled, where it came from) from wizard_config; (None, reason) when the config cannot be read --
     an unreadable config never switches the reranker on, and never off: the live rule decides alone."""
@@ -329,6 +337,9 @@ def reranker_gate(confirm: bool = True, torch_mod=None) -> Dict[str, Any]:
                     decided_by="owner")
     elif cfg_on is False:
         gate.update(why="reranker_enabled is false in %s: off" % cfg_src, decided_by="config")
+    elif backend == "cpu" and _accelerator_unavailable(basis):
+        gate.update(why="the accelerator is unavailable (%s): the reranker is off until it returns" % basis,
+                    decided_by="cpu-only")
     elif backend == "cpu":
         gate.update(why="no accelerator (CPU-only): the reranker is never on", decided_by="cpu-only")
     elif gib is None:

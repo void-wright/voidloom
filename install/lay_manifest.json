@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 508,
+    "core": 509,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 463,
+    "all": 464,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 250,
+    "null": 251,
     "skills": 18
    }
   },
-  "derived_at_head": "9cc2f89",
+  "derived_at_head": "b733247",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 526,
+  "entries": 527,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 239,
+     "count": 240,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 250
+   "total": 251
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a25c20294660960b1ed638848634a63c7d56e500878f85726afc8e4e5435f952",
+   "sha256": "9c095269922c064a15ebf81a9305592b6df9183da0c82fedfe6729547a8d9aa3",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1827,13 +1827,13 @@
    "src": "organs/gpu_guard.py"
   },
   {
-   "bytes": 87501,
+   "bytes": 88034,
    "component": "core",
    "dst": "organs/hybrid_retrieval.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "2d5c66ca89d14cd4cb94d3123dcd54959fdfa973e19bc5f65567ac5f044b2b88",
+   "sha256": "6020956090f9e76c5b3f8c8832ab417aa59c2f1f2efcf6c3b14fcdf4116e5411",
    "src": "organs/hybrid_retrieval.py"
   },
   {
@@ -2197,13 +2197,13 @@
    "src": "organs/voidloom_canary.py"
   },
   {
-   "bytes": 79319,
+   "bytes": 81911,
    "component": "core",
    "dst": "organs/voidloom_device.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "edaac7e038f5db491e498e8f5c42c2b75e0d8fb404d2bccf7d1c065993cb27f8",
+   "sha256": "d56cd8860224eeea2f8dfbbb266dcec6e39f13bcc5d6fd17f97bb1d94f4f3f6d",
    "src": "organs/voidloom_device.py"
   },
   {
@@ -2907,13 +2907,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 183929,
+   "bytes": 185248,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "fd7d5e6a1911601f7c99070c157680cbb4a98e5bb7b5bd0919fac0a818627505",
+   "sha256": "669e70ddfb5275e1c6503d8c3ebfaceec38c0390a7c7c0a23af3681e4797ad0f",
    "src": "voidloom/cli.py"
   },
   {
@@ -4285,6 +4285,16 @@
    "root": null,
    "sha256": "d533e837d338f13dddfa0a93ed940d296a13770d3dbf735653eb24d5f13ef280",
    "src": "voidloom/tests/test_migrations_042_045.py"
+  },
+  {
+   "bytes": 6975,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "cb9da9004849e32830686f84a6502458a6f1fa0c07cef5224be0e5c6f243e6c5",
+   "src": "voidloom/tests/test_missing_compute_card_reads_degraded.py"
   },
   {
    "bytes": 9433,
