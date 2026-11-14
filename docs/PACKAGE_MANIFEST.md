@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T21:31:39Z from the working tree whose HEAD was `05ef6b3`
+> Generated 2026-11-14T21:34:59Z from the working tree whose HEAD was `260c8d5`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,9 +12,9 @@
 
 | | |
 |---|---|
-| files tracked | 538 |
-| files hashed | 538 |
-| total bytes | 11630052 |
+| files tracked | 539 |
+| files hashed | 539 |
+| total bytes | 11638497 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  263 files, 3609536 bytes
+### `voidloom` — The CLI facade  ·  264 files, 3617637 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -117,7 +117,7 @@
 | `voidloom/_facade.py` | 42347 | `5d86f3db5bef7de5` |
 | `voidloom/_guard.py` | 11713 | `11461a1e7bd1ef77` |
 | `voidloom/_paths.py` | 6956 | `5e32ae0a9515cb3c` |
-| `voidloom/cli.py` | 187336 | `1ba4c1ac9446ea68` |
+| `voidloom/cli.py` | 189033 | `609892d0fd492f15` |
 | `voidloom/tests/__init__.py` | 29 | `c00b7e2467584fad` |
 | `voidloom/tests/_owned_brain.py` | 4509 | `e550d2b14985ecb6` |
 | `voidloom/tests/_thinker_fakes.py` | 15135 | `d63b82c100143add` |
@@ -214,6 +214,7 @@
 | `voidloom/tests/test_env_file_reader.py` | 112024 | `b594afd253b5038a` |
 | `voidloom/tests/test_env_sidecar_discovery.py` | 8371 | `86acb3159b1d2b62` |
 | `voidloom/tests/test_every_armed_unit_has_a_dry_run.py` | 5001 | `e49840549c10e78e` |
+| `voidloom/tests/test_export_names_unverified_text.py` | 6132 | `2101df3094543d3b` |
 | `voidloom/tests/test_first_night_is_derived.py` | 10458 | `2b9b097840fdfcaf` |
 | `voidloom/tests/test_front_door_refusals.py` | 4916 | `1c2cf686f6e3efda` |
 | `voidloom/tests/test_fts_any_word.py` | 9287 | `7c6676405f55cef5` |
@@ -319,7 +320,7 @@
 | `voidloom/tests/test_sleep_loop_unstallable_r1.py` | 32083 | `15f584b671fdd571` |
 | `voidloom/tests/test_sleep_self_test_offline.py` | 6080 | `cac413a6355b3a7e` |
 | `voidloom/tests/test_stamp_weights_hash.py` | 13172 | `ed8e4af2dbfde798` |
-| `voidloom/tests/test_status_inspect_export.py` | 21640 | `2a88a0048b8836cb` |
+| `voidloom/tests/test_status_inspect_export.py` | 21912 | `9a2c4fe562225031` |
 | `voidloom/tests/test_stranger_tier1_upgrade.py` | 89205 | `0e0c94faef9a76a9` |
 | `voidloom/tests/test_suite_children_have_no_terminal.py` | 2046 | `5ca230c2de180a5d` |
 | `voidloom/tests/test_suite_is_portable.py` | 5091 | `5925f8ad9985a8f9` |
@@ -415,7 +416,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1004717 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1004986 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -433,7 +434,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 147956 | `6ab064ef5b366c81` |
+| `install/lay_manifest.json` | 148225 | `27c8c5fc536c3e22` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -575,7 +576,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 226713 bytes
+### `docs` — Documentation  ·  12 files, 226788 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -583,10 +584,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19765 | `f22116939a3af066` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `4232ee60a97cf384` |
+| `docs/LAYOUT.md` | 8372 | `1c0d93d601f491d0` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 41471 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 41546 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

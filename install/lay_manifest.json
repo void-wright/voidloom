@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 520,
+    "core": 521,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 475,
+    "all": 476,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 261,
+    "null": 262,
     "skills": 18
    }
   },
-  "derived_at_head": "05ef6b3",
+  "derived_at_head": "260c8d5",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 538,
+  "entries": 539,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 250,
+     "count": 251,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 261
+   "total": 262
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "4232ee60a97cf3842e37d964d93062f23f54dfb19935ba6984e9ed69dedd51fe",
+   "sha256": "1c0d93d601f491d09bd4324333be00e88c041f1fa128a2a61c683832eba656bd",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -2917,13 +2917,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 187336,
+   "bytes": 189033,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "1ba4c1ac9446ea68f7248ac660c3217e9b27808936f90861424ee7854a624508",
+   "sha256": "609892d0fd492f1531ada0d49abc944ef4de02758ba998b7f6ed1ef1a0e37257",
    "src": "voidloom/cli.py"
   },
   {
@@ -3885,6 +3885,16 @@
    "root": null,
    "sha256": "e49840549c10e78ef15ad18c1c6024fafb7fc38425db301dc0073d55ea56e3bd",
    "src": "voidloom/tests/test_every_armed_unit_has_a_dry_run.py"
+  },
+  {
+   "bytes": 6132,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "2101df3094543d3bfd010e109a9bc3dc0a8b7bab3d4215253204e3c6809563c7",
+   "src": "voidloom/tests/test_export_names_unverified_text.py"
   },
   {
    "bytes": 10458,
@@ -4937,13 +4947,13 @@
    "src": "voidloom/tests/test_stamp_weights_hash.py"
   },
   {
-   "bytes": 21640,
+   "bytes": 21912,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2a88a0048b8836cbca0793a0ae537cf63c9508826414b9dd04d70ff0e575fb87",
+   "sha256": "9a2c4fe562225031c9052150fea035ea72c5391b7223054588f2c0d0c5dc0571",
    "src": "voidloom/tests/test_status_inspect_export.py"
   },
   {

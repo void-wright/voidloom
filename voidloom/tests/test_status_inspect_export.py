@@ -77,9 +77,12 @@ def run(*args):
 
 
 def stamp(conn, mid, whash, table=TABLE, dim=DIM, at="2026-01-01T00:00:00+00:00", kind="text", inputs=None):
+    # a text stamp carries the hash of the text it was embedded from, as the writer's does (export checks it)
+    row = conn.execute("SELECT content FROM memories WHERE id = ?", (mid,)).fetchone()
+    digest = mw.content_hash(row[0]) if kind == "text" and row else "d" * 64
     conn.execute(
         f"INSERT OR REPLACE INTO {mw.PROVENANCE_TABLE} ({', '.join(mw.PROVENANCE_COLUMNS)}) "
-        "VALUES (?, ?, 'model', 'ref', ?, ?, ?, ?, 'test', ?, ?)", (mid, table, whash, dim, "d" * 64, at, kind, inputs))
+        "VALUES (?, ?, 'model', 'ref', ?, ?, ?, ?, 'test', ?, ?)", (mid, table, whash, dim, digest, at, kind, inputs))
 
 
 class _Brain(unittest.TestCase):

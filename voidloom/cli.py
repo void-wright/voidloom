@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib  # stdlib; used by the --quiet stderr-silence guard
+import hashlib  # stdlib; export checks each text against its stamp
 import json
 import os
 import re
@@ -2448,6 +2449,16 @@ def _model_stamp(conn: sqlite3.Connection, memory_id: int,
     return rows[0], len(rows)
 
 
+def _text_matches_stamp(conn: sqlite3.Connection, memory_id: int, stamp: Any) -> Optional[bool]:
+    """Does the text as stored hash to the content_hash its stamp was embedded from? None when there is nothing to
+    check it against: no stamp, a stamp with no content_hash, or one derived from member vectors, not text. The bytes
+    are read as stored (CAST AS BLOB), so a text that is not valid UTF-8 is checked too."""
+    if not isinstance(stamp, dict) or not stamp.get("content_hash") or (stamp.get("input_kind") or "text") != "text":
+        return None
+    raw = conn.execute("SELECT CAST(content AS BLOB) FROM memories WHERE id = ?", (memory_id,)).fetchone()
+    return hashlib.sha256(bytes((raw[0] if raw else None) or b"")).hexdigest() == stamp["content_hash"]
+
+
 def _memory_record(conn: sqlite3.Connection, memory_id: int, active_table: Optional[str]) -> Optional[Dict[str, Any]]:
     """One memory as `inspect` and `export` show it, or None when there is no such row."""
     cols = [r[1] for r in conn.execute("PRAGMA table_info(memories)").fetchall()]
@@ -2462,7 +2473,8 @@ def _memory_record(conn: sqlite3.Connection, memory_id: int, active_table: Optio
             "seed": bool(rec["seed"]) if "seed" in rec else None, "origin": rec.get("origin"),
             "visibility": visibility, "visibility_basis": basis, "category": rec.get("category"),
             "kind": rec.get("kind"), "importance": rec.get("importance"), "is_archived": rec.get("is_archived"),
-            "created_at": rec.get("created_at"), "tags": tags, "model_stamp": stamp, "stamps": stamps}
+            "created_at": rec.get("created_at"), "tags": tags, "model_stamp": stamp, "stamps": stamps,
+            "text_matches_stamp": _text_matches_stamp(conn, memory_id, stamp)}
 
 
 def _active_filter(memory_write: Any, conn: sqlite3.Connection) -> Any:
@@ -2563,8 +2575,17 @@ def verb_export(args) -> Dict[str, Any]:
             return error("brain_unreadable", f"{type(e).__name__}: {e}", data={"db_path": db}, verb="export")
     finally:
         conn.close()
-    return ok("export_ok", {"selection": "explicit", "requested": len(ids), "exported": len(records),
-                            "missing_ids": missing, "records": records, "db_path": db}, verb="export")
+    # each record's text against the stamp its vector was embedded from: a text changed behind the writer is named
+    not_matching = [r["id"] for r in records if r.get("text_matches_stamp") is False]
+    unchecked = sum(1 for r in records if r.get("text_matches_stamp") is None)
+    text_check = {"verified": sum(1 for r in records if r.get("text_matches_stamp") is True),
+                  "not_matching": len(not_matching), "not_matching_ids": not_matching,
+                  "no_text_stamp": unchecked, "could_not_verify": len(not_matching) + unchecked,
+                  "basis": "sha256 of each record's stored bytes against its stamp's content_hash"}
+    env = ok("export_ok", {"selection": "explicit", "requested": len(ids), "exported": len(records),
+                           "missing_ids": missing, "records": records, "text_check": text_check, "db_path": db},
+             verb="export")
+    return _flag_degraded(env, "export_text_unverified") if not_matching else env
 
 
 def verb_hooks(args) -> Dict[str, Any]:
