@@ -1,0 +1,12 @@
+#!/bin/sh
+# Fake nvidia-smi: a genuine one-card machine (a laptop) whose only card drives its screen.
+case "$*" in
+  *--query-gpu=count*) echo 1 ;;
+  *--query-gpu=index,uuid,display_active*) echo "0, GPU-00000000-fake-0000-0000-000000000000, Enabled" ;;
+  *--query-gpu=index,display_active*) echo "0, Enabled" ;;
+  *--query-gpu=index,uuid,name,memory.total*) echo "0, GPU-00000000-fake-0000-0000-000000000000, NVIDIA GeForce RTX 2080 Ti, 11264 MiB, 900 MiB, 10 %, 7.5" ;;
+  *--query-gpu=index*) echo 0 ;;
+  *-L*) echo "GPU 0: NVIDIA GeForce RTX 2080 Ti (UUID: GPU-00000000-fake-0000-0000-000000000000)" ;;
+  *) echo "fake nvidia-smi" ;;
+esac
+exit 0

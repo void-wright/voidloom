@@ -36,9 +36,10 @@ print(json.dumps({"value": value, "basis": basis, "before": before, "after": aft
 
 
 class TestAmbientEmpty(unittest.TestCase):
-    def _resolve(self, ambient):
+    def _resolve(self, ambient, smi_dir=None):
         with tempfile.TemporaryDirectory(prefix="ambient_", dir=os.environ.get("VOIDLOOM_SCRATCH") or None) as home:
-            env = {"PATH": os.environ.get("PATH", ""), "HOME": home,
+            path = os.environ.get("PATH", "")
+            env = {"PATH": ("%s:%s" % (smi_dir, path)) if smi_dir else path, "HOME": home,
                    "WIZARD_ENV_FILE": str(Path(home) / "absent-env"),
                    "WIZARD_CONFIG_PATH": str(Path(home) / "absent-config.json"),
                    "PYTHONDONTWRITEBYTECODE": "1"}
@@ -58,8 +59,10 @@ class TestAmbientEmpty(unittest.TestCase):
         self.assertNotEqual(r["after"], "0", "the fix's whole point: an empty ambient never becomes card 0")
 
     def test_unset_ambient_with_no_declaring_file_is_the_default_with_the_default_basis(self):
-        # the pair partner: UNSET (not empty) still falls through to the package default
-        r = self._resolve(None)
+        # the pair partner: UNSET (not empty) still falls through to the package default -- on a machine with one card,
+        # where the default is right (a fake nvidia-smi, so the host's own cards cannot decide the answer; with more
+        # than one card and card 0 driving a display the default is refused: test_display_card_never_the_fallback)
+        r = self._resolve(None, smi_dir=Path(__file__).resolve().parent / "fixtures" / "fakesmi_one_card")
         self.assertEqual(r["value"], "0", r)
         self.assertEqual(r["basis"], "default", r)
 

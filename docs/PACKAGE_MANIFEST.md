@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T04:34:38Z from the working tree whose HEAD was `cff3a05`
+> Generated 2026-11-14T05:20:07Z from the working tree whose HEAD was `1063538`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,14 +12,14 @@
 
 | | |
 |---|---|
-| files tracked | 519 |
-| files hashed | 519 |
-| total bytes | 11470156 |
+| files tracked | 522 |
+| files hashed | 522 |
+| total bytes | 11484980 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  78 files, 4833377 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  78 files, 4837006 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -88,7 +88,7 @@
 | `organs/voidloom_approvals.py` | 120545 | `49b44835dd162330` |
 | `organs/voidloom_banner.py` | 104239 | `c7d9b35fc7ec1d0d` |
 | `organs/voidloom_canary.py` | 114403 | `0f8a8005428a5c74` |
-| `organs/voidloom_device.py` | 74175 | `e6534dd0f1ade94b` |
+| `organs/voidloom_device.py` | 77804 | `f458e9ad1e1f9b98` |
 | `organs/voidloom_env.py` | 24582 | `6fe9129d71ba317c` |
 | `organs/voidloom_heartbeat.py` | 37464 | `7142ec7ccf30467b` |
 | `organs/voidloom_hooks_status.py` | 421184 | `04933b0f28e7304c` |
@@ -102,7 +102,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  245 files, 3503729 bytes
+### `voidloom` — The CLI facade  ·  248 files, 3513851 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -123,6 +123,8 @@
 | `voidloom/tests/_thinker_gemini_fake.py` | 10414 | `f573c49ac6eaa4f5` |
 | `voidloom/tests/conftest.py` | 10411 | `37a08850c815bed6` |
 | `voidloom/tests/fixtures/claude_2_1_287_tool_call_unparsed.json` | 3665 | `8fc8387ca64a6711` |
+| `voidloom/tests/fixtures/fakesmi_card_dropped/nvidia-smi` | 752 | `517fe6d7900c1d3d` |
+| `voidloom/tests/fixtures/fakesmi_one_card/nvidia-smi` | 649 | `ed339e740adfc7d9` |
 | `voidloom/tests/harness/README.md` | 3514 | `9d572f2f3792cb87` |
 | `voidloom/tests/harness/c2_install_schema_suite.py` | 19152 | `48cf8c6741611e64` |
 | `voidloom/tests/harness/c3_one_installer_suite.py` | 11688 | `ad6dd04d661309fd` |
@@ -172,8 +174,9 @@
 | `voidloom/tests/test_cuda_no_device_guard.py` | 9966 | `cbf77207426df874` |
 | `voidloom/tests/test_derived_layer.py` | 21203 | `aff463b0000b26b7` |
 | `voidloom/tests/test_derived_layer_surfaces.py` | 4586 | `32ace4b5f2f308ec` |
-| `voidloom/tests/test_device_ambient_empty.py` | 6594 | `74362adaa3787108` |
+| `voidloom/tests/test_device_ambient_empty.py` | 7014 | `ae1a617c127529d8` |
 | `voidloom/tests/test_digest_has_one_encoder.py` | 2211 | `a5a3e06dc7cc8f7d` |
+| `voidloom/tests/test_display_card_never_the_fallback.py` | 8301 | `bbb35759fb5802ee` |
 | `voidloom/tests/test_docs_name_real_paths.py` | 13642 | `e0aafc370c98f39d` |
 | `voidloom/tests/test_docs_name_the_keyword_verdict.py` | 1631 | `4a34ec4d4f850f30` |
 | `voidloom/tests/test_docs_state_the_lock_rules.py` | 6577 | `b90d1a79a4dbf4e2` |
@@ -396,7 +399,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 997775 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 998585 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -414,7 +417,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 142863 | `22c075f765371ea9` |
+| `install/lay_manifest.json` | 143673 | `954019f993fa5361` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -556,7 +559,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 225099 bytes
+### `docs` — Documentation  ·  12 files, 225362 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -564,10 +567,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19726 | `ec03c0e4f27ea7fa` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `c690140e5b088899` |
+| `docs/LAYOUT.md` | 8372 | `28017eb0f282cd8e` |
 | `docs/ONBOARDING_GUIDE.md` | 57892 | `cf15b2fba65108df` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 39948 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 40211 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

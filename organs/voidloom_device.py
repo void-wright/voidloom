@@ -258,6 +258,67 @@ def _card_table() -> Optional[List[Tuple[int, str, str]]]:
     return out
 
 
+def _smi_count() -> Optional[int]:
+    """How many cards nvidia-smi COUNTS (`--query-gpu=count`), once per process; None when it cannot be asked or does
+    not answer a number.
+
+    The count is not the listing. Measured on WSL2 after a driver update left one of two cards unreadable ("Unable to
+    determine the device handle for GPU1"): the index/uuid queries list ONE row -- the display card -- while the count
+    still says 2. A one-row table is therefore not evidence of a one-card machine; this number is."""
+    if "count" in _cards_cache:
+        return _cards_cache["count"]
+    exe = nvidia_smi()
+    out = None
+    if exe:
+        import subprocess
+        try:
+            p = subprocess.run([exe, "--query-gpu=count", "--format=csv,noheader"], capture_output=True, text=True,
+                               timeout=15, stdin=subprocess.DEVNULL)
+            if p.returncode == 0:
+                first = (p.stdout.strip().splitlines() or [""])[0].strip()
+                out = int(first) if first.isdigit() else None
+        except (OSError, subprocess.SubprocessError):
+            out = None
+    _cards_cache["count"] = out
+    return out
+
+
+def _unlisted_cards(table) -> int:
+    """How many cards nvidia-smi counts but does not list (0 when the table is complete or the count is unknown)."""
+    n = _smi_count()
+    listed = len(table or [])
+    return n - listed if (n is not None and n > listed) else 0
+
+
+def _display_cards(table) -> set:
+    """The listed cards that drive a display: display_active=Enabled, plus the owner's WIZARD_DISPLAY_INDEX. Empty
+    when the owner declared WIZARD_DISPLAY_INDEX=none (no display card to protect)."""
+    disp, _src = declared_display()
+    if disp == "none":
+        return set()
+    out = {n for n, _u, a in (table or []) if a.strip().lower() == "enabled"}
+    if disp is not None and disp.isdigit():
+        out.add(int(disp))
+    return out
+
+
+def _fallback_reaches_display(value: str) -> Optional[str]:
+    """Why the package's fallback card ``value`` must NOT be pinned, else None.
+
+    The fallback (nothing declared, or a damaged declaration) is card 0, which is right on a one-card machine. On a
+    host with more than one card -- listed, or counted but unreadable -- card 0 is the card most likely to drive the
+    display, and nobody chose it. When it does drive one, no device is the answer: never the display by default."""
+    table = _card_table()
+    if not table or not value.isdigit() or int(value) not in _display_cards(table):
+        return None
+    missing = _unlisted_cards(table)
+    if len(table) < 2 and not missing:
+        return None
+    return ("card %s drives a display and nvidia-smi counts %d card(s) but lists %d (%s): nothing declares a compute "
+            "card, so none is chosen" % (value, len(table) + missing, len(table),
+                                         ("%d unreadable" % missing) if missing else "more than one card"))
+
+
 def _uuid_to_index(entry: str) -> Optional[Tuple[int, str]]:
     """(index, display_active) for a GPU- UUID (CUDA accepts a unique prefix); None when it cannot be resolved
     (no nvidia-smi, no match, an ambiguous prefix, or a MIG- instance, which nvidia-smi does not list here)."""
@@ -465,6 +526,11 @@ def is_refused(basis: str) -> bool:
 
 def refusal_line(value: Optional[str], basis: str) -> str:
     """The ONE stderr line a refusal prints at the point of use: the value, the reason, the result."""
+    if "+fallback-display-refused: " in basis:
+        head, why = basis.split("+fallback-display-refused: ", 1)
+        return ("voidloom: the fallback card %s REFUSED (%s): %s -- running with NO GPU (CUDA_VISIBLE_DEVICES=''). "
+                "Declare the compute card (WIZARD_CUDA_DEVICE=<index>) once it is readable again."
+                % (PACKAGE_SAFE_DEFAULT, head, why))
     if basis.startswith("ambient-display-refused:"):
         why = ("card %s drives a display and this host lists another card (an owner with no display card to protect "
                "declares WIZARD_DISPLAY_INDEX=none)" % basis.split(":", 1)[1])
@@ -561,7 +627,7 @@ def resolve_cuda_device() -> Tuple[Optional[str], str]:
         # never another card. With ONE card (a laptop whose only GPU drives its screen) or no nvidia-smi to ask,
         # nothing can be told apart, and the operator's value is honoured as set, whichever spelling.
         table = _card_table()
-        if not table or len(table) < 2:
+        if not table or (len(table) < 2 and not _unlisted_cards(table)):
             uu = [e for e in honoured if not e.isdigit()]
             basis = "ambient" if not uu else ("ambient-unchecked:%s" % ("one card" if table else "no nvidia-smi"))
             return _finish(ambient.strip(), basis)
@@ -592,7 +658,12 @@ def resolve_cuda_device() -> Tuple[Optional[str], str]:
             return _finish(ambient.strip(), "ambient")
         return _finish(ambient.strip(), "ambient-uuid:" + ",".join(str(n) for n in reached))
 
-    return _finish(*_declared_layers(prefix))
+    value, basis = _declared_layers(prefix)
+    if value == PACKAGE_SAFE_DEFAULT and (basis.endswith("default") or is_degraded(basis)):
+        why = _fallback_reaches_display(value)
+        if why is not None:
+            return _finish("", "%s+fallback-display-refused: %s" % (basis, why))
+    return _finish(value, basis)
 
 
 def _declared_layers(prefix: str = "") -> Tuple[Optional[str], str]:

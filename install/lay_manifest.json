@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 501,
+    "core": 504,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 456,
+    "all": 459,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 243,
+    "null": 246,
     "skills": 18
    }
   },
-  "derived_at_head": "cff3a05",
+  "derived_at_head": "1063538",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 519,
+  "entries": 522,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 232,
+     "count": 235,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 243
+   "total": 246
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "c690140e5b088899a24a35bbcad8420906331e696500ab6ce6e946c4fa92a574",
+   "sha256": "28017eb0f282cd8e6aa80f3d71ebe09f07af908f98341f3ad1b321d7d04005c7",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -2197,13 +2197,13 @@
    "src": "organs/voidloom_canary.py"
   },
   {
-   "bytes": 74175,
+   "bytes": 77804,
    "component": "core",
    "dst": "organs/voidloom_device.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e6534dd0f1ade94b252f0bb53b3426733ddec1af7032c2e2dfb70fa0e581aba3",
+   "sha256": "f458e9ad1e1f9b989ce5ae11cb96fc9ede611155a135c1412b0b766b2f9e60b8",
    "src": "organs/voidloom_device.py"
   },
   {
@@ -2977,6 +2977,26 @@
    "src": "voidloom/tests/fixtures/claude_2_1_287_tool_call_unparsed.json"
   },
   {
+   "bytes": 752,
+   "component": "core",
+   "dst": null,
+   "exec": true,
+   "platform": "all",
+   "root": null,
+   "sha256": "517fe6d7900c1d3da7747908254c52b244e9a314133384662792a2dd45c66523",
+   "src": "voidloom/tests/fixtures/fakesmi_card_dropped/nvidia-smi"
+  },
+  {
+   "bytes": 649,
+   "component": "core",
+   "dst": null,
+   "exec": true,
+   "platform": "all",
+   "root": null,
+   "sha256": "ed339e740adfc7d9e826155224bf35752e8570b8400ab119826a8ae18af8bcc8",
+   "src": "voidloom/tests/fixtures/fakesmi_one_card/nvidia-smi"
+  },
+  {
    "bytes": 3514,
    "component": "core",
    "dst": null,
@@ -3467,13 +3487,13 @@
    "src": "voidloom/tests/test_derived_layer_surfaces.py"
   },
   {
-   "bytes": 6594,
+   "bytes": 7014,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "74362adaa378710831496436c8f6c576f2ba6108bbae0bf60d9fdc44eeb8e716",
+   "sha256": "ae1a617c127529d81b46054fbddf092a86f78ccbb4ef04dc079716f6a0a9758a",
    "src": "voidloom/tests/test_device_ambient_empty.py"
   },
   {
@@ -3485,6 +3505,16 @@
    "root": null,
    "sha256": "a5a3e06dc7cc8f7d83e459ee30933d0bbb6902136c7e7133a47860816b0fa19e",
    "src": "voidloom/tests/test_digest_has_one_encoder.py"
+  },
+  {
+   "bytes": 8301,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "bbb35759fb5802ee0bcace805ae6c44e5425078c31b4d26f2018366fd94e8930",
+   "src": "voidloom/tests/test_display_card_never_the_fallback.py"
   },
   {
    "bytes": 13642,
