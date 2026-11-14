@@ -149,6 +149,22 @@ Every verb emits the same shape:
 Process exit codes: `ok → 0`, `error → 1`, `refused → 3` (a distinct code so a
 caller can tell *blocked by policy* from *failed*).
 
+A `recall` or `batch-recall` whose vector arm was out (the model or its table
+refused, unreadable or absent) still answers by keyword, keeps `status: ok` and
+exit 0, and says so at the top of the envelope:
+
+```json
+{ "status": "ok", "code": "recall_degraded", "degraded": true, "data": { "degradation": { "reason": "...", "means": "..." }, ... } }
+```
+
+`data` names the reason under `degradation` (on a Tier-0 floor answer, in its
+own `degraded` block). `batch-recall` carries `degraded: true` and
+`batch_recall_degraded` on its own envelope when any record in it was answered
+that way, and each such record carries its own flag. The engine's
+`claude_memory.py recall` and `anticipate` answers carry the same
+`degraded: true` beside `status: ok`, with `code` `recall_degraded` /
+`anticipate_degraded` and the detail under `degradation`.
+
 ### `store` categories
 
 The `--category` value is validated against the engine's canonical enum (read

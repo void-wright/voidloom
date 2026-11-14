@@ -2433,7 +2433,7 @@ def cmd_recall(args):
     if rerank_info:
         result["rerank"] = rerank_info
     # The flag a person's surface reads: coverage holds the figures, the envelope says what kind of answer this is.
-    _flag = _degraded_key(_coverage, "keyword (FTS5) recall over the same brain; no semantic ranking")
+    _flag = _degraded_flag(_coverage, "keyword (FTS5) recall over the same brain; no semantic ranking", "recall")
     if _flag:
         result.update(_flag, tier=0)
 
@@ -2451,6 +2451,18 @@ def cmd_recall(args):
             print(f"[WARNING] explain skipped: {_explain_err}", file=sys.stderr)
 
     _output(result)
+
+
+def _degraded_flag(coverage: Any, means: str, verb: str) -> Dict[str, Any]:
+    """The top of a recall-shaped answer whose vector arm was out (refused, unreadable or absent), else nothing.
+
+    `status` stays "ok" (the words did answer, and a script that checks status keeps working); beside it the envelope
+    carries `degraded: true` and a code naming the degradation, so a reader of the top level alone can tell this
+    answer from a full one. What happened, what it means and the way back sit under `degradation`."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import memory_write
+    flag = memory_write.degrade_of(coverage, means)
+    return {"degraded": True, "code": f"{verb}_degraded", "degradation": flag} if flag else {}
 
 
 def _degraded_key(coverage: Any, means: str) -> Dict[str, Any]:
@@ -3904,7 +3916,8 @@ def cmd_anticipate(args):
             "status": "ok",
             "action": "anticipate",
             "coverage": _coverage,
-            **_degraded_key(_coverage, "anticipation reads the brain's own rows; no vector was searched for it"),
+            **_degraded_flag(_coverage, "anticipation reads the brain's own rows; no vector was searched for it",
+                             "anticipate"),
             "memories_loaded": result["memories_loaded"],
             "ambiguous": result["ambiguous"],
             "tiers": result["tiers"],

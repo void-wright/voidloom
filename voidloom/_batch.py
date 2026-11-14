@@ -129,7 +129,7 @@ def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
                 rec = {"index": i, "query": q, "top_k": k, "status": "ok", "results": hits}
                 if isinstance(res.get("coverage"), dict):   # carried even when `results` is empty
                     rec["coverage"] = res["coverage"]
-                for key in ("degraded", "tier", "engine"):   # what kind of answer this item is
+                for key in ("degraded", "degradation", "tier", "engine"):   # what kind of answer this item is
                     if key in res:
                         rec[key] = res[key]
                 # The side channels ride beside `results` (memories only); the batch-recall default verb used to

@@ -72,7 +72,9 @@ class TypedRefusalsAtTheFrontDoor(unittest.TestCase):
         self.assertEqual(data.get("status"), "ok", p.stdout[-800:])
         self.assertEqual(data.get("tier"), 0, p.stdout[-800:])
         self.assertTrue(data.get("degraded"), p.stdout[-800:])
-        self.assertIn("SNAPSHOT_ABSENT", json.dumps(data.get("degraded")))
+        self.assertIn("SNAPSHOT_ABSENT", json.dumps(data.get("degradation")))
+        self.assertEqual((env.get("status"), env.get("degraded"), env.get("code")), ("ok", True, "recall_degraded"),
+                         p.stdout[-800:])
         self.assertGreater(data.get("result_count", 0), 0, "the keyword arm answered nothing")
 
     def test_saboteur_an_integrity_refusal_is_typed_and_never_a_keyword_answer(self):

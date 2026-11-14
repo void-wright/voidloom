@@ -387,7 +387,8 @@ class KeywordRecallNeedsNoEmbedder(_Engine):
         r = self._child()
         self.assertEqual(r.returncode, 0, r.stdout[-400:] + r.stderr[-400:])
         out = json.loads(r.stdout.strip().splitlines()[-1])
-        self.assertEqual(out["degraded"]["reason"], "SNAPSHOT_ABSENT", "it reached for the model, found none and says so")
+        self.assertEqual(out["degradation"]["reason"], "SNAPSHOT_ABSENT", "it reached for the model, found none and says so")
+        self.assertEqual((out["status"], out["degraded"], out["code"]), ("ok", True, "recall_degraded"), out)
         self.assertEqual(out["result_count"], 1, out)
 
 

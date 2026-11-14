@@ -171,7 +171,7 @@ def _render_human(env: Dict[str, Any]) -> str:
         # the matched memory TEXT. Fail-graceful: any shape surprise falls
         # through to the generic pretty-dump so a render hiccup never hides a
         # successful result.
-        if code in ("recall_ok", "batch_recall_ok", "context_ok"):
+        if code in ("recall_ok", "recall_degraded", "batch_recall_ok", "batch_recall_degraded", "context_ok"):
             try:
                 card = _render_recall_human(env, code, head)
                 if card is not None:
@@ -312,6 +312,28 @@ def _render_memory_card(row: Dict[str, Any], *, indent: str = "") -> str:
     return "\n".join(lines)
 
 
+def _vector_arm_out(data: Any) -> bool:
+    """True when a recall answer's vector arm was out -- refused, unreadable or absent -- so the words answered alone:
+    the engine's own flag, a Tier-0 floor answer's block, or a coverage figure that says so. A read-only brain is a
+    different degrade (the recall is served whole; only its access stats go unlogged) and is not this."""
+    if not isinstance(data, dict):
+        return False
+    deg = data.get("degraded")
+    if deg is True or isinstance(deg, dict):
+        return True
+    cov = data.get("coverage")
+    return isinstance(cov, dict) and cov.get("degraded") is True
+
+
+def _flag_degraded(env: Dict[str, Any], degraded_code: str) -> Dict[str, Any]:
+    """An answer whose vector arm was out keeps `status: ok` (a script that checks status keeps working) and carries,
+    at the top of the envelope, `degraded: true` and a code naming the degradation instead of the plain ok code."""
+    if env.get("status") == STATUS_OK:
+        env["code"] = degraded_code
+    env["degraded"] = True
+    return env
+
+
 def _degrade_banner(data: Dict[str, Any]) -> Optional[str]:
     """One line naming a degraded answer, for the surface a HUMAN reads.
 
@@ -326,6 +348,8 @@ def _degrade_banner(data: Dict[str, Any]) -> Optional[str]:
     if not isinstance(data, dict):
         return None
     deg = data.get("degraded")
+    if deg is True and isinstance(data.get("degradation"), dict):
+        deg = data["degradation"]                                    # the flag on top, what happened beneath it
     cov = data.get("coverage")
     if not deg and isinstance(cov, dict) and cov.get("degraded") is True:
         deg = {"reason": cov.get("refusal") or cov.get("error")}     # a flag left in the figures still reaches a person
@@ -923,7 +947,7 @@ def _render_recall_human(env: Dict[str, Any], code: str, head: str) -> Optional[
     if not isinstance(data, dict):
         return None
 
-    if code == "batch_recall_ok":
+    if code in ("batch_recall_ok", "batch_recall_degraded"):
         return _render_batch_recall_human(data, head)
 
     # Single recall / context: matched memories live flat at data["results"].
@@ -1131,6 +1155,8 @@ def verb_recall(args) -> Dict[str, Any]:
             return _db_uninitialized_error(db, verb="recall", exc=exc)
         raise
     env = _wrap_engine_result(res, verb="recall", ok_code="recall_ok")
+    if env.get("status") == STATUS_OK and _vector_arm_out(env.get("data")):
+        _flag_degraded(env, "recall_degraded")
     # BIND THE FLAG. A degrade nobody can see is a silent drop, which is the
     # defect class this whole round exists to end -- so the envelope says it.
     if _ro_degraded and isinstance(env.get("data"), dict):
@@ -1514,9 +1540,13 @@ def verb_batch_recall(args) -> Dict[str, Any]:
     # C5: same rule as batch-store -- both fold `_batch.summarize`, so both had
     # the same count in the payload and the same wrong verdict beside it.
     _failed = _payload.get("failed") if isinstance(_payload, dict) else None
+    # The batch's OWN envelope says when any answer in it came from the words alone, not only each record inside it.
+    _deg = (any(_vector_arm_out(r) for r in results) if results
+            else _vector_arm_out({"coverage": _payload.get("coverage")}))
     _env = (incomplete if _failed else ok)
-    return _env("batch_recall_incomplete" if _failed else "batch_recall_ok",
-                _payload, verb="batch-recall")
+    env = _env("batch_recall_incomplete" if _failed else "batch_recall_ok",
+               _payload, verb="batch-recall")
+    return _flag_degraded(env, "batch_recall_degraded") if _deg else env
 
 
 def verb_batch_store(args) -> Dict[str, Any]:

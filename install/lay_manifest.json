@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "523b8f3",
+  "derived_at_head": "cff3a05",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 519,
   "not_laid": {
@@ -1647,13 +1647,13 @@
    "src": "organs/calibration_memory.py"
   },
   {
-   "bytes": 226868,
+   "bytes": 227680,
    "component": "core",
    "dst": "organs/claude_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "8fbcfe414a828ff388d3d811245609b27cbe4b3f8af39876207a98beb4e22d2c",
+   "sha256": "b8ef95e601842d42adf47ef45244d6948fa448f83b990166b62e174679c77ebf",
    "src": "organs/claude_memory.py"
   },
   {
@@ -2807,13 +2807,13 @@
    "src": "uninstall.sh"
   },
   {
-   "bytes": 12349,
+   "bytes": 13187,
    "component": "core",
    "dst": "voidloom/README.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "829be503896bf9bc3630212e783aee468c926a743d7a080d7ef85143684fc694",
+   "sha256": "0dce39744fc39d9ec891f50d564460d0c4b1604273d43624d5a055937190a823",
    "src": "voidloom/README.md"
   },
   {
@@ -2857,13 +2857,13 @@
    "src": "voidloom/_approvals_faces.py"
   },
   {
-   "bytes": 14800,
+   "bytes": 14815,
    "component": "core",
    "dst": "voidloom/_batch.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "c8ed154e8a8fae1fd9e052e6cae409c79e3e8f329763839ace5dfc697d6490fa",
+   "sha256": "5b41d6eee6beae0d05fa4ebd37d82499a58e3edaa3111fe945bdcd6c770018c4",
    "src": "voidloom/_batch.py"
   },
   {
@@ -2907,13 +2907,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 182167,
+   "bytes": 183929,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "9680d96bcc6d3ee0685310589098c3d88c5700d413ed1b49300318ee9b1876a9",
+   "sha256": "fd7d5e6a1911601f7c99070c157680cbb4a98e5bb7b5bd0919fac0a818627505",
    "src": "voidloom/cli.py"
   },
   {
@@ -3737,13 +3737,13 @@
    "src": "voidloom/tests/test_encoder_tier_is_bijective.py"
   },
   {
-   "bytes": 32676,
+   "bytes": 32789,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2e63a9d23f1c8b7702368bbad14eadb8effd53b6433f72f9a0d93c4abc5317ce",
+   "sha256": "ef7b5ff432fda0f6f6f901c9d9595e1488525f207773c0c2ba80721be647bd0b",
    "src": "voidloom/tests/test_engine_reads_the_search_set.py"
   },
   {
@@ -3807,13 +3807,13 @@
    "src": "voidloom/tests/test_first_night_is_derived.py"
   },
   {
-   "bytes": 4754,
+   "bytes": 4916,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "441075ca77b283859fe457158513f71b79b5b8b4187b41549e16502be2d2b9f9",
+   "sha256": "1c2cf686f6e3efdaf1a2fc9a268b13b53df7aa6be914867b0fb8c7224bcd7848",
    "src": "voidloom/tests/test_front_door_refusals.py"
   },
   {
@@ -4487,13 +4487,13 @@
    "src": "voidloom/tests/test_recall_topk_after_placement.py"
   },
   {
-   "bytes": 33432,
+   "bytes": 37752,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "834121a28729f6e184e1ea49e300a1f4f4bb25a471c9593a058d6a6edf1f720f",
+   "sha256": "16c5957b7c380cf9ed7a2b3130edcff9b8ea818c3918ec05caf4cd2bdd516367",
    "src": "voidloom/tests/test_refusals_name_the_way_out.py"
   },
   {

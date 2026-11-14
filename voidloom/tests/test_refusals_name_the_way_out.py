@@ -391,7 +391,8 @@ class ADegradedAnswerReachesAPerson(_Planted):
 
     def assert_flagged(self, data):
         self.assertTrue(data["results"], data)
-        self.assertEqual(data["degraded"]["reason"], "SNAPSHOT_ABSENT", data)
+        self.assertIs(data["degraded"], True, data)
+        self.assertEqual(data["degradation"]["reason"], "SNAPSHOT_ABSENT", data)
         self.assertEqual(data["tier"], 0, data)
         self.assertEqual((data["coverage"]["vector_arm"], data["coverage"]["degraded"]), ("refused", True), data)
 
@@ -399,14 +400,17 @@ class ADegradedAnswerReachesAPerson(_Planted):
         out, p = self.engine("recall", "--query", "lantern")
         self.assertEqual((p.returncode, out.get("status")), (0, "ok"), (out, p.stderr[-400:]))
         self.assert_flagged(out)
+        self.assertEqual(out["code"], "recall_degraded", out)
         env, p = self.cli_json("recall", "--query", "lantern")
         self.assertEqual(p.returncode, 0, p.stderr[-400:])
         self.assert_flagged(env["data"])
+        self.assertEqual((env["status"], env["degraded"], env["code"]), ("ok", True, "recall_degraded"), env)
 
     def test_saboteur_every_batch_item_says_what_kind_of_answer_it_is(self):
         env, p = self.cli_json("batch-recall", "--items", '["lantern"]')
         self.assertEqual(p.returncode, 0, p.stderr[-400:])
         self.assert_flagged(env["data"]["results"][0])
+        self.assertEqual((env["status"], env["degraded"], env["code"]), ("ok", True, "batch_recall_degraded"), env)
 
     def test_saboteur_the_banner_prints_on_the_human_surface(self):
         for argv in (("recall", "--query", "lantern"), ("batch-recall", "--items", '["lantern"]')):
@@ -456,7 +460,7 @@ class ABrainWithNoLockKeepsServing(_Room):
         out, p = self.engine("recall", "--query", "lantern")
         self.assertEqual((p.returncode, out.get("status")), (0, "ok"), (out, p.stderr[-400:]))
         self.assertTrue(out["results"], out)
-        self.assertNotEqual((out.get("degraded") or {}).get("reason"), "LOCK_MISSING", out)
+        self.assertNotEqual((out.get("degradation") or {}).get("reason"), "LOCK_MISSING", out)
         env, p = self.cli_json("recall", "--query", "lantern")
         self.assertEqual((p.returncode, env["status"]), (0, "ok"), env)
 
@@ -539,6 +543,70 @@ class TheKeywordMigrationsBackup(unittest.TestCase):
         self.assertIs(hybrid_retrieval._holds_memories(bad), True)
 
 
+# A recall whose query encoder is stood in for (no model is loaded): the question is what each recall surface SAYS when
+# its vector arm is out, not what it does with no model. `voidloom` imports the same `claude_memory` module object.
+_STUB_ENCODE = ("import sys, runpy; sys.path.insert(0, 'organs'); import claude_memory as c; "
+                "c._encode = lambda *a, **k: bytes(4 * 768); ")
+
+
+class _RecallSurfaces:
+    """The four recall surfaces, each answered over this room's brain with the encoder stood in for."""
+
+    def _child(self, code, argv):
+        p = subprocess.run([sys.executable, "-c", code, *argv], capture_output=True, text=True, timeout=240,
+                           env=self.env(PYTHONPATH=str(ROOT)), cwd=str(self.d))
+        try:
+            return json.loads(p.stdout), p                      # voidloom --json prints one (indented) document
+        except ValueError:
+            lines = [ln for ln in p.stdout.strip().splitlines() if ln.startswith("{")]
+            return (json.loads(lines[-1]) if lines else {}), p
+
+    def organ(self, *argv):
+        return self._child(_STUB_ENCODE + "sys.argv = ['claude_memory.py'] + sys.argv[1:]; c.main()", argv)
+
+    def voidloom(self, *argv):
+        return self._child(_STUB_ENCODE + "sys.argv = ['voidloom'] + sys.argv[1:]; "
+                           "runpy.run_module('voidloom', run_name='__main__')", [*argv, "--json"])
+
+    def surfaces(self):
+        return {"recall": self.organ("recall", "--query", "lantern", "--top_k", "3"),
+                "anticipate": self.organ("anticipate", "--top-k", "3"),
+                "voidloom recall": self.voidloom("recall", "--query", "lantern", "--top-k", "3"),
+                "batch-recall": self.voidloom("batch-recall", "--items", '["lantern", "keeper"]', "--top-k", "3")}
+
+
+@unittest.skipUnless(HAVE_VEC, "needs sqlite_vec")
+class EveryRecallSurfaceFlagsAMissingVectorTableAtTheTop(_RecallSurfaces, _Planted):
+    """The vector table dropped: every surface answers by keyword, keeps `status: ok`, and carries `degraded: true` and
+    a code naming the degradation at the TOP of its own envelope -- the batch's own envelope too, not only its records."""
+    CODES = {"recall": "recall_degraded", "anticipate": "anticipate_degraded", "voidloom recall": "recall_degraded",
+             "batch-recall": "batch_recall_degraded"}
+
+    def setUp(self):
+        super().setUp()
+        self.plant_vector(el.catalogue_tiers()["cpu"]["weights_hash"])
+
+    def test_control_an_intact_brain_answers_plain_ok_on_every_surface(self):
+        got = {name: (p.returncode, out.get("status"), out.get("code"), out.get("degraded"))
+               for name, (out, p) in self.surfaces().items()}
+        self.assertEqual(got, {"recall": (0, "ok", None, None), "anticipate": (0, "ok", None, None),
+                               "voidloom recall": (0, "ok", "recall_ok", None),
+                               "batch-recall": (0, "ok", "batch_recall_ok", None)})
+
+    def test_saboteur_the_vector_table_dropped_is_flagged_at_the_top_of_every_surface(self):
+        c = schema_migrator.connect(str(self.db)); c.execute("DROP TABLE memory_embeddings"); c.commit(); c.close()
+        surfaces = self.surfaces()
+        got = {name: (p.returncode, out.get("status"), out.get("code"), out.get("degraded"))
+               for name, (out, p) in surfaces.items()}
+        self.assertEqual(got, {name: (0, "ok", code, True) for name, code in self.CODES.items()},
+                         {n: (o, p.stderr[-300:]) for n, (o, p) in surfaces.items()})
+        out, _p = surfaces["recall"]
+        self.assertEqual(out["degradation"]["reason"], "PROVENANCE_UNREADABLE", out)
+        self.assertTrue(out["results"], "the keyword arm still answers")
+        env, _p = surfaces["batch-recall"]
+        self.assertTrue(all(r.get("degraded") is True for r in env["data"]["results"]), env)
+
+
 @unittest.skipUnless(HAVE_VEC, "needs sqlite_vec")
 class AnAnswerOverAMissingTableSaysSo(_Room):
     def setUp(self):
@@ -555,7 +623,8 @@ class AnAnswerOverAMissingTableSaysSo(_Room):
         self.assertEqual(out.get("status"), "ok", (out, p.stderr[-400:]))
         self.assertIs(out["coverage"]["degraded"], True, out)
         self.assertEqual(out["coverage"]["error"], "PROVENANCE_UNREADABLE", out)
-        self.assertEqual(out["degraded"]["reason"], "PROVENANCE_UNREADABLE", out)
+        self.assertEqual(out["degradation"]["reason"], "PROVENANCE_UNREADABLE", out)
+        self.assertEqual((out["degraded"], out["code"]), (True, "anticipate_degraded"), out)
 
     def test_saboteur_status_carries_the_flag_and_a_person_reads_it(self):
         env, p = self.cli_json("status")
