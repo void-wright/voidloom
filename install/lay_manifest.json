@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 510,
+    "core": 511,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 465,
+    "all": 466,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 252,
+    "null": 253,
     "skills": 18
    }
   },
-  "derived_at_head": "a9362e7",
+  "derived_at_head": "3f1ebe7",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 528,
+  "entries": 529,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 241,
+     "count": 242,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 252
+   "total": 253
   },
   "platforms": [
    "all",
@@ -767,13 +767,13 @@
    "src": "docs/FIRST_NIGHT.md"
   },
   {
-   "bytes": 19726,
+   "bytes": 19765,
    "component": "core",
    "dst": "docs/GETTING_STARTED.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ec03c0e4f27ea7fa5a082abc73a8fef84b7266eefd18e313bb18676a3f2a5db8",
+   "sha256": "f22116939a3af066f96efbcd4c22484a240e52bcaee24af77e75b7dc1b98ac5a",
    "src": "docs/GETTING_STARTED.md"
   },
   {
@@ -793,17 +793,17 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "0795140708f6b9b5f0758fbf6229171de33fa728508afc74741ea1e3c1192246",
+   "sha256": "fa954f7ef7b88a9abc511d2fb785ca036e26696d56603a913a2f88fa2a9ae7d4",
    "src": "docs/LAYOUT.md"
   },
   {
-   "bytes": 57892,
+   "bytes": 57944,
    "component": "core",
    "dst": "docs/ONBOARDING_GUIDE.md",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "cf15b2fba65108dfcb90ef0ed354042e84a3bd0a83a0644fcc866439ae067d15",
+   "sha256": "1d874da2fc948b57a2da5883874000729cb9a851282ef318160c62dda5d45159",
    "src": "docs/ONBOARDING_GUIDE.md"
   },
   {
@@ -907,13 +907,13 @@
    "src": "hooks/voidloom_signoff.py"
   },
   {
-   "bytes": 360863,
+   "bytes": 360910,
    "component": "core",
    "dst": null,
    "exec": true,
    "platform": "posix",
    "root": null,
-   "sha256": "21544c67a42443f77fbcd4128307e83c7b0ad8c4f0aebad522ddcd9987ed433b",
+   "sha256": "46747c932b23e927525e0119b4eca1bdace01e316d733e4e447bcc76fbee2d83",
    "src": "install.sh"
   },
   {
@@ -1007,13 +1007,13 @@
    "src": "install/golden_vectors.py"
   },
   {
-   "bytes": 74029,
+   "bytes": 74076,
    "component": "core",
    "dst": "install/install.ps1",
    "exec": false,
    "platform": "windows",
    "root": "brain",
-   "sha256": "5e3a039a160034d10d95f8c6e4b6927d9eff505d42c40dce2f9209fedf186f01",
+   "sha256": "f96e90875aec42e8b60964ea61c37608bef51cc76dfb694f9cc3eb1d75812427",
    "src": "install/install.ps1"
   },
   {
@@ -1587,13 +1587,13 @@
    "src": "organs/anti_recency.py"
   },
   {
-   "bytes": 15447,
+   "bytes": 19756,
    "component": "core",
    "dst": "organs/approvals_policy.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "109f4fc3197ef74bea0eaf1b9e271f0cce94cdb0e74e833c1c002eb253c151ec",
+   "sha256": "3b01c9c13fa5bc3bd154c5c8879316941e9cbe762d4844508de1b3038537df06",
    "src": "organs/approvals_policy.py"
   },
   {
@@ -2907,13 +2907,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 186023,
+   "bytes": 186557,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "2a9405c880de4334b7930ad31ba4d52fcbd3272b4c267e2fe7d6b6ea76068791",
+   "sha256": "0b242613b0af64132acbbe7e0859655d96f56beabbbc25eabba255d02de6da86",
    "src": "voidloom/cli.py"
   },
   {
@@ -3765,6 +3765,16 @@
    "root": null,
    "sha256": "baccf770ef398023d7fbb23f281b6f685628b43a874e63b4567090de9711b092",
    "src": "voidloom/tests/test_embedding_upgrade_verbs.py"
+  },
+  {
+   "bytes": 4980,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "dd1f40d15a05e41125e9a72310325a81b732dada20a764fc2beb6d4610fbf71e",
+   "src": "voidloom/tests/test_enacted_proposals_await_work.py"
   },
   {
    "bytes": 4626,

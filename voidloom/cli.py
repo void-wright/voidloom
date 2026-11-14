@@ -1865,7 +1865,8 @@ def verb_approvals(args) -> Dict[str, Any]:
     return _approvals_envelope(
         "approvals_list",
         {"unified_count": total, "breakdown": breakdown,
-         "ping": ping, "records": records, "decided_by_policy": _decided_by_policy(db)},
+         "ping": ping, "records": records, "decided_by_policy": _decided_by_policy(db),
+         "approved_awaiting_work": _awaiting_work(db)},
         _count_trust(db))
 
 
@@ -1878,6 +1879,18 @@ def _decided_by_policy(db) -> List[Dict[str, Any]]:
             sys.path.insert(0, od)
         import approvals_policy  # type: ignore
         return approvals_policy.decided_by_policy(_paths.resolve_db(db))
+    except Exception:  # noqa: BLE001 - never break approvals
+        return []
+
+
+def _awaiting_work(db) -> List[Dict[str, Any]]:
+    """Every enacted self-eval title with status awaiting-work (approvals_policy.awaiting_work); [] when unreadable."""
+    try:
+        od = str(_paths.organ_dir())
+        if od not in sys.path:
+            sys.path.insert(0, od)
+        import approvals_policy  # type: ignore
+        return approvals_policy.awaiting_work(_paths.resolve_db(db))
     except Exception:  # noqa: BLE001 - never break approvals
         return []
 

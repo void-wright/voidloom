@@ -37,7 +37,7 @@
 .PARAMETER WithCrons   Also wire optional maintenance crons (default OFF; needs your own token).
 .PARAMETER DryRun      Print what would happen; change nothing.
 .PARAMETER Approvals   auto|manual. Once a month the self-eval proposes changes: auto = the brain approves its own
-                       proposals (signed policy:auto, named at each session start for 7 days); manual = they wait for you
+                       proposals (signed policy:auto, named at each session start and in voidloom approvals for 30 days); manual = they wait for you
                        in `voidloom approvals --tui`. Asked at a console (blank = auto); a recorded choice is
                        re-used; with no console a NEW install takes auto and an existing brain with no recorded
                        choice is left as it is. Belief links and governance holds always wait for a person.
@@ -969,7 +969,7 @@ if (-not $apHow) {
     if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
         Say "Approvals. Once a month the brain reviews its own health and proposes improvements."
         Say "  a) Automatic (recommended) -- the brain approves its own monthly proposals and names what it decided"
-        Say "     at the start of each session for the next 7 days. Change it any time: voidloom approvals --mode manual"
+        Say "     at the start of each session (and in voidloom approvals) for 30 days. Change it any time: voidloom approvals --mode manual"
         Say "  b) Manual -- each proposal waits for you in: voidloom approvals --tui"
         Say "  (Belief links and governance holds are not affected: they always wait for a person.)"
         if ($PriorInstall) { Say "  On this brain today: no choice is recorded, so each proposal waits for you. A blank line switches it to a)." }

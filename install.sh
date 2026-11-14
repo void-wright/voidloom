@@ -127,7 +127,7 @@
 #                                            # only on the human's yes to "may I run <vendor>'s installer?".
 #   bash install.sh --approvals auto|manual  # the OWNER's approvals choice (2026-10-26): once a month the self-eval
 #                                            # proposes changes; auto = the brain approves its own proposals (signed
-#                                            # policy:auto, named at each session start for 7 days), manual = they wait for
+#                                            # policy:auto, named at each session start and in voidloom approvals for 30 days), manual = they wait for
 #                                            # you in `voidloom approvals --tui`. Belief links and governance holds
 #                                            # always wait for a person. Asked at a terminal (blank = auto); a recorded
 #                                            # choice is re-used; with no terminal a NEW install takes auto and an
@@ -2379,7 +2379,7 @@ approvals_settle() {
         ask_say ""
         ask_say "[install] Approvals. Once a month the brain reviews its own health and proposes improvements."
         ask_say "          a) Automatic (recommended) -- the brain approves its own monthly proposals and names what it"
-        ask_say "             decided at the start of each session for the next 7 days. Change it any time: voidloom approvals --mode manual"
+        ask_say "             decided at the start of each session (and in voidloom approvals) for 30 days. Change it any time: voidloom approvals --mode manual"
         ask_say "          b) Manual -- each proposal waits for you in: voidloom approvals --tui"
         ask_say "          (Belief links and governance holds are not affected by this: they always wait for a person.)"
         [ "$PRIOR_INSTALL" -eq 1 ] && ask_say "          On this brain today: no choice is recorded, so each proposal waits for you. A blank line switches it to a)."

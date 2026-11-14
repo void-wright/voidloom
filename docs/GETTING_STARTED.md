@@ -126,7 +126,7 @@ proposes improvements.
 
 - `a` — **Automatic** (recommended; a blank line chooses this): the brain
   approves its own monthly proposals and names what it decided at the start of
-  each session for the next 7 days.
+  each session for the next 30 days, and lists it in `voidloom approvals`.
 - `b` — **Manual**: each proposal waits for you in `voidloom approvals --tui`.
 
 **3. Which GPU** (only with two or more NVIDIA GPUs and nothing declared yet).

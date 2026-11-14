@@ -199,6 +199,65 @@ def _titles_a_person_declined(db_path: str, titles: List[str]) -> Tuple[set, boo
     return {r[0] for r in rows} & set(titles), True
 
 
+def _titles_awaiting_work(db_path: str, titles: List[str], report_id: int) -> Tuple[Dict[str, List[int]], bool]:
+    """({title: [earlier reports it was enacted on]}, the ledger was readable) for `titles`.
+
+    Enacting a self-eval proposal writes one procedural memory and nothing else, and no state anywhere records that
+    the work was done -- so a title enacted on an earlier report is still OPEN work. Approving it again would write
+    another memory and do nothing more (the sweep's brain: one title enacted on five reports). An unreadable table
+    cannot tell, like the decline ledger: readable=False holds the report for a person."""
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % Path(db_path).as_posix(), uri=True)
+    except sqlite3.Error:
+        return {}, False
+    try:
+        rows = con.execute(
+            "SELECT proposal_title, report_id FROM self_eval_enacted_proposals "
+            "WHERE status = 'enacted' AND report_id <> ? ORDER BY report_id, id", (report_id,)).fetchall()
+    except sqlite3.Error:
+        return {}, False
+    finally:
+        con.close()
+    out: Dict[str, List[int]] = {}
+    for title, rid in rows:
+        if title in titles and rid not in out.setdefault(title, []):
+            out[title].append(rid)
+    return out, True
+
+
+def awaiting_work(db_path: str) -> List[Dict[str, Any]]:
+    """Every enacted self-eval title, once, with status 'awaiting-work' and every report it was enacted on.
+
+    The status is DERIVED, not stored: enactment is the last state the brain records (closure states such as done or
+    won't-do do not exist yet), so an enacted engineering proposal is, as far as the brain can prove, work nobody has
+    done. [] when the table cannot be read."""
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % Path(db_path).as_posix(), uri=True)
+    except sqlite3.Error:
+        return []
+    try:
+        rows = con.execute(
+            "SELECT proposal_title, report_id, enacted_at, enacted_memory_id FROM self_eval_enacted_proposals "
+            "WHERE status = 'enacted' ORDER BY report_id, id").fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        con.close()
+    by: Dict[str, Dict[str, Any]] = {}
+    for title, rid, at, mid in rows:
+        w = by.setdefault(title, {"title": title, "status": "awaiting-work", "reports": [], "memory_ids": [],
+                                  "first_enacted_at": at, "last_enacted_at": at})
+        if rid not in w["reports"]:
+            w["reports"].append(rid)
+        if mid is not None:
+            w["memory_ids"].append(mid)
+        w["last_enacted_at"] = at
+    for w in by.values():
+        w["line"] = "AWAITING WORK: %s (approved on report%s %s; nothing records it done)" % (
+            w["title"], "s" if len(w["reports"]) > 1 else "", ", ".join("#%d" % r for r in w["reports"]))
+    return list(by.values())
+
+
 def decide_new_self_eval_report(db_path: str, report_id: Optional[int], *,
                                 config: Optional[str] = None) -> Dict[str, Any]:
     """The policy step the monthly unit runs after writing report `report_id`."""
@@ -216,12 +275,30 @@ def decide_new_self_eval_report(db_path: str, report_id: Optional[int], *,
                           "the whole report waits for a person"}
     again = sorted(declined)
     titles = [t for t in titles if t not in declined]
-    if not titles and not again:
+    awaiting, readable = _titles_awaiting_work(db_path, titles, report_id)
+    if not readable:
+        return {"status": "held", "mode": "auto", "report_id": report_id, "held": sorted(titles + again),
+                "reason": "the enacted-proposal ledger could not be read, so open work cannot be told from new; "
+                          "the whole report waits for a person"}
+    folded = sorted(t for t in titles if t in awaiting)
+    titles = [t for t in titles if t not in awaiting]
+    if not titles and not again and not folded:
         return {"status": "skipped", "mode": "auto", "report_id": report_id,
                 "reason": "the report carries no proposals"}
     import voidloom_approvals as va
     out: Dict[str, Any] = {"mode": "auto", "report_id": report_id, "actor": POLICY_ACTOR,
-                           "approved": titles, "declined_again": again}
+                           "approved": titles, "declined_again": again, "folded": folded,
+                           "folded_into": {t: awaiting[t] for t in folded}}
+    if folded:
+        # Already approved and enacted on an earlier report, and nothing records the work done: the title stays ONE
+        # open item (awaiting_work) instead of a second memory. Closed on this report with the reason said.
+        fold = va.reject("self-eval:%d" % report_id, titles=folded, db=db_path,
+                         confirmed_via=POLICY_CONFIRMED_VIA, actor=POLICY_ACTOR,
+                         reason="already approved on report(s) %s and awaiting work; folded into that open item, "
+                                "not enacted again" % ", ".join(
+                                    sorted({"#%d" % r for t in folded for r in awaiting[t]})))
+        out["folded_status"] = fold.get("status")
+        out["status"] = fold.get("status", "error")
     if again:
         # A person said no before: the policy repeats that no rather than leaving the title
         # in the queue every month (recheck R3-6; the Council's "don't raise again").
@@ -229,7 +306,7 @@ def decide_new_self_eval_report(db_path: str, report_id: Optional[int], *,
                         confirmed_via=POLICY_CONFIRMED_VIA, actor=POLICY_ACTOR,
                         reason="declined by a person on an earlier report; not raised again")
         out["declined_again_status"] = rej.get("status")
-        out["status"] = rej.get("status", "error")
+        out["status"] = rej.get("status", "error") if out.get("status", "ok") == "ok" else out["status"]
     if titles:
         # confirm=True: the variance gate holds a bulk enactment for a person to confirm.
         # The owner's ruling (2026-10-26) was "straight to full approval": auto decides the

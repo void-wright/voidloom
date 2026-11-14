@@ -181,7 +181,7 @@ Claude token in the env file, or timers that called Claude before, are evidence 
 
 **Approvals (2026-10-26).** Once a month the self-eval proposes improvements. The installer asks: *a) Automatic
 (recommended) -- the brain approves its own monthly proposals and names what it decided at the start of each session
-for the next 7 days; b) Manual -- each proposal waits for you in `voidloom approvals --tui`.* A blank answer is a). With no terminal,
+for the next 30 days, and lists it in `voidloom approvals`; b) Manual -- each proposal waits for you in `voidloom approvals --tui`.* A blank answer is a). With no terminal,
 pass `--approvals auto|manual`; without it a **new** install takes automatic and an **upgrade** with no recorded choice is
 left as it is. Belief links and governance holds are never automatic. Change it any time:
 `voidloom approvals --mode auto|manual` (`voidloom approvals --mode` shows what is in force). Every decision the brain
@@ -878,7 +878,7 @@ persona (yours is still yours, from Step 3); it is the system's own face.
   enhancements/deprecations. In **manual** mode it never enacts them on its own --
   you do, by name. In **auto** mode (the default for a new install) the brain
   approves the report it just wrote, signed `policy:auto`, and names what it decided at
-  the start of each session for the next 7 days (`voidloom approvals --mode` shows or
+  the start of each session for the next 30 days (`voidloom approvals` lists it; `--mode` shows or
   changes it). A title a person declined before is declined again, never approved. See what's
   waiting, then approve or reject:
   ```bash
