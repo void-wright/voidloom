@@ -574,7 +574,7 @@ def read_priming(db: str, sanitize: Callable[[Any], str],
     return out
 
 
-def read_policy_decisions(db: str, organs: str, days: float = 7.0) -> List[str]:
+def read_policy_decisions(db: str, organs: str, days: Optional[float] = None) -> List[str]:
     """2026-10-26: what the brain decided WITHOUT a person, said where a person
     will hear it.  In auto mode nothing waits in the queue, and a Claude Code
     Desktop user never sees the terminal banner -- this injected line is how the
@@ -586,6 +586,8 @@ def read_policy_decisions(db: str, organs: str, days: float = 7.0) -> List[str]:
         sys.path.insert(0, organs)
     try:
         import approvals_policy as _ap  # type: ignore
+        if days is None:
+            days = getattr(_ap, "DECIDED_WINDOW_DAYS", 30.0)
         rows = _ap.recent_policy_decisions(db, days=days)
     except Exception:
         return []

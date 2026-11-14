@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 509,
+    "core": 510,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 464,
+    "all": 465,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 251,
+    "null": 252,
     "skills": 18
    }
   },
-  "derived_at_head": "b733247",
+  "derived_at_head": "a9362e7",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 527,
+  "entries": 528,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 240,
+     "count": 241,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 251
+   "total": 252
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "9c095269922c064a15ebf81a9305592b6df9183da0c82fedfe6729547a8d9aa3",
+   "sha256": "0795140708f6b9b5f0758fbf6229171de33fa728508afc74741ea1e3c1192246",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1587,13 +1587,13 @@
    "src": "organs/anti_recency.py"
   },
   {
-   "bytes": 14211,
+   "bytes": 15447,
    "component": "core",
    "dst": "organs/approvals_policy.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "0736c3a2e5cfc14a5e4e674aa5bcf01ab8a7afd55a8a1ec3bdcea8350dcdd502",
+   "sha256": "109f4fc3197ef74bea0eaf1b9e271f0cce94cdb0e74e833c1c002eb253c151ec",
    "src": "organs/approvals_policy.py"
   },
   {
@@ -2267,13 +2267,13 @@
    "src": "organs/voidloom_persona.py"
   },
   {
-   "bytes": 163482,
+   "bytes": 163579,
    "component": "core",
    "dst": "organs/voidloom_preamble.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "99e2a7cf0d8b9f19a59ab411fc82b4a2779d08f681ea0f4f4f4824d779476695",
+   "sha256": "5750a672df37ba112b154428d22d71eac53dfd23a5bc315feccd71e54294f051",
    "src": "organs/voidloom_preamble.py"
   },
   {
@@ -2847,13 +2847,13 @@
    "src": "voidloom/_agent_context.py"
   },
   {
-   "bytes": 42385,
+   "bytes": 43572,
    "component": "core",
    "dst": "voidloom/_approvals_faces.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ece04bc6d7c96606d024be57dddd433c45d0665c2853b06c7a5f1b734abdc1ee",
+   "sha256": "be442b62098db58a6383907cc91b8f786dd9b468e372cf29f66a2d6242b60e42",
    "src": "voidloom/_approvals_faces.py"
   },
   {
@@ -2907,13 +2907,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 185248,
+   "bytes": 186023,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "669e70ddfb5275e1c6503d8c3ebfaceec38c0390a7c7c0a23af3681e4797ad0f",
+   "sha256": "2a9405c880de4334b7930ad31ba4d52fcbd3272b4c267e2fe7d6b6ea76068791",
    "src": "voidloom/cli.py"
   },
   {
@@ -4405,6 +4405,16 @@
    "root": null,
    "sha256": "38208ba2c18f0d9c9561bd9c0d60e0c8ffbecb46d9f9193a88305b8a557bae33",
    "src": "voidloom/tests/test_persona_forge.py"
+  },
+  {
+   "bytes": 4545,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "cc0370b428d2a210b8735ebe09f67a6170dea41c5b03d3b574c83322dc0c5592",
+   "src": "voidloom/tests/test_policy_decisions_are_shown.py"
   },
   {
    "bytes": 6695,

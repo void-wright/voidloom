@@ -64,6 +64,9 @@ CONFIG_KEY = "approvals"
 POLICY_ACTOR = "policy:auto"
 POLICY_CONFIRMED_VIA = "policy"
 COVERS = ("self-eval",)
+# How long a decision the policy made stays on every surface a person looks at (the approvals list, the TUI,
+# --present and the session-start line). Seven days was too short: the owner could no longer see a decision a week on.
+DECIDED_WINDOW_DAYS = 30.0
 NOT_COVERED = {
     "belief": "proposes nothing until a contradiction detector with measured precision exists",
     "governance": "a hold is a risky write; it always waits for a person",
@@ -238,7 +241,7 @@ def decide_new_self_eval_report(db_path: str, report_id: Optional[int], *,
     return out
 
 
-def recent_policy_decisions(db_path: str, days: float = 7.0) -> List[Dict[str, Any]]:
+def recent_policy_decisions(db_path: str, days: float = DECIDED_WINDOW_DAYS) -> List[Dict[str, Any]]:
     """Audit rows the policy wrote in the last `days`. The oversight surface: what the
     brain decided without a person, read from the same log a person's decisions use."""
     try:
@@ -263,6 +266,22 @@ def recent_policy_decisions(db_path: str, days: float = 7.0) -> List[Dict[str, A
         out.append({"audit_id": aid, "ref": ref, "action": action, "titles": titles,
                     "status": status, "at": at})
     return out
+
+
+def decided_line(row: Dict[str, Any]) -> str:
+    """One plain line for a decision the policy made: what, when, how many, the first titles -- or that it failed."""
+    titles = [str(t) for t in (row.get("titles") or [])]
+    shown = "; ".join(t[:60] for t in titles[:3]) + (" (+%d more)" % (len(titles) - 3) if len(titles) > 3 else "")
+    verb = "declined again" if row.get("action") == "reject" else "approved"
+    head = "AUTO-DECIDED %s on %s: %d %s" % (row.get("ref"), str(row.get("at"))[:10], len(titles), verb)
+    if row.get("status") != "ok":
+        head += " but NOT enacted (status %s)" % row.get("status")
+    return head + (" -- " + shown if shown else "")
+
+
+def decided_by_policy(db_path: str, days: float = DECIDED_WINDOW_DAYS) -> List[Dict[str, Any]]:
+    """recent_policy_decisions() with each row's line: the section every approvals face shows."""
+    return [dict(r, line=decided_line(r)) for r in recent_policy_decisions(db_path, days=days)]
 
 
 def _main(argv: Optional[List[str]] = None) -> int:

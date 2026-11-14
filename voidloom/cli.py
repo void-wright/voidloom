@@ -1865,8 +1865,21 @@ def verb_approvals(args) -> Dict[str, Any]:
     return _approvals_envelope(
         "approvals_list",
         {"unified_count": total, "breakdown": breakdown,
-         "ping": ping, "records": records},
+         "ping": ping, "records": records, "decided_by_policy": _decided_by_policy(db)},
         _count_trust(db))
+
+
+def _decided_by_policy(db) -> List[Dict[str, Any]]:
+    """What the brain decided without a person in the policy's window -- each row with its one line. [] when the
+    policy organ cannot be read (it never breaks a face; the faces' own trust verdict covers an unreadable brain)."""
+    try:
+        od = str(_paths.organ_dir())
+        if od not in sys.path:
+            sys.path.insert(0, od)
+        import approvals_policy  # type: ignore
+        return approvals_policy.decided_by_policy(_paths.resolve_db(db))
+    except Exception:  # noqa: BLE001 - never break approvals
+        return []
 
 
 def _verb_present(backend, db) -> Dict[str, Any]:
@@ -1875,7 +1888,8 @@ def _verb_present(backend, db) -> Dict[str, Any]:
     from . import _approvals_faces as faces
     records = backend.structured_record(db=db)
     payload = faces.build_askuserquestion_payload(records)
-    card = faces.render_present(records)
+    decided = _decided_by_policy(db)
+    card = faces.render_present(records, decided=decided)
     total, breakdown = backend.unified_count(db=db)
     # R3 -- SAME CLASS, SECOND FACE. `--present` renders a CARD a human reads and
     # an AskUserQuestion payload a session acts on; both said `0` on a brain
@@ -1884,7 +1898,7 @@ def _verb_present(backend, db) -> Dict[str, Any]:
     return _approvals_envelope(
         "approvals_present",
         {"unified_count": total, "breakdown": breakdown,
-         "card": card, "askuserquestion": payload, "records": records},
+         "card": card, "askuserquestion": payload, "records": records, "decided_by_policy": decided},
         _count_trust(db))
 
 
@@ -1925,6 +1939,7 @@ def _verb_tui(backend, db, face: Optional[str] = None) -> Dict[str, Any]:
         structured=lambda: backend.structured_record(db=db),
         enact=_enact,
         snooze=lambda hours: backend.set_snooze(hours, db=db),
+        decided=lambda: _decided_by_policy(db),
     )
     status = res.get("status")
     if status == "refused":

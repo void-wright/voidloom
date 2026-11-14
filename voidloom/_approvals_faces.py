@@ -358,14 +358,27 @@ def _trust_line(r, trust: Dict[str, Any]) -> str:
     return r.dim(label) if label else ""
 
 
+def _decided_lines(r, decided: Optional[List[Dict[str, Any]]]) -> List[str]:
+    """The "decided by the policy" section: one line per decision the brain made without a person in the window.
+    Empty when there were none -- a section with nothing in it is not printed."""
+    if not decided:
+        return []
+    out = [r.dim("decided by the policy (approvals mode auto), most recent last:")]
+    for d in decided:
+        out.append("  " + r.accent("✦") + " " + _sanitize(d.get("line") or ""))
+    return out
+
+
 def render_present(records: List[Dict[str, Any]], *,
-                   force_mode: Optional[str] = None) -> str:
-    """The full Face-2 `--present` human view: the card for the next item, then a
-    quiet tail telling the human the AskUserQuestion options. When nothing is
-    pending, a calm empty message."""
+                   force_mode: Optional[str] = None,
+                   decided: Optional[List[Dict[str, Any]]] = None) -> str:
+    """The full Face-2 `--present` human view: what the policy decided (if anything), the card for the next item,
+    then a quiet tail telling the human the AskUserQuestion options. When nothing is pending, a calm empty message."""
     r = _renderer(force_mode=force_mode)
+    head_lines = _decided_lines(r, decided)
+    lead = ("\n".join(head_lines) + "\n") if head_lines else ""
     if not records:
-        return (f"{r.sigil()}  {r.dim('the void is quiet — nothing awaits review.')}")
+        return lead + (f"{r.sigil()}  {r.dim('the void is quiet — nothing awaits review.')}")
     head = records[0]
     card = render_card(head, force_mode=force_mode)
     remaining = len(records) - 1
@@ -374,7 +387,7 @@ def render_present(records: List[Dict[str, Any]], *,
         tail.append(r.dim(f"  …and {remaining} more awaiting — "
                           "approve one-by-one."))
     tail.append(r.dim("  The session will ask: Approve / Reject / Snooze."))
-    return card + "\n" + "\n".join(tail)
+    return lead + card + "\n" + "\n".join(tail)
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +421,8 @@ def run_tui(*, list_pending: Callable[[], List[Dict[str, Any]]],
             snooze: Callable[[float], Dict[str, Any]],
             force_mode: Optional[str] = None,
             _input: Callable[[str], str] = input,
-            _force_backend: Optional[str] = None) -> Dict[str, Any]:
+            _force_backend: Optional[str] = None,
+            decided: Optional[Callable[[], List[Dict[str, Any]]]] = None) -> Dict[str, Any]:
     """Run Face 1 (the TUI). Returns a result dict (status/code) — it does not
     print an envelope (cli.py wraps the return).
 
@@ -450,7 +464,7 @@ def run_tui(*, list_pending: Callable[[], List[Dict[str, Any]]],
                 # textual mis-init must never strand Drew — fall back to ANSI.
                 backend = "ansi"
     return _run_ansi(structured=structured, enact=enact, snooze=snooze,
-                     force_mode=force_mode, _input=_input)
+                     force_mode=force_mode, _input=_input, decided=decided)
 
 
 def _verdict(res: Any) -> tuple:
@@ -498,7 +512,8 @@ def _run_ansi(*, structured: Callable[[], List[Dict[str, Any]]],
               enact: Callable[..., Dict[str, Any]],
               snooze: Callable[[float], Dict[str, Any]],
               force_mode: Optional[str],
-              _input: Callable[[str], str]) -> Dict[str, Any]:
+              _input: Callable[[str], str],
+              decided: Optional[Callable[[], List[Dict[str, Any]]]] = None) -> Dict[str, Any]:
     """The graceful ANSI/input() fallback TUI. A calm, line-oriented loop: list
     the pending cards, let Drew pick one + an action + a comment. Confirm-gated
     by construction (an explicit action keystroke). NEVER raises."""
@@ -587,6 +602,14 @@ def _run_ansi(*, structured: Callable[[], List[Dict[str, Any]]],
             # state to RENDER, never a reason to leave.
             print(f"{r.sigil()}  {r.wordmark(spaced=False)}  {r.dim('approvals (TUI)')}")
             print(r.chrome("─" * 64))
+            try:
+                _dec = _decided_lines(r, decided() if decided else [])
+            except Exception:
+                _dec = []
+            if _dec:
+                for _ln in _dec:
+                    print("   " + _ln)
+                print(r.chrome("─" * 64))
             if not records:
                 print("   " + r.dim("the void is quiet — nothing awaits review."
                                     if first_pass else
