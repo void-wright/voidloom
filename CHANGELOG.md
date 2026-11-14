@@ -6,8 +6,58 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-11-14
+
+### Changed
+
+- **A degraded recall says so at the top of its answer.** When the vector arm is out and only
+  keywords answered, `recall` and `anticipate` keep `status: ok` but add `degraded: true` and the code
+  `recall_degraded` / `anticipate_degraded`; `voidloom recall` answers `recall_degraded` instead of
+  `recall_ok`, and a `batch-recall` envelope answers `batch_recall_degraded` when any item was answered
+  by words alone. A script that checks `status` keeps working; one that matches `code == "recall_ok"`
+  will now see the degraded code on those answers. On those answers `degraded` is now `true`, and the
+  details that the 1.1.0 `degraded` block carried (reason, meaning, way back) are under `degradation`.
+  A read-only brain still reports `degraded: "readonly_db"`, as before.
+- **What the policy decided is shown where you look.** In auto mode nothing waits in the queue, so every
+  approvals face used to read empty while the policy approved whole self-eval reports, and the only
+  notice expired after 7 days. `voidloom approvals --list`, `--present` and the TUI now carry a "decided
+  by the policy" section for 30 days, and the session line uses the same window.
+- **An approved self-eval proposal is open work.** `approvals --list` shows enacted titles as approved,
+  awaiting work, with every report they were enacted on, and the policy no longer enacts the same title
+  again on a later report.
+- **RAPTOR keeps one synthesis node per group** and updates it in place, instead of writing a new node
+  every run. Its own nodes are never members of a group, a node is embedded when it is written, and the
+  summary reads the newest members. Nodes written by earlier versions are left as they are.
+- **Community detection keeps the newest seven epochs** and deletes older epochs, their communities
+  and their summaries in one savepoint. On a brain that has run nightly for months, the first run
+  deletes most of those rows. It does not run `VACUUM`, so the file shrinks only when you vacuum it.
+- **The organ run ledger has two new results:** `running` for a run seen while still going, and
+  `ended-unobserved` for one that ended before a later look could read its result. Neither counts as
+  a failure.
+
 ### Fixed
 
+- **A machine that loses its compute card no longer computes on its display card.** When the driver
+  counts more cards than it can list, the fallback card 0, an ambient pin onto the display card, the
+  installer's single-card exemption and `gpu_guard`'s single-card grant are all refused, and the install
+  stops naming the driver's error. A genuine one-card machine is unchanged, including a laptop whose
+  owner declared its only card the display, and a declared index is honoured.
+- **A CPU answer hides every card** from the process that got it and from what it starts, and
+  `model_garden` applies the card pin before it imports torch.
+- **A crashed `nvidia-smi`, or a declared compute card the driver does not list, reads degraded** with a
+  `doctor` warning, never as "no accelerator". `doctor`'s degraded line and its flag now agree.
+- **`load-seed --embed` is one transaction.** A refused or killed load leaves the brain as it was, and
+  the error carries the memory count before the load and after the rollback.
+- **The model garden's cross-encoder and GLiNER load from the local cache only**, so a missing model is
+  reported as unavailable instead of being fetched.
+- **The organ run ledger records each run's own result.** A run seen while still going is recorded as
+  running and settled when it ends, so a failed run is no longer filed as the previous run's success.
+  `doctor` and the yield sentinel name failed runs.
+- **The dream pipeline ages rows and cuts its windows in UTC**, in the brain's own stamp format. On a
+  host west of UTC the activity profile aged rows against local time, and the co-recall window dropped
+  the cutoff's whole date. A new `brain_clock` organ is the one clock.
+- **Decision times, the calibration log, the approvals snooze and the belief watermark are stamped in
+  UTC**, and read back on the same clock, so a one-hour snooze lasts one hour.
 - The qwen-tier end-to-end test no longer inherits the brain location from your shell. With
   `WIZARD_LIBRARY_HOME` exported it wrote the seed pack into that brain, and with
   `WIZARD_LIBRARY_DB` exported it skipped without saying why. It now runs in its own box either
@@ -16,6 +66,19 @@ All notable changes to Voidloom are recorded here. The format follows
 - The dream-lead differential test no longer fails at random on a host at or east of UTC. Its two
   brains were stamped and read by the wall clock seconds apart, so a time-weighted reader could
   differ in the fourth decimal; both brains and every reader now share one fixed instant.
+- Tests that keep a child process off every card declare the CPU instead of passing an empty
+  `CUDA_VISIBLE_DEVICES`.
+
+### Known issues
+
+- The run ledger observes its own unit while that unit is running, so its own runs read
+  `ended-unobserved`, never `success`. The same happens to a unit that runs more often than hourly and
+  is still running when the ledger looks.
+- On a machine with two cards, nothing declared, and both cards reporting no active display (a monitor
+  asleep), card 0 can still be chosen. This is unchanged from 1.1.0; declaring `WIZARD_DISPLAY_INDEX`
+  avoids it.
+- Some organs outside the dream pipeline still age UTC rows against local time. The effect is
+  day-granular and small.
 
 ## [1.1.0] — 2026-11-13
 
@@ -482,6 +545,7 @@ The first public release, under the Apache License 2.0.
 - Some schema fields and built-in labels carry names from the system's first
   installation; [`NOTICE`](./NOTICE) explains why they are kept.
 
-[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/void-wright/voidloom/releases/tag/v1.1.1
 [1.1.0]: https://github.com/void-wright/voidloom/releases/tag/v1.1.0
 [1.0.0]: https://github.com/void-wright/voidloom/releases/tag/v1.0.0
