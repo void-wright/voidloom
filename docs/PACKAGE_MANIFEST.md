@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T06:45:08Z from the working tree whose HEAD was `3b5d5d5`
+> Generated 2026-11-14T06:49:41Z from the working tree whose HEAD was `5d853e6`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,12 +14,12 @@
 |---|---|
 | files tracked | 535 |
 | files hashed | 535 |
-| total bytes | 11589877 |
+| total bytes | 11589964 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4865918 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4865922 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -27,7 +27,7 @@
 | `organs/affect_lighthouse.py` | 30948 | `9a20023c7b3d80a4` |
 | `organs/affect_probe_scan.py` | 34389 | `445156d34066b10c` |
 | `organs/anti_recency.py` | 52698 | `fa3f190996c58a3f` |
-| `organs/approvals_policy.py` | 19756 | `3b01c9c13fa5bc3b` |
+| `organs/approvals_policy.py` | 19760 | `24c40935d5ad4a73` |
 | `organs/arcane_manifest.py` | 70881 | `c7433aa7cee72baa` |
 | `organs/assayer.py` | 33829 | `d08c60f7a8cc53a2` |
 | `organs/belief_cli.py` | 19439 | `b9cd462cb7127977` |
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  260 files, 3582363 bytes
+### `voidloom` — The CLI facade  ·  260 files, 3582361 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -205,7 +205,7 @@
 | `voidloom/tests/test_embedder_lock.py` | 41160 | `ad6e499277de4122` |
 | `voidloom/tests/test_embedding_provenance.py` | 47949 | `bafb18b3076b0f44` |
 | `voidloom/tests/test_embedding_upgrade_verbs.py` | 10268 | `baccf770ef398023` |
-| `voidloom/tests/test_enacted_proposals_await_work.py` | 4980 | `dd1f40d15a05e411` |
+| `voidloom/tests/test_enacted_proposals_await_work.py` | 4978 | `38cf657cbda471ab` |
 | `voidloom/tests/test_encoder_follows_the_connection.py` | 4626 | `d0c37c2aa8f347dc` |
 | `voidloom/tests/test_encoder_tier_is_bijective.py` | 11497 | `535f0e1c0e57a6ee` |
 | `voidloom/tests/test_engine_reads_the_search_set.py` | 32789 | `ef7b5ff432fda0f6` |
@@ -430,7 +430,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 147168 | `0c5fcbc05f4eacdd` |
+| `install/lay_manifest.json` | 147168 | `0490e0753411c3a7` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -572,7 +572,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 226464 bytes
+### `docs` — Documentation  ·  12 files, 226549 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -583,7 +583,7 @@
 | `docs/LAYOUT.md` | 8372 | `72f3b367d926b620` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 41222 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 41307 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

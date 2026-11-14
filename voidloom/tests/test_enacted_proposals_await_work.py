@@ -3,7 +3,7 @@
 
 "Enacting" a self-eval proposal writes one procedural memory and nothing else -- no task, no ticket. Under auto mode
 the policy approved every title on every report, so the same engineering proposals were approved and "enacted" month
-after month (five times for one title on the sweep's brain), each time one more memory and no work. Now:
+after month (five times for one title on a measured brain), each time one more memory and no work. Now:
   * `approvals --list` carries an "approved, awaiting work" section: every enacted title, its status `awaiting-work`
     (nothing in the brain records that the work was done -- closure states do not exist yet), and every report it was
     enacted on;
@@ -90,7 +90,7 @@ class ARepeatedTitleIsFoldedNotEnactedAgain(_Auto):
         self.assertEqual(open_work[NEW["title"]]["reports"], [second], open_work)
 
     def test_a_title_enacted_twice_before_this_change_lists_both_reports_once(self):
-        # Brains already carry the repetition (the sweep's brain: one title enacted on five reports).
+        # Brains already carry the repetition (a measured brain: one title enacted on five reports).
         first = _report(self.brain.path, "2026-07")
         second = _report(self.brain.path, "2026-08")
         for rid in (first, second):

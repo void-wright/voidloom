@@ -65,7 +65,7 @@ POLICY_ACTOR = "policy:auto"
 POLICY_CONFIRMED_VIA = "policy"
 COVERS = ("self-eval",)
 # How long a decision the policy made stays on every surface a person looks at (the approvals list, the TUI,
-# --present and the session-start line). Seven days was too short: the owner could no longer see a decision a week on.
+# --present and the session-start line). Seven days was too short: a decision dropped out of sight a week after it.
 DECIDED_WINDOW_DAYS = 30.0
 NOT_COVERED = {
     "belief": "proposes nothing until a contradiction detector with measured precision exists",
@@ -204,7 +204,7 @@ def _titles_awaiting_work(db_path: str, titles: List[str], report_id: int) -> Tu
 
     Enacting a self-eval proposal writes one procedural memory and nothing else, and no state anywhere records that
     the work was done -- so a title enacted on an earlier report is still OPEN work. Approving it again would write
-    another memory and do nothing more (the sweep's brain: one title enacted on five reports). An unreadable table
+    another memory and do nothing more (measured on a live brain: one title enacted on five reports). An unreadable table
     cannot tell, like the decline ledger: readable=False holds the report for a person."""
     try:
         con = sqlite3.connect("file:%s?mode=ro" % Path(db_path).as_posix(), uri=True)

@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "3b5d5d5",
+  "derived_at_head": "5d853e6",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 535,
   "not_laid": {
@@ -1587,13 +1587,13 @@
    "src": "organs/anti_recency.py"
   },
   {
-   "bytes": 19756,
+   "bytes": 19760,
    "component": "core",
    "dst": "organs/approvals_policy.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "3b01c9c13fa5bc3bd154c5c8879316941e9cbe762d4844508de1b3038537df06",
+   "sha256": "24c40935d5ad4a7367c87154b3c7d09de294259764565b43cd4baef81535c214",
    "src": "organs/approvals_policy.py"
   },
   {
@@ -3797,13 +3797,13 @@
    "src": "voidloom/tests/test_embedding_upgrade_verbs.py"
   },
   {
-   "bytes": 4980,
+   "bytes": 4978,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "dd1f40d15a05e41125e9a72310325a81b732dada20a764fc2beb6d4610fbf71e",
+   "sha256": "38cf657cbda471ab50121600fedf79c9492cfc0b60d8129b0f96231a8ea96745",
    "src": "voidloom/tests/test_enacted_proposals_await_work.py"
   },
   {
