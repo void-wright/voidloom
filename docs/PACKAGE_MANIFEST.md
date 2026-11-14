@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T07:36:34Z from the working tree whose HEAD was `adcc437`
+> Generated 2026-11-14T09:14:04Z from the working tree whose HEAD was `22bc397`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 535 |
 | files hashed | 535 |
-| total bytes | 11589964 |
+| total bytes | 11591209 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  260 files, 3582361 bytes
+### `voidloom` — The CLI facade  ·  260 files, 3583220 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -236,7 +236,7 @@
 | `voidloom/tests/test_init_prelock_snapshot.py` | 5338 | `0dfb477d2d9a3d76` |
 | `voidloom/tests/test_install_stops_and_says_why.py` | 23227 | `474ccf96583a5fbf` |
 | `voidloom/tests/test_installer_accelerator.py` | 40526 | `9a64dfb7b1d3d16b` |
-| `voidloom/tests/test_installer_counts_an_unreadable_card.py` | 4659 | `c1b57303929b8591` |
+| `voidloom/tests/test_installer_counts_an_unreadable_card.py` | 5518 | `9d2ac671b1affb40` |
 | `voidloom/tests/test_installer_literals.py` | 13974 | `f3497e7a1d314520` |
 | `voidloom/tests/test_installer_marks_what_it_creates.py` | 8490 | `d7f73eb5782cc532` |
 | `voidloom/tests/test_installer_questions.py` | 37609 | `764af8ede1695d23` |
@@ -412,7 +412,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1003520 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1003873 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -430,13 +430,13 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 147168 | `bda4e59b7ec2229d` |
+| `install/lay_manifest.json` | 147168 | `c7726ae138531219` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
 | `install/requirements.txt` | 9850 | `17aa573d4ee42fa1` |
 | `install/self_check.py` | 68030 | `c72f175c60d2822f` |
-| `install/tier1_probe.py` | 45759 | `22fa0878aacd6bff` |
+| `install/tier1_probe.py` | 46112 | `19ace7b49506b4f8` |
 | `install/wire_persona.ps1` | 8385 | `6c760a0105833234` |
 | `install/wire_persona.sh` | 10855 | `0896d140f773a1bc` |
 | `install/write_set.json` | 34420 | `5b0dd0930d92dde4` |
@@ -589,7 +589,7 @@
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 476309 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 476342 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -602,7 +602,7 @@
 | `NOTICE` | 4391 | `6608b4df230ab445` |
 | `README.md` | 31068 | `794ff57f4952db14` |
 | `SECURITY.md` | 1930 | `384e3060f9d1866a` |
-| `install.sh` | 360910 | `46747c932b23e927` |
+| `install.sh` | 360943 | `93ae95875aa3ab04` |
 | `uninstall.sh` | 10531 | `2b6b2ab4e02a4c49` |
 
 ### `.github` —   ·  9 files, 20980 bytes

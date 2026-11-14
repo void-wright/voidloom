@@ -1203,7 +1203,7 @@ gpu_unreadable_refusal() {   # rc 2, nothing touched, when the driver counts a c
     local _n _m
     _n="$(gpu_count)"; _m="$(gpu_listed_count)"
     [ "$_n" -gt "$_m" ] || return 0
-    echo "[install] REFUSED: nvidia-smi counts ${_n} GPUs but can read only ${_m} ($( "$NVSMI" -L 2>&1 >/dev/null | sed -n '1p' | cut -c1-160 )): the card the brain uses cannot be told apart from the one that drives your display. Fix the driver (on WSL: wsl --shutdown, or reboot Windows; else reinstall or roll back the driver), confirm nvidia-smi lists every card, then re-run. ${NOTHING_TOUCHED}" >&2
+    echo "[install] REFUSED: nvidia-smi counts ${_n} GPUs but can read only ${_m} ($( "$NVSMI" -L 2>&1 >/dev/null | sed -n '1p' | cut -c1-160 )): the card the brain uses cannot be told apart from the one that drives your display. Fix the driver (on WSL: wsl --shutdown, or reboot Windows; else reinstall or roll back the driver), confirm nvidia-smi lists every card, then re-run. ${NOTHING_TOUCHED}${RECORDED_NOTE:+ $RECORDED_NOTE}" >&2
     own_sidecar_restore; exit 2
 }
 

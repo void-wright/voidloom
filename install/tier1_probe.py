@@ -290,7 +290,10 @@ def display_verdict(pin: str, cards: dict, declared: str = "", pin_declared_by: 
         raise RuntimeError("nvidia-smi counts %d cards but lists %d (%s): a card is unreadable, so the display card "
                            "cannot be told apart" % (counted, len(cards), order))
     if len(cards) == 1:
-        if decl and decl.lower() != "none" and decl == order[0]:
+        # With the driver's own count at hand and equal to 1 (checked above), the declared display IS the only card:
+        # a laptop whose GPU drives its screen, honoured as before. Only an UNKNOWN count leaves room for a card the
+        # driver cannot read, so only then does a declared display on the only listed card refuse.
+        if counted is None and decl and decl.lower() != "none" and decl == order[0]:
             raise RuntimeError("the only card nvidia-smi lists (%s) is the display the owner declared "
                                "(WIZARD_DISPLAY_INDEX=%s): the host has another card it cannot read" % (decl, decl))
         if pin != order[0]:

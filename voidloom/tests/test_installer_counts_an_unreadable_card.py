@@ -88,6 +88,18 @@ class TheAmbientProofRefusesAnUnreadableCard(unittest.TestCase):
             self.t.display_verdict("0", {"0": "Enabled"}, "", "", "the only GPU", counted=2)
         self.assertIn("counts 2", str(cm.exception))
 
+    def test_a_counted_one_card_laptop_may_declare_its_display(self):
+        # One card counted and listed, and the owner declared it the display: a laptop whose only GPU drives
+        # its screen. Nothing else can exist to be the compute card, so the single-card basis holds.
+        v = self.t.display_verdict("0", {"0": "Enabled"}, "0", "", "the only GPU", counted=1)
+        self.assertEqual(v["display_basis"], "single-card")
+
+    def test_the_unreadable_card_refusal_reports_what_the_run_already_kept(self):
+        # Called after the thinker step, which may already have recorded something: the refusal must carry
+        # RECORDED_NOTE, as every other late refusal does, rather than claim nothing was touched.
+        body = SH.read_text().split("gpu_unreadable_refusal() {", 1)[1].split("\n}", 1)[0]
+        self.assertIn("RECORDED_NOTE", body)
+
     def test_a_genuine_one_card_machine_keeps_the_single_card_basis(self):
         v = self.t.display_verdict("0", {"0": "Enabled"}, "", "", "the only GPU", counted=1)
         self.assertEqual(v["display_basis"], "single-card")
