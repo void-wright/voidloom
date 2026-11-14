@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "9cfcfa7",
+  "derived_at_head": "4b40c80",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 517,
   "not_laid": {
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 37974,
+   "bytes": 38318,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "877d9eb4f237c79c2fae617fbf17166783370cc13b3fc5bc9d318d28e27de9f2",
+   "sha256": "01197b4d28c6245cb236a53a4d8d4278cccba2dc75d4d5bca11e1e53e4b6362d",
    "src": "CHANGELOG.md"
   },
   {
@@ -3727,13 +3727,13 @@
    "src": "voidloom/tests/test_encoder_follows_the_connection.py"
   },
   {
-   "bytes": 9285,
+   "bytes": 11503,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "e08d4e89b254ee18cf10224368197c8438fae776647e1d846da6e26175094814",
+   "sha256": "230e808cbeba916afe1adc8747cc363d822e36fade9c345f98389bff690589dc",
    "src": "voidloom/tests/test_encoder_tier_is_bijective.py"
   },
   {

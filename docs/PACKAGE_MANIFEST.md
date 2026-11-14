@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-13T22:34:11Z from the working tree whose HEAD was `9cfcfa7`
+> Generated 2026-11-14T03:11:48Z from the working tree whose HEAD was `4b40c80`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 517 |
 | files hashed | 517 |
-| total bytes | 11441189 |
+| total bytes | 11443753 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -102,7 +102,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  243 files, 3478932 bytes
+### `voidloom` — The CLI facade  ·  243 files, 3481150 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -198,7 +198,7 @@
 | `voidloom/tests/test_embedding_provenance.py` | 47949 | `bafb18b3076b0f44` |
 | `voidloom/tests/test_embedding_upgrade_verbs.py` | 10268 | `baccf770ef398023` |
 | `voidloom/tests/test_encoder_follows_the_connection.py` | 4626 | `d0c37c2aa8f347dc` |
-| `voidloom/tests/test_encoder_tier_is_bijective.py` | 9285 | `e08d4e89b254ee18` |
+| `voidloom/tests/test_encoder_tier_is_bijective.py` | 11503 | `230e808cbeba916a` |
 | `voidloom/tests/test_engine_reads_the_search_set.py` | 32676 | `2e63a9d23f1c8b77` |
 | `voidloom/tests/test_env_file_mode_follows_symlink.py` | 5084 | `d5df32f5ac8290f7` |
 | `voidloom/tests/test_env_file_path_is_curated.py` | 4651 | `f7d4f5258ebd5cf6` |
@@ -394,7 +394,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 997230 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 997231 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -412,7 +412,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 142318 | `ea7ef78354cd2352` |
+| `install/lay_manifest.json` | 142319 | `9f686cce7c97578c` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -554,7 +554,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 224920 bytes
+### `docs` — Documentation  ·  12 files, 224921 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -565,18 +565,18 @@
 | `docs/LAYOUT.md` | 8372 | `07c45210098318d5` |
 | `docs/ONBOARDING_GUIDE.md` | 57892 | `cf15b2fba65108df` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 39769 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 39770 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 474156 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 474500 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 37974 | `877d9eb4f237c79c` |
+| `CHANGELOG.md` | 38318 | `01197b4d28c6245c` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3050 | `f954ccc6b225b273` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |

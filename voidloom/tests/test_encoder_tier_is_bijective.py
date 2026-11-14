@@ -111,9 +111,25 @@ class TestEncoderTierIsBijective(unittest.TestCase):
 class TestQwenTierEmbedsAtItsOwnWidth(unittest.TestCase):
     """The layer that proves the claim: a real qwen brain, really embedded."""
 
+    # The brain resolvers the box's engines consult before their relative-self default.
+    # Inherited from the invoker, they escaped the box: the lite engine resolves
+    # WIZARD_LIBRARY_DB, then WIZARD_LIBRARY_HOME, so `load-seed` wrote the seed pack into
+    # the brain HOME named; `init` refuses when WIZARD_LIBRARY_DB names another file, and
+    # that refusal became a skip; modules `claude_memory.py` imports fall back to
+    # CLAUDE_MEMORY_DB. The box is the only brain this class may touch.
+    _RESOLVERS = ("WIZARD_LIBRARY_DB", "WIZARD_LIBRARY_HOME", "CLAUDE_MEMORY_DB")
+
     @classmethod
     def setUpClass(cls):
         cls._tmp = tempfile.mkdtemp(prefix="vl_qwen_", dir=str(Path.home()))
+        try:
+            cls._build_box()
+        except BaseException:
+            shutil.rmtree(cls._tmp, ignore_errors=True)   # tearDownClass does not run after this
+            raise
+
+    @classmethod
+    def _build_box(cls):
         box = Path(cls._tmp) / "pkg"
         out = subprocess.run(["git", "ls-files"], cwd=str(ROOT),
                              capture_output=True, text=True, timeout=60)
@@ -124,19 +140,41 @@ class TestQwenTierEmbedsAtItsOwnWidth(unittest.TestCase):
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / rel, dst)
         cls.box = box
-        env = {**os.environ, "WIZARD_EMBED_MODEL": "qwen",
-               "PYTHONDONTWRITEBYTECODE": "1"}
+        env = {k: v for k, v in os.environ.items() if k not in cls._RESOLVERS}
+        env["WIZARD_EMBED_MODEL"] = "qwen"
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
         env["CUDA_VISIBLE_DEVICES"] = "1"   # FORCED, never setdefault (#15708): GPU 0 drives the display
         cls.env = env
+        # With the resolvers gone, nothing in the environment can make `init` refuse, and the
+        # model's absence is the class-level skip above. A failure here is a defect: say so.
         r = subprocess.run([sys.executable, "organs/claude_memory.py", "init"],
                            cwd=str(box), capture_output=True, text=True,
                            timeout=1800, env=env)
         if r.returncode != 0:
-            raise unittest.SkipTest("qwen-tier init failed: " + r.stderr[-400:])
-        subprocess.run([sys.executable, "organs/claude_memory_lite.py", "load-seed",
-                        "--file", "seed/seed_pack.json"],
-                       cwd=str(box), capture_output=True, text=True,
-                       timeout=600, env=env)
+            raise AssertionError("qwen-tier init failed inside the box:\n"
+                                 + r.stdout[-600:] + r.stderr[-600:])
+        seed = subprocess.run([sys.executable, "organs/claude_memory_lite.py", "load-seed",
+                               "--file", "seed/seed_pack.json"],
+                              cwd=str(box), capture_output=True, text=True,
+                              timeout=600, env=env)
+        if seed.returncode != 0:
+            raise AssertionError("load-seed failed inside the box:\n"
+                                 + seed.stdout[-600:] + seed.stderr[-600:])
+        import json as _j, re as _re
+        m = _re.search(r"\{.*\}", seed.stdout, _re.S)
+        loaded = (_j.loads(m.group(0)) if m else {}).get("loaded")
+        if not isinstance(loaded, int) or loaded <= 0:
+            raise AssertionError("load-seed loaded nothing, so the backfill below would "
+                                 "have nothing to embed:\n" + seed.stdout[-600:])
+        # ...and it landed in THE BOX, counted where it was meant to go.
+        c = sqlite3.connect(f"file:{box / 'claude_memory.db'}?mode=ro", uri=True)
+        try:
+            in_box = c.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        finally:
+            c.close()
+        if in_box != loaded:
+            raise AssertionError(f"load-seed reported {loaded} rows but the box's brain holds "
+                                 f"{in_box}: the seed pack went to some other brain")
 
     @classmethod
     def tearDownClass(cls):

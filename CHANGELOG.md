@@ -6,6 +6,13 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The qwen-tier end-to-end test no longer inherits the brain location from your shell. With
+  `WIZARD_LIBRARY_HOME` exported it wrote the seed pack into that brain, and with
+  `WIZARD_LIBRARY_DB` exported it skipped without saying why. It now runs in its own box either
+  way, and fails loudly if the seed pack does not land there.
+
 ## [1.1.0] — 2026-11-13
 
 ### Added
