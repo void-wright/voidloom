@@ -648,7 +648,10 @@ class TestTensionFadeEvidence(_TmpCase):
             cfg = {**dp.DEFAULT_CONFIG}
             r = {}
             with contextlib.ExitStack() as pinned:
-                for mod in (dp, qk, gm, ar, mse):
+                # brain_clock is the organs' shared UTC clock: a reader that asks it for "now" never touches its
+                # own module's `datetime`, so it is pinned with the readers.
+                import brain_clock
+                for mod in (dp, qk, gm, ar, mse, brain_clock):
                     pinned.enter_context(mock.patch.object(mod, "datetime", clock))
                 r["nrem"] = dp.phase_nrem_consolidation(b.c, cfg, None)
                 r["edges"] = b.all("SELECT source_id, target_id, confidence FROM memory_edges ORDER BY 1, 2")
