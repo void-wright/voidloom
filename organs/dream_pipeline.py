@@ -81,6 +81,7 @@ from pathlib import Path
 # A per-module inline fallback would recreate the 13-way divergence this
 # module exists to end.
 import voidloom_env
+import brain_clock  # the brain's one clock (UTC, its own stamp format); stdlib-only, laid beside this module
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -736,8 +737,10 @@ def rebuild_activity_profile(conn: sqlite3.Connection, cfg: Dict[str, Any]) -> D
     half_life = max(0.5, float(cfg["activity_half_life_days"]))
     decay_lambda = math.log(2.0) / half_life
     lookback = int(cfg["activity_lookback_days"])
-    now = datetime.now()
-    cutoff = (now - timedelta(days=lookback)).isoformat()
+    # UTC in the stored format: access_log.accessed_at and memories.created_at are datetime('now') stamps. A local
+    # clock aged every row by the UTC offset; a 'T' cutoff dropped the cutoff's whole date.
+    now = brain_clock.utc_now()
+    cutoff = brain_clock.utc_stamp(now - timedelta(days=lookback))
     rw = float(cfg["activity_recall_weight"])
     sw = float(cfg["activity_store_weight"])
 
@@ -1125,7 +1128,7 @@ def phase_nrem_consolidation(conn: sqlite3.Connection, cfg: Dict[str, Any],
     method = cfg["nrem_extraction_method"]            # 'sleep_loop' (substrate enum)
     meta_tag = cfg["nrem_metadata_tag"]               # 'co_recalled' (lives in metadata)
     nrem_meta = json.dumps({"nrem": meta_tag})
-    cutoff = (datetime.now() - timedelta(days=lookback_days)).isoformat()
+    cutoff = brain_clock.utc_cutoff(lookback_days)    # UTC, stored format (see rebuild_activity_profile)
 
     # Pull recent real-session recalls ordered in time; co-recall == same window.
     rows = conn.execute(

@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 512,
+    "core": 514,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 467,
+    "all": 469,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 256,
+    "brain": 257,
     "home": 2,
-    "null": 254,
+    "null": 255,
     "skills": 18
    }
   },
-  "derived_at_head": "0505a6e",
+  "derived_at_head": "83c6ce6",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 530,
+  "entries": 532,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 243,
+     "count": 244,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 254
+   "total": 255
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "fa7d836e03df6fec809fd26700466193cd28e669c88699e35f030c3ef7c340b3",
+   "sha256": "d33e9d6414801f6aa5955922149c013a6c668bff134d639ba587a20800f4a0d6",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1637,6 +1637,16 @@
    "src": "organs/belief_engine.py"
   },
   {
+   "bytes": 1944,
+   "component": "core",
+   "dst": "organs/brain_clock.py",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "62be8c0542fae70f11c0b298a3d2b729a75ebaf9c22863e8ba2ef610194af358",
+   "src": "organs/brain_clock.py"
+  },
+  {
    "bytes": 47193,
    "component": "core",
    "dst": "organs/calibration_memory.py",
@@ -1727,13 +1737,13 @@
    "src": "organs/dream_ledger.py"
   },
   {
-   "bytes": 131381,
+   "bytes": 131746,
    "component": "core",
    "dst": "organs/dream_pipeline.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "15942583a2865e925896423fb406ac5b361ac5fe9f7eb1696e496dcabc3c01cc",
+   "sha256": "2f335cbcd432f04d8984be35db628a3e037cea538f88d1875449b7755b0a0939",
    "src": "organs/dream_pipeline.py"
   },
   {
@@ -3665,6 +3675,16 @@
    "root": null,
    "sha256": "bce1e4d75dce79ed710f3bffab0daf4f8f947d6003c3453b5c1ee3ebcba4ca4b",
    "src": "voidloom/tests/test_dream_watch_unconfigured_r2.py"
+  },
+  {
+   "bytes": 4412,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "f8268a27a30ee5e96d6749026a8348e15a37523fb69a86c0b7209bd1d596be65",
+   "src": "voidloom/tests/test_dream_windows_are_utc.py"
   },
   {
    "bytes": 38506,
