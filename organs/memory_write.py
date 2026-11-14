@@ -1547,8 +1547,8 @@ def re_embed_hint(n: int, db_path: Optional[str], lock_tier: Optional[str]) -> s
     name = LOCK_TIER_TO_TIER_SET.get(lock_tier or "")
     alt = f" (or `voidloom tier set {name}`)" if name else ""
     return (f"run `{re_embed_command(db_path)}`{alt} to verify {n} legacy vector(s): "
-            f"they were written before this brain's lock and are searched, but their "
-            f"bytes are not yet checked against it")
+            f"they carry no stamp under this lock, so which model wrote them is not recorded; "
+            f"they are searched, but their bytes are not yet checked against it")
 
 
 def _three_numbers(num: int, den: int) -> Dict[str, Any]:

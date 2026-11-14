@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 519,
+    "core": 520,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 474,
+    "all": 475,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 260,
+    "null": 261,
     "skills": 18
    }
   },
-  "derived_at_head": "8b5680d",
+  "derived_at_head": "05ef6b3",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 537,
+  "entries": 538,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 249,
+     "count": 250,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 260
+   "total": 261
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7232da0433a978e90b08f0cda2d23fa6b94b7c46b5e26f01c6c10674d709c105",
+   "sha256": "4232ee60a97cf3842e37d964d93062f23f54dfb19935ba6984e9ed69dedd51fe",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -4235,6 +4235,16 @@
    "root": null,
    "sha256": "85558a868799daee0c9b595d7cfb49831e65b90fc33572cf6543dfe33e5e059b",
    "src": "voidloom/tests/test_leak_gate.py"
+  },
+  {
+   "bytes": 1373,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "b9a8d618e216e958f93d696d27d8c6525736d8249b8874e11ff7e75e0006deb0",
+   "src": "voidloom/tests/test_legacy_hint_words.py"
   },
   {
    "bytes": 8846,
