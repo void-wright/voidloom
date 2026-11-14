@@ -648,7 +648,7 @@ class ProvenanceUnreadable(ProvenanceError):
 class ProvenanceUnmatched(ProvenanceError):
     """Measured, and ZERO rows are stamped under the active tier's model.
 
-    The typed refusal M1-C2 requires: a reader that filtered on this tier would
+    A typed refusal, never an empty answer: a reader that filtered on this tier would
     be searching nothing, or searching another model's space. `.coverage` carries
     the full report so the refusal still reports coverage.
     """
