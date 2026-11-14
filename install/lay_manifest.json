@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 507,
+    "core": 508,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 462,
+    "all": 463,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 249,
+    "null": 250,
     "skills": 18
    }
   },
-  "derived_at_head": "2818c58",
+  "derived_at_head": "9cc2f89",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 525,
+  "entries": 526,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 238,
+     "count": 239,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 249
+   "total": 250
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "0d8115eff0484984fc5322000e30d9593ce4653227053ce35b1dea8dfb971bfb",
+   "sha256": "a25c20294660960b1ed638848634a63c7d56e500878f85726afc8e4e5435f952",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1887,13 +1887,13 @@
    "src": "organs/model_fetch.py"
   },
   {
-   "bytes": 41693,
+   "bytes": 42154,
    "component": "core",
    "dst": "organs/model_garden.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "0488ab4dc8113db41d7e907b2d4f3571980d7e22cf284bf621e5d896c4970d4e",
+   "sha256": "a1278c6297f38640dcf6bfbf57b41699d0cd350c417c297728fc5e16be7020fe",
    "src": "organs/model_garden.py"
   },
   {
@@ -2197,13 +2197,13 @@
    "src": "organs/voidloom_canary.py"
   },
   {
-   "bytes": 77804,
+   "bytes": 79319,
    "component": "core",
    "dst": "organs/voidloom_device.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f458e9ad1e1f9b989ce5ae11cb96fc9ede611155a135c1412b0b766b2f9e60b8",
+   "sha256": "edaac7e038f5db491e498e8f5c42c2b75e0d8fb404d2bccf7d1c065993cb27f8",
    "src": "organs/voidloom_device.py"
   },
   {
@@ -3437,6 +3437,16 @@
    "src": "voidloom/tests/test_counterfactual_reply_r3.py"
   },
   {
+   "bytes": 7499,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "29e588f3c60a87886c659e21fe4a6653c60f1389a89b6ee92f75b1bddc2ae1ec",
+   "src": "voidloom/tests/test_cpu_answer_hides_every_card.py"
+  },
+  {
    "bytes": 1691,
    "component": "core",
    "dst": null,
@@ -3927,13 +3937,13 @@
    "src": "voidloom/tests/test_gpu_display_declared.py"
   },
   {
-   "bytes": 6720,
+   "bytes": 6820,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "a726472005f76bd54a8135247bcf3aaa3c6b83ab85ec0cef2ebd2bc634358df4",
+   "sha256": "1473331c071d0280691f82adbcdd95371d0eec5debc30325797d5d0966fc628f",
    "src": "voidloom/tests/test_gpu_guard_single_card_is_never_the_display.py"
   },
   {

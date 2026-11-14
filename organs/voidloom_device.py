@@ -1369,6 +1369,34 @@ def _backend_ok(backend: str, torch) -> Tuple[bool, str]:
 
 
 def _confirm(r: dict, torch_mod=None) -> dict:
+    """Stage two (_confirm_backend), then: a CPU answer hides every CUDA card from this process and its children."""
+    return _hide_cuda_for_a_cpu_answer(_confirm_backend(r, torch_mod))
+
+
+def _hide_cuda_for_a_cpu_answer(r: dict) -> dict:
+    """When the confirmed answer is the CPU, write the engine's "no device" -- an EMPTY CUDA_VISIBLE_DEVICES, with
+    torch's NVML-based check (_guard_hidden_cuda_probe) -- unless the variable already selects no device.
+
+    Without it, a process that got 'cpu' because its card was refused, is not listed, or could not be asked (a crashed
+    nvidia-smi) left CUDA_VISIBLE_DEVICES unset: card 0 -- on a two-card host, the display card -- stayed visible to
+    every library that probes CUDA on its own (peft's infer_device() does) and to every child process. The process
+    computes on the CPU either way, so hiding the cards costs it nothing. A machine with no NVIDIA tool and no CUDA
+    variable is left as found: there is nothing to hide."""
+    if r.get("backend") != "cpu":
+        return r
+    if hides_every_cuda_card():
+        _guard_hidden_cuda_probe()
+        return r
+    if nvidia_smi() is None and _ENV_KEY not in os.environ:
+        return r
+    before = os.environ.get(_ENV_KEY)
+    os.environ[_ENV_KEY] = ""
+    _guard_hidden_cuda_probe()
+    return dict(r, notes=list(r.get("notes") or []) + [
+        "CUDA hidden for this process and its children (CUDA_VISIBLE_DEVICES=%r -> '')" % (before,)])
+
+
+def _confirm_backend(r: dict, torch_mod=None) -> dict:
     """Stage two: apply the pin, then ask the backend's own API. Unconfirmed -> 'cpu', said in the basis."""
     if r["backend"] != "cpu":
         _apply_pin(r)

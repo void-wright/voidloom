@@ -311,7 +311,18 @@ def _resolve_device(spec: ModelSpec) -> str:
     """
     if spec.device == "cpu":
         return "cpu"
-    # 'cuda:0' or 'auto' both resolve through the accelerator resolver.
+    # 'cuda:0' or 'auto' both resolve through the accelerator resolver. The pin lands BEFORE torch is imported, as in
+    # every entry module, so no library torch loads sees a card the resolver refused.
+    try:
+        try:
+            from voidloom_device import apply_cuda_pin as _pin
+        except ImportError:
+            import sys as _s
+            _s.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from voidloom_device import apply_cuda_pin as _pin
+        _pin()
+    except Exception:
+        pass
     try:
         import torch  # local import: import-of-model_garden stays torch-free
         return _torch_device(torch)

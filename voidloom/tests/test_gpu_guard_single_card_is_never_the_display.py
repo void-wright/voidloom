@@ -62,6 +62,7 @@ class TheSingleGrantInProcess(unittest.TestCase):
         return self.g.acquire(self.profile, policy=pol, _gpus=self.one, _now_hour=14, _nvlink=False, **seams)
 
     def test_the_configured_compute_card_is_not_visible(self):
+        # gpu-pin-gate: a policy dict handed to gpu_guard's seams; nothing pins or initialises CUDA
         v = self._acquire({"compute_index": "1", "display_uuid": None}, _display_active={DISPLAY: True})
         self.assertEqual((v.granted, v.device_plan), (False, self.g.PLAN_CLOUD), v.reasons)
         self.assertTrue(any(r.startswith("REFUSE-SINGLE") and "compute card 1 is not visible" in r
