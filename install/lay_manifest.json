@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 516,
+    "core": 517,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 471,
+    "all": 472,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 257,
+    "null": 258,
     "skills": 18
    }
   },
-  "derived_at_head": "16eeac0",
+  "derived_at_head": "3b5d5d5",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 534,
+  "entries": 535,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 246,
+     "count": 247,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 257
+   "total": 258
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "edb2afea7e44948a639ff1c67461b33093653992d048f8c4b8041622c4ad3a1c",
+   "sha256": "72f3b367d926b620ee0aa68cea18f48dc0bedafc930672d9b44786c767757403",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1687,13 +1687,13 @@
    "src": "organs/cognitive_map.py"
   },
   {
-   "bytes": 46994,
+   "bytes": 50195,
    "component": "core",
    "dst": "organs/communities.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "331522b97b374104837bf73cb811b6dc378a3735c79a6f27eb8458af4b4b63bd",
+   "sha256": "bd94f5c4c5fe74a644352f459c97203c5fdc34f3fea3dd68495e21b04854512a",
    "src": "organs/communities.py"
   },
   {
@@ -3395,6 +3395,16 @@
    "root": null,
    "sha256": "5875111fc486ec70b2da7601f04c79ab3210d748c9bd7835f37c87eadbc1848a",
    "src": "voidloom/tests/test_cognitive_map_degree_cost_d26.py"
+  },
+  {
+   "bytes": 4948,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "e8e52b80269bb7ffccb44bd20c20fa8c50134c26c1183fbe474d85216c75db97",
+   "src": "voidloom/tests/test_community_epochs_are_pruned.py"
   },
   {
    "bytes": 10842,

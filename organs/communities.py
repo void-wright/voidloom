@@ -148,6 +148,9 @@ DEFAULT_COMMUNITIES_CONFIG: Dict[str, Any] = {
     # PINNED SEED for partition stability (Leiden is randomised; a fixed seed +
     # the carry-forward below keeps IDs stable night to night).
     "seed": 1729,
+    # --- history ---
+    # Epochs kept: the newest N. Every reader reads the newest epoch only; older ones were never read again.
+    "communities_keep_epochs": 7,
     # --- carry-forward (ID stability) ---
     # A new partition's cluster inherits a prior community_id when their member
     # sets overlap by >= this Jaccard. Below it, a fresh id is minted.
@@ -565,13 +568,55 @@ def carry_forward_ids(
     return assignments
 
 
+#: metadata key holding the highest community_id ever minted, so the high-water mark survives a prune of the epochs
+#: that held it.
+MAX_ID_KEY = "communities_max_community_id"
+
+
 def _max_community_id(conn: sqlite3.Connection) -> int:
-    """Highest community_id ever minted (across all epochs), so a fresh id never
+    """Highest community_id ever minted (across all epochs, including pruned ones), so a fresh id never
     collides with a retired one."""
     if not _has_table(conn, "memory_communities"):
         return 0
     row = conn.execute("SELECT MAX(community_id) FROM memory_communities").fetchone()
-    return int(row[0]) if row and row[0] is not None else 0
+    live = int(row[0]) if row and row[0] is not None else 0
+    try:
+        kept = conn.execute("SELECT value FROM metadata WHERE key = ?", (MAX_ID_KEY,)).fetchone()
+        kept_id = int(kept[0]) if kept and str(kept[0]).strip().lstrip("-").isdigit() else 0
+    except sqlite3.Error:
+        kept_id = 0
+    return max(live, kept_id)
+
+
+def prune_epochs(conn: sqlite3.Connection, keep: int = 7) -> Dict[str, Any]:
+    """Delete every epoch older than the newest `keep`, and the summaries of communities no kept epoch holds.
+
+    Every reader reads the NEWEST epoch only (the carry-forward, the summaries) plus the highest id ever minted, which
+    is recorded in metadata first so a pruned epoch cannot take it away. The caller owns the transaction (the stage
+    runs this inside its own and commits once). Reclaiming the space (VACUUM) is the owner's call, never done here.
+    Returns {epochs_pruned, communities_deleted, members_deleted, summaries_deleted, kept_from_epoch}."""
+    out = {"epochs_pruned": 0, "communities_deleted": 0, "members_deleted": 0, "summaries_deleted": 0,
+           "kept_from_epoch": None}
+    keep = max(1, int(keep))
+    if not _has_table(conn, "memory_communities"):
+        return out
+    epochs = [int(r[0]) for r in conn.execute(
+        "SELECT DISTINCT epoch FROM memory_communities ORDER BY epoch DESC").fetchall()]
+    if len(epochs) <= keep:
+        return out
+    cut = epochs[keep - 1]                     # the oldest epoch kept
+    high = _max_community_id(conn)
+    conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (MAX_ID_KEY, str(high)))
+    out["members_deleted"] = conn.execute(
+        "DELETE FROM memory_community_members WHERE epoch < ?", (cut,)).rowcount
+    out["communities_deleted"] = conn.execute(
+        "DELETE FROM memory_communities WHERE epoch < ?", (cut,)).rowcount
+    out["summaries_deleted"] = conn.execute(
+        "DELETE FROM community_summaries WHERE community_id NOT IN "
+        "(SELECT DISTINCT community_id FROM memory_communities)").rowcount
+    out["epochs_pruned"] = len(epochs) - keep
+    out["kept_from_epoch"] = cut
+    return out
 
 
 # ============================================================
@@ -1017,6 +1062,20 @@ def run_communities_stage(
                 # Detection succeeded; summary failure is non-fatal observability.
                 result["status"] = "partial"
                 result["reason"] = f"summaries: {summ.get('reason')}"
+
+        # Keep a window of epochs, not every night forever: one transaction, all or nothing.
+        try:
+            conn.execute("SAVEPOINT communities_prune")
+            pr = prune_epochs(conn, int(conf.get("communities_keep_epochs", 7)))
+            conn.execute("RELEASE SAVEPOINT communities_prune")
+            conn.commit()
+            result["epochs_pruned"] = pr["epochs_pruned"]
+        except sqlite3.Error as e:
+            conn.execute("ROLLBACK TO SAVEPOINT communities_prune")
+            conn.execute("RELEASE SAVEPOINT communities_prune")
+            result["epochs_pruned"] = 0
+            result["status"] = "partial"
+            result["reason"] = ((result.get("reason") + "; ") if result.get("reason") else "") + f"prune: {e}"
 
         return result
 

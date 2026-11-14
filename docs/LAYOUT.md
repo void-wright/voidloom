@@ -1,6 +1,6 @@
 # Repository layout — how to find anything in one screen
 
-> Read this before you read code. **534 tracked files, 11 of them at the
+> Read this before you read code. **535 tracked files, 11 of them at the
 > top level.** Every count on this page is derived from the tree, and
 > `voidloom/tests/test_docs_name_real_paths.py` re-derives them and fails if
 > this page and `git ls-files` disagree — because the previous version said
