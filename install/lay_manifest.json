@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 504,
+    "core": 505,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 459,
+    "all": 460,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 256,
     "home": 2,
-    "null": 246,
+    "null": 247,
     "skills": 18
    }
   },
-  "derived_at_head": "1063538",
+  "derived_at_head": "fcad90e",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 522,
+  "entries": 523,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 235,
+     "count": 236,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 246
+   "total": 247
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "28017eb0f282cd8e6aa80f3d71ebe09f07af908f98341f3ad1b321d7d04005c7",
+   "sha256": "128d5119e7cde1237ba7c6ce8c0279c5fc08544d1bbd865baf813ede285cd0ce",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -907,13 +907,13 @@
    "src": "hooks/voidloom_signoff.py"
   },
   {
-   "bytes": 359474,
+   "bytes": 360863,
    "component": "core",
    "dst": null,
    "exec": true,
    "platform": "posix",
    "root": null,
-   "sha256": "1a1fe53ade42b3813b11ab58ad101c9df0e0c9f197fce20f5409ef4a526231ef",
+   "sha256": "21544c67a42443f77fbcd4128307e83c7b0ad8c4f0aebad522ddcd9987ed433b",
    "src": "install.sh"
   },
   {
@@ -1117,13 +1117,13 @@
    "src": "install/self_check.py"
   },
   {
-   "bytes": 44519,
+   "bytes": 45759,
    "component": "core",
    "dst": "install/tier1_probe.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "736c07ad2386ef397b206a2aa449210de7426ef5f5ea083271b9c11656136e38",
+   "sha256": "22fa0878aacd6bff2b609e80d2fa3c49d35d8a4abdd42626f8008d4499f2d1b7",
    "src": "install/tier1_probe.py"
   },
   {
@@ -4035,6 +4035,16 @@
    "root": null,
    "sha256": "9a64dfb7b1d3d16b9ce96c33797c3412a4303fa70ff456e5dee0b28b7d44366b",
    "src": "voidloom/tests/test_installer_accelerator.py"
+  },
+  {
+   "bytes": 4659,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "c1b57303929b859196ce10bd9161d21dfd9615d18bc00c436b42fcaa5db4f925",
+   "src": "voidloom/tests/test_installer_counts_an_unreadable_card.py"
   },
   {
    "bytes": 13974,

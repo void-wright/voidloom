@@ -1181,12 +1181,30 @@ gpu_present() {
 gpu_listed() {   # the driver lists cards -- whatever --force-cpu says about THIS run's own device (#8)
     [ -n "$NVSMI" ] && "$NVSMI" >/dev/null 2>&1
 }
-gpu_count() {
+gpu_listed_count() {   # the cards the driver can READ (one `-L` line each)
     if [ -n "$NVSMI" ]; then
         "$NVSMI" -L 2>/dev/null | grep -c '^GPU ' || echo 0
     else
         echo 0
     fi
+}
+gpu_count() {   # the cards the driver COUNTS -- including one it cannot read -- never fewer than it lists
+    # A driver that lost a card still COUNTS it (--query-gpu=count) while -L lists only the cards it can read; on a
+    # two-card host whose compute card dropped out, -L alone made this a "one GPU" host and its display card "the only GPU".
+    local _l _c
+    _l="$(gpu_listed_count)"
+    _c=""
+    [ -n "$NVSMI" ] && _c="$("$NVSMI" --query-gpu=count --format=csv,noheader 2>/dev/null | sed -n '1{s/[[:space:]]//g;p;}')"
+    case "$_c" in ''|*[!0-9]*) _c=0 ;; esac
+    if [ "$_c" -gt "$_l" ]; then echo "$_c"; else echo "$_l"; fi
+}
+gpu_unreadable_refusal() {   # rc 2, nothing touched, when the driver counts a card it cannot read
+    gpu_listed || return 0
+    local _n _m
+    _n="$(gpu_count)"; _m="$(gpu_listed_count)"
+    [ "$_n" -gt "$_m" ] || return 0
+    echo "[install] REFUSED: nvidia-smi counts ${_n} GPUs but can read only ${_m} ($( "$NVSMI" -L 2>&1 >/dev/null | sed -n '1p' | cut -c1-160 )): the card the brain uses cannot be told apart from the one that drives your display. Fix the driver (on WSL: wsl --shutdown, or reboot Windows; else reinstall or roll back the driver), confirm nvidia-smi lists every card, then re-run. ${NOTHING_TOUCHED}" >&2
+    own_sidecar_restore; exit 2
 }
 
 # The file this run's brain IS, for the reads below: the one in place, else the snapshot about to be copied into place (an
@@ -2384,6 +2402,7 @@ approvals_settle() {
 approvals_settle
 
 GPU_DEVICE=""; _gpu_resolved=""
+gpu_unreadable_refusal
 # #8 (stranger test, 2026-10-13): --force-cpu decides THIS run's device; it does not answer which card the brain's
 # background jobs use. It used to discard the owner's --gpu / --display-gpu ("not used, nothing is recorded") and Step D
 # then warned "else card 0" on the same 2-GPU host. Given as flags, the answers are recorded as on any other run; with

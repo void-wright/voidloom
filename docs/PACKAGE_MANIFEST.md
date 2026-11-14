@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T05:20:07Z from the working tree whose HEAD was `1063538`
+> Generated 2026-11-14T05:20:59Z from the working tree whose HEAD was `fcad90e`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,9 +12,9 @@
 
 | | |
 |---|---|
-| files tracked | 522 |
-| files hashed | 522 |
-| total bytes | 11484980 |
+| files tracked | 523 |
+| files hashed | 523 |
+| total bytes | 11492544 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -102,7 +102,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  248 files, 3513851 bytes
+### `voidloom` — The CLI facade  ·  249 files, 3518510 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -229,6 +229,7 @@
 | `voidloom/tests/test_init_prelock_snapshot.py` | 5337 | `a9f05439e115fc3c` |
 | `voidloom/tests/test_install_stops_and_says_why.py` | 23227 | `474ccf96583a5fbf` |
 | `voidloom/tests/test_installer_accelerator.py` | 40526 | `9a64dfb7b1d3d16b` |
+| `voidloom/tests/test_installer_counts_an_unreadable_card.py` | 4659 | `c1b57303929b8591` |
 | `voidloom/tests/test_installer_literals.py` | 13974 | `f3497e7a1d314520` |
 | `voidloom/tests/test_installer_marks_what_it_creates.py` | 8490 | `d7f73eb5782cc532` |
 | `voidloom/tests/test_installer_questions.py` | 37609 | `764af8ede1695d23` |
@@ -399,7 +400,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 998585 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1000101 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -417,13 +418,13 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 143673 | `954019f993fa5361` |
+| `install/lay_manifest.json` | 143949 | `245b40178472de40` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
 | `install/requirements.txt` | 9850 | `17aa573d4ee42fa1` |
 | `install/self_check.py` | 68030 | `c72f175c60d2822f` |
-| `install/tier1_probe.py` | 44519 | `736c07ad2386ef39` |
+| `install/tier1_probe.py` | 45759 | `22fa0878aacd6bff` |
 | `install/wire_persona.ps1` | 8385 | `6c760a0105833234` |
 | `install/wire_persona.sh` | 10855 | `0896d140f773a1bc` |
 | `install/write_set.json` | 34267 | `43b9b37c874ad8d6` |
@@ -567,7 +568,7 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19726 | `ec03c0e4f27ea7fa` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `28017eb0f282cd8e` |
+| `docs/LAYOUT.md` | 8372 | `128d5119e7cde123` |
 | `docs/ONBOARDING_GUIDE.md` | 57892 | `cf15b2fba65108df` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
 | `docs/PACKAGE_MANIFEST.md` | 40211 | (self -- not pinnable) |
@@ -576,7 +577,7 @@
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 474873 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 476262 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -589,7 +590,7 @@
 | `NOTICE` | 4391 | `6608b4df230ab445` |
 | `README.md` | 31068 | `794ff57f4952db14` |
 | `SECURITY.md` | 1930 | `384e3060f9d1866a` |
-| `install.sh` | 359474 | `1a1fe53ade42b381` |
+| `install.sh` | 360863 | `21544c67a42443f7` |
 | `uninstall.sh` | 10531 | `2b6b2ab4e02a4c49` |
 
 ### `.github` —   ·  9 files, 20980 bytes

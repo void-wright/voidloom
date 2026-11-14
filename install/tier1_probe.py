@@ -73,6 +73,7 @@ import sqlite3
 import subprocess
 import sys
 import urllib.request
+from typing import Optional
 from pathlib import Path
 
 TIER_BY_TABLE = {"memory_embeddings": "nomic", "memory_embeddings_v2": "jina", "memory_embeddings_v3": "qwen"}
@@ -250,14 +251,19 @@ def live_display(organs: str) -> dict:
             cards[parts[0]] = parts[1]
     if not cards:
         raise RuntimeError("%s --query-gpu=index,display_active listed no card: display_active is unobservable" % smi)
-    return {"nvidia_smi": smi, "cards": cards}
+    counted = None
+    c = subprocess.run([smi, "--query-gpu=count", "--format=csv,noheader"], capture_output=True, text=True, timeout=8)
+    if c.returncode == 0:
+        first = (c.stdout.strip().splitlines() or [""])[0].strip()
+        counted = int(first) if first.isdigit() else None
+    return {"nvidia_smi": smi, "cards": cards, "counted": counted}
 
 
 PIN_DECLARATION_KEYS = ("CUDA_VISIBLE_DEVICES", "WIZARD_CUDA_DEVICE")
 
 
 def display_verdict(pin: str, cards: dict, declared: str = "", pin_declared_by: str = "",
-                    pin_source: str = "") -> dict:
+                    pin_source: str = "", counted: Optional[int] = None) -> dict:
     """The P4 display rule (ruler VL-REF-v1.1 and v1.2; coordinator rulings, memories #21831, #21839), a
     pure function of the LIVE observation `cards` ({index: display_active}), the owner's display
     declaration `declared` (WIZARD_DISPLAY_INDEX from the env file, outside the managed block: '<index>',
@@ -277,7 +283,16 @@ def display_verdict(pin: str, cards: dict, declared: str = "", pin_declared_by: 
             raise RuntimeError("WIZARD_DISPLAY_INDEX=%r is neither a card index nor 'none'" % decl)
         if decl not in cards:
             raise RuntimeError("WIZARD_DISPLAY_INDEX=%s names no card nvidia-smi lists (%s)" % (decl, order))
+    # `counted` is nvidia-smi's own count (--query-gpu=count), which includes a card the driver cannot read. A card
+    # it counts but does not list makes the single-card exemption below false: the host has more than one card and
+    # the listed one may be the display.
+    if counted is not None and counted > len(cards):
+        raise RuntimeError("nvidia-smi counts %d cards but lists %d (%s): a card is unreadable, so the display card "
+                           "cannot be told apart" % (counted, len(cards), order))
     if len(cards) == 1:
+        if decl and decl.lower() != "none" and decl == order[0]:
+            raise RuntimeError("the only card nvidia-smi lists (%s) is the display the owner declared "
+                               "(WIZARD_DISPLAY_INDEX=%s): the host has another card it cannot read" % (decl, decl))
         if pin != order[0]:
             raise RuntimeError("one card (index %s) and the pin is %s: the pin must be that card" % (order[0], pin))
         facts["display_basis"] = "single-card"     # sharing the only card with a display is unavoidable
@@ -392,7 +407,8 @@ def step_p4(a) -> dict:
                                      if facts["live_display_active"][i].strip().lower() == "enabled"]
     facts["display_declared"] = (getattr(a, "display_index", "") or "").strip() or None
     facts.update(display_verdict(pin, obs["cards"], getattr(a, "display_index", "") or "",
-                                 getattr(a, "pin_declared_by", "") or "", getattr(a, "pin_source", "") or ""))
+                                 getattr(a, "pin_declared_by", "") or "", getattr(a, "pin_source", "") or "",
+                                 counted=obs.get("counted")))
     # Only now, with the pin proven not to be the display card, is CUDA initialised -- under
     # CUDA_VISIBLE_DEVICES=<pin>, forced by the parent before this interpreter started.
     if os.environ.get("CUDA_VISIBLE_DEVICES") != pin:
