@@ -139,7 +139,11 @@ class Status(_Brain):
         self.conn.execute("INSERT INTO memory_links (source_id, target_id, link_type, strength, weights_hash) "
                           "VALUES (1, 2, 'related', 0.7, ?)", (FOREIGN,))
         self.conn.commit()
-        rc, env = run("status", "--db", str(self.db), "--json")
+        # The lock's model bytes being on THIS disk is not what this control is about (a host without them reads
+        # status_degraded, by design, tested where that refusal lives); every number below is derived either way.
+        from voidloom import cli
+        with __import__("unittest.mock").mock.patch.object(cli, "_absent_model", lambda *a, **k: None):
+            rc, env = run("status", "--db", str(self.db), "--json")
         self.assertEqual((rc, env["status"], env["code"]), (0, "ok", "status_ok"))
         d = env["data"]
         self.assertEqual(d["lock"]["weights_hash"], self.h)

@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-15T16:52:48Z from the working tree whose HEAD was `8ee5a43`
+> Generated 2026-11-15T18:28:15Z from the working tree whose HEAD was `1b4bb59`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 549 |
 | files hashed | 549 |
-| total bytes | 11769522 |
+| total bytes | 11769890 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  273 files, 3709770 bytes
+### `voidloom` — The CLI facade  ·  273 files, 3710138 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -328,7 +328,7 @@
 | `voidloom/tests/test_sleep_loop_unstallable_r1.py` | 32083 | `15f584b671fdd571` |
 | `voidloom/tests/test_sleep_self_test_offline.py` | 6080 | `cac413a6355b3a7e` |
 | `voidloom/tests/test_stamp_weights_hash.py` | 13172 | `ed8e4af2dbfde798` |
-| `voidloom/tests/test_status_inspect_export.py` | 22100 | `cd05d997938b13e2` |
+| `voidloom/tests/test_status_inspect_export.py` | 22468 | `275efc45aae1efb4` |
 | `voidloom/tests/test_stranger_tier1_upgrade.py` | 89205 | `0e0c94faef9a76a9` |
 | `voidloom/tests/test_suite_children_have_no_terminal.py` | 2046 | `5ca230c2de180a5d` |
 | `voidloom/tests/test_suite_is_portable.py` | 5091 | `5925f8ad9985a8f9` |
@@ -443,7 +443,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 150932 | `7e10690b1b6a4d48` |
+| `install/lay_manifest.json` | 150932 | `d34ceae3978ec568` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |

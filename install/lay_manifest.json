@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "8ee5a43",
+  "derived_at_head": "1b4bb59",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 549,
   "not_laid": {
@@ -5037,13 +5037,13 @@
    "src": "voidloom/tests/test_stamp_weights_hash.py"
   },
   {
-   "bytes": 22100,
+   "bytes": 22468,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "cd05d997938b13e2ac82d0bedd004570d8dde7e35953eff6a4b23fef90527378",
+   "sha256": "275efc45aae1efb49f3b8ca3db73e1753d6af52e8c3b8113ae8be80e4f02ca9b",
    "src": "voidloom/tests/test_status_inspect_export.py"
   },
   {
