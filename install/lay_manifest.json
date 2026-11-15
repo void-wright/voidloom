@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 530,
+    "core": 531,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 485,
+    "all": 486,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 270,
+    "null": 271,
     "skills": 19
    }
   },
-  "derived_at_head": "51c8592",
+  "derived_at_head": "7759b7a",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 548,
+  "entries": 549,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 259,
+     "count": 260,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 270
+   "total": 271
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "9a01b921f978e9f0ac8fa06c519ba0d2edbd0876b568bf9a8611790b02089159",
+   "sha256": "e24b345a9f58ee9ce26248f82b45a30a9328f791950e6888faebb91f483627b3",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -3865,6 +3865,16 @@
    "root": null,
    "sha256": "ef7b5ff432fda0f6f6f901c9d9595e1488525f207773c0c2ba80721be647bd0b",
    "src": "voidloom/tests/test_engine_reads_the_search_set.py"
+  },
+  {
+   "bytes": 7871,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "069d1950b6e7be7eee28a78957cd63168c233d3130667d14b203a391b7999caf",
+   "src": "voidloom/tests/test_engine_strips_like_5_1_2.py"
   },
   {
    "bytes": 5084,

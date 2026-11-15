@@ -29,6 +29,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 # rho-2: the pin is RESOLVED, never hardcoded. apply_cuda_pin() reads
 # WIZARD_CUDA_DEVICE (and the declaring env-file/config) and falls back to
 # PACKAGE_SAFE_DEFAULT = "0" -- correct on every machine but the author's,
@@ -174,7 +183,12 @@ def _load_model():
         _model_cache["model"] = model
         return model
     except Exception as e:
-        _error(f"Failed to load embedding model: {e}")
+        # Typed, as the engine's own door says it: the loader's code, or EMBEDDER_UNAVAILABLE for a load that failed
+        # for a reason the loader did not type.
+        code = getattr(e, "code", None) or "EMBEDDER_UNAVAILABLE"
+        _output({"status": "error", "error": code, "message": f"failed to load the embedding model: {e}",
+                 **(getattr(e, "detail", None) or {})})
+        sys.exit(1)
 
 
 def _encode(text: str, prefix: str = "search_document") -> bytes:
@@ -182,13 +196,12 @@ def _encode(text: str, prefix: str = "search_document") -> bytes:
         _organs()
         import embedder_lock
         with embedder_lock.hub_closed():
-            model = _load_model()
+            _load_model()
     else:
-        model = _load_model()
-    import numpy as np
-    query = f"{prefix}: {text}"
-    vec = model.encode(query, normalize_embeddings=True)
-    return serialize_f32(vec[:NOMIC_DIM].astype(np.float32).tolist())
+        _load_model()
+    # The engine's one encode, so the text reaches the model framed and edged exactly as every other store's does.
+    import embedding_upgrade as _eu
+    return _eu.encode_locked(text, is_query=(prefix == "search_query"), lock=_store_lock())
 
 
 def _get_conn() -> sqlite3.Connection:
@@ -673,7 +686,7 @@ def cmd_maintain(args):
     actions = []
 
     # 1. Decay: reduce importance based on time since last access
-    now = datetime.now()
+    now = brain_clock.utc_now()        # last_accessed is a UTC stamp: aged on the brain's own clock
     memories = conn.execute(
         "SELECT id, importance, last_accessed, access_count FROM memories WHERE is_archived = 0"
     ).fetchall()

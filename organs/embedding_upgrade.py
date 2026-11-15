@@ -365,6 +365,8 @@ def encode_jina(texts: List[str], task: str = JINA_TASK_RETRIEVAL,
     import numpy as np
 
     model = _get_jina_model()
+    # Not as_tokenized_by_5_1_2: jina's remote-code module tokenizes the text as given, never stripped, under every
+    # sentence-transformers version, and its stored vectors are of exactly that.
     embeddings = model.encode(
         texts,
         normalize_embeddings=True,
@@ -563,6 +565,17 @@ def _encode_style(model_id: str) -> str:
     return "plain"
 
 
+def as_tokenized_by_5_1_2(text: str, *, after_prompt: bool) -> str:
+    """The text exactly as sentence-transformers 5.1.2 handed it to the tokenizer of a stock Transformer module: it
+    stripped every input (`str(s).strip()`), after any prompt was prepended; later versions do not. Stripping here, in
+    the engine, keeps every vector the same whichever version runs, because under 5.1.2 a second strip changes nothing.
+    WordPiece (nomic) never saw the difference; Qwen3-Embedding's byte-level BPE does, so an edge-whitespace text would
+    otherwise embed to a different vector than the one stored under 5.1.2. After a prompt (Qwen's query side; its prompt
+    carries no edge whitespace) only the trailing edge was ever stripped. Not for jina: its remote-code module tokenizes
+    without stripping, so its stored vectors are of the text as given."""
+    return text.rstrip() if after_prompt else text.strip()
+
+
 def encode_locked(text: str, *, is_query: bool, lock: Dict[str, Any]) -> bytes:
     """Encode ONE text with the locked embedder, framed the way that model wants
     (nomic: a task prefix; Qwen3-Embedding is ASYMMETRIC: prompt_name='query' on the
@@ -574,38 +587,63 @@ def encode_locked(text: str, *, is_query: bool, lock: Dict[str, Any]) -> bytes:
     dim = int(lock["dim"])
     style = _encode_style(lock["model_id"])
     if style == "nomic":
-        vec = model.encode(f"{'search_query' if is_query else 'search_document'}: {text}",
-                           normalize_embeddings=True)
+        vec = model.encode(as_tokenized_by_5_1_2(f"{'search_query' if is_query else 'search_document'}: {text}",
+                                                 after_prompt=False), normalize_embeddings=True)
     elif style == "qwen" and is_query:
         try:
-            vec = model.encode(text, prompt_name="query", normalize_embeddings=True)
+            vec = model.encode(as_tokenized_by_5_1_2(text, after_prompt=True), prompt_name="query",
+                               normalize_embeddings=True)
         except (TypeError, ValueError, KeyError):
-            vec = model.encode(text, normalize_embeddings=True)
+            vec = model.encode(as_tokenized_by_5_1_2(text, after_prompt=False), normalize_embeddings=True)
     else:
-        vec = model.encode(text, normalize_embeddings=True)
+        vec = model.encode(as_tokenized_by_5_1_2(text, after_prompt=False), normalize_embeddings=True)
     return serialize_f32(np.asarray(vec)[:dim].astype(np.float32).tolist())
 
 
 def encode_locked_batch(texts: List[str], *, is_query: bool = False,
                         lock: Dict[str, Any]) -> List[bytes]:
-    """Batch form of encode_locked, for the re-embed path."""
+    """Batch form of encode_locked, for the re-embed path. The texts are batched exactly as sentence-transformers
+    5.1.2 batched them -- sorted by the length of the text as given, longest first, then cut into batches -- and only
+    then stripped, so a stripped edge never moves a text into another batch (a batch's padding changes its vectors in
+    the last bits)."""
     import numpy as np
     model, lock = get_locked_embedder(lock)
     dim = int(lock["dim"])
     style = _encode_style(lock["model_id"])
-    kw: Dict[str, Any] = {"normalize_embeddings": True, "show_progress_bar": False,
-                          "batch_size": min(max(len(texts), 1), BATCH_SIZE)}
+    size = min(max(len(texts), 1), BATCH_SIZE)
+    kw: Dict[str, Any] = {"normalize_embeddings": True, "show_progress_bar": False}
     if style == "nomic":
         prefix = "search_query" if is_query else "search_document"
-        embs = model.encode([f"{prefix}: {t}" for t in texts], **kw)
+        given = [f"{prefix}: {t}" for t in texts]
+        embs = _encode_in_given_batches(model, given, [as_tokenized_by_5_1_2(g, after_prompt=False) for g in given],
+                                        size, kw)
     elif style == "qwen" and is_query:
         try:
-            embs = model.encode(texts, prompt_name="query", **kw)
+            embs = _encode_in_given_batches(model, texts, [as_tokenized_by_5_1_2(t, after_prompt=True) for t in texts],
+                                            size, {**kw, "prompt_name": "query"})
         except (TypeError, ValueError, KeyError):
-            embs = model.encode(texts, **kw)
+            embs = _encode_in_given_batches(model, texts, [as_tokenized_by_5_1_2(t, after_prompt=False) for t in texts],
+                                            size, kw)
     else:
-        embs = model.encode(texts, **kw)
+        embs = _encode_in_given_batches(model, texts, [as_tokenized_by_5_1_2(t, after_prompt=False) for t in texts],
+                                        size, kw)
     return [serialize_f32(np.asarray(e)[:dim].astype(np.float32).tolist()) for e in embs]
+
+
+def _encode_in_given_batches(model: Any, given: List[str], stripped: List[str], size: int,
+                             kw: Dict[str, Any]) -> List[Any]:
+    """`stripped` encoded in the batches sentence-transformers 5.1.2 made of `given`: its own length sort (np.argsort
+    of the negated lengths; a prompt adds the same length to every text and moves nothing), cut every `size`. Each
+    batch is one call, so the library's own sort can only reorder rows inside it. Returned in input order."""
+    import numpy as np
+    order = [int(i) for i in np.argsort([-len(g) for g in given])]
+    out: List[Any] = [None] * len(given)
+    for start in range(0, len(order), size):
+        part = order[start:start + size]
+        embs = model.encode([stripped[i] for i in part], batch_size=len(part), **kw)
+        for i, e in zip(part, embs):
+            out[i] = e
+    return out
 
 
 def _model_for(model_id: str, lock: Dict[str, Any]):
