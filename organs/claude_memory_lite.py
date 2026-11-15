@@ -283,10 +283,11 @@ def _lock_coverage(conn: sqlite3.Connection) -> dict:
     verified = conn.execute(f"SELECT COUNT(*) FROM memories m WHERE {active} AND m.id IN ({ids}) "
                             f"AND m.id IN ({stamped})", (vt, wh, dim)).fetchone()[0]
     # an unstamped vector is legacy only in the lock's own table: one carrying a stamp under the lock's checksum or
-    # 'unresolved', or on a brain with no stamp under another checksum (the reader's rule, memory_write.member_sql)
-    # -- two scalar reads, once per call (never per row)
-    owned = conn.execute("SELECT 1 FROM embedding_provenance WHERE vec_table = ? AND weights_hash IN (?, ?) LIMIT 1",
-                         (vt, _UNRESOLVED_STAMP, wh)).fetchone() is not None
+    # 'unresolved' on a memory that holds a vector there (a stamp whose vector is gone vouches for nothing), or on a
+    # brain with no stamp under another checksum (the reader's rule, memory_write.member_sql) -- two scalar reads, once
+    # per call (never per row)
+    owned = conn.execute("SELECT 1 FROM embedding_provenance WHERE vec_table = ? AND weights_hash IN (?, ?) "
+                         f"AND memory_id IN ({ids}) LIMIT 1", (vt, _UNRESOLVED_STAMP, wh)).fetchone() is not None
     others = conn.execute("SELECT 1 FROM embedding_provenance WHERE weights_hash NOT IN (?, ?) LIMIT 1",
                           (_UNRESOLVED_STAMP, wh)).fetchone() is not None
     unstamped_ok = owned or not others

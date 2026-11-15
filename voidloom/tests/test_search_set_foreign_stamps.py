@@ -93,6 +93,43 @@ class TheSiblingTrap(_Stamped):
         self.assertEqual(self.lite_matched()["matched"], 0)
 
 
+class AStampWithNoVector(_Stamped):
+    """A stamp under the lock's checksum whose memory holds no vector in the table vouches for nothing: it does not make
+    a repointed table the lock's own, so the table's unstamped vectors stay outside."""
+
+    def plant_orphan_lock_stamp_on_v3(self):
+        gpu = el.catalogue_tiers()["gpu"]["weights_hash"]
+        orphan = self.memory("a stamp whose vector is gone", vector=False)
+        self.stamp(orphan, gpu, table=V3, dim=V3_DIM)
+
+    def test_saboteur_an_orphan_lock_stamp_does_not_readmit_the_unstamped_rows(self):
+        self.unstamped_v3(self.ids[:2])
+        self.repoint_to_gpu()
+        self.plant_orphan_lock_stamp_on_v3()
+        cov = mw.coverage_envelope(self.conn, detail=False)
+        self.assertEqual((cov["ok"], cov.get("error"), cov.get("matched")), (False, "NO_ROWS_FOR_LOCK", 0), cov)
+        with self.assertRaises(mw.ProvenanceUnmatched):
+            mw.search_set(self.conn)
+        lite = self.lite_matched()
+        self.assertEqual((lite["matched"], lite.get("error")), (0, "NO_ROWS_FOR_LOCK"), lite)
+
+    def test_saboteur_nor_holds_an_unstamped_episodic_as_legacy(self):
+        self.conn.execute("UPDATE memories SET kind = 'episodic' WHERE id = ?", (self.ids[0],))
+        self.conn.commit()
+        self.unstamped_v3(self.ids[:1])
+        self.repoint_to_gpu()
+        self.plant_orphan_lock_stamp_on_v3()
+        self.assertEqual(mw.legacy_episodics_held(self.conn, mw.provenance_filter(self.conn), "1970-01-01")[0], 0)
+
+    def test_control_a_lock_stamp_on_a_held_vector_still_makes_the_table_the_locks_own(self):
+        self.unstamped_v3(self.ids[:2])
+        self.repoint_to_gpu()
+        gpu = el.catalogue_tiers()["gpu"]["weights_hash"]
+        self.stamp(self.ids[0], gpu, table=V3, dim=V3_DIM)      # stamped, and its vector is there
+        self.assertEqual(self.search_ids(), self.ids[:2])
+        self.assertEqual(self.lite_matched()["matched"], 2)
+
+
 class TheLegacyDoor(_Stamped):
     def test_control_an_unstamped_vector_beside_a_foreign_row_in_the_locks_own_table_stays_legacy(self):
         self.conn.execute(f"DELETE FROM {mw.PROVENANCE_TABLE} WHERE memory_id = ?", (self.ids[0],))

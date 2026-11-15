@@ -1175,6 +1175,9 @@ class ProvenanceFilter:
     revision: str
     tier: str
     lock_path: Optional[str]
+    # A subquery naming the memories with a vector in vec_table, read from the extension's ordinary shadow table, when
+    # this connection can read it: a stamp makes the table the lock's own only when its memory holds a vector there.
+    vector_ids_sql: Optional[str] = None
 
     @property
     def locked(self) -> bool:
@@ -1206,13 +1209,15 @@ class ProvenanceFilter:
 
     def unstamped_admitted_sql(self) -> str:
         """True when an unstamped vector in the lock's table may be legacy: the table carries a stamp under the lock's
-        checksum or 'unresolved' (it is the lock's own), or the brain holds no stamp under any other checksum (it kept
-        none to say otherwise). Uncorrelated, so it is evaluated once per statement. Binds nothing. Locked only."""
+        checksum or 'unresolved' on a memory that holds a vector there (it is the lock's own; a stamp whose vector is
+        gone vouches for nothing), or the brain holds no stamp under any other checksum (it kept none to say
+        otherwise). Uncorrelated, so it is evaluated once per statement. Binds nothing. Locked only."""
         if not self.locked:
             raise ValueError("unstamped_admitted_sql needs a locked filter")
         own = f"('{WEIGHTS_HASH_UNRESOLVED}', {_sql_text(self.weights_hash)})"
+        held = f" AND p4.memory_id IN ({self.vector_ids_sql})" if self.vector_ids_sql else ""
         return (f"(EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p4 WHERE p4.vec_table = {_sql_text(self.vec_table)} "
-                f"AND p4.weights_hash IN {own}) "
+                f"AND p4.weights_hash IN {own}{held}) "
                 f"OR NOT EXISTS (SELECT 1 FROM {PROVENANCE_TABLE} p3 WHERE p3.weights_hash NOT IN {own}))")
 
     def verified_sql(self, vec_alias: str = "v") -> str:
@@ -1277,6 +1282,18 @@ class ProvenanceFilter:
                 "revision": self.revision, "tier": self.tier, "lock_path": self.lock_path}
 
 
+def vector_ids_sql(conn: sqlite3.Connection, table: str) -> Optional[str]:
+    """A subquery naming the memories with a vector in `table`, readable on any connection: sqlite-vec keeps one row per
+    vector in the ordinary shadow table `<table>_rowids`. None when it cannot be read here."""
+    if not (isinstance(table, str) and table.replace("_", "").isalnum()):
+        return None                     # a table name only ever comes from the lock, and is spliced into SQL
+    try:
+        conn.execute(f"SELECT 1 FROM {table}_rowids LIMIT 1")
+    except sqlite3.Error:
+        return None
+    return f"SELECT rowid FROM {table}_rowids"
+
+
 def provenance_filter(conn: sqlite3.Connection) -> ProvenanceFilter:
     """The filter for this connection's database, derived on this call.
 
@@ -1299,7 +1316,7 @@ def provenance_filter(conn: sqlite3.Connection) -> ProvenanceFilter:
         return ProvenanceFilter(vec_table=lock["vec_table"], dim=int(lock["dim"]),
                                 weights_hash=lock["weights_hash"], model_id=lock["model_id"],
                                 revision=lock["revision"], tier=lock["tier"],
-                                lock_path=lock.get("_path"))
+                                lock_path=lock.get("_path"), vector_ids_sql=vector_ids_sql(conn, lock["vec_table"]))
     table, dim = _resolve_tier(conn)
     ident = model_identity(table)
     return ProvenanceFilter(vec_table=table, dim=int(dim), weights_hash=None,
