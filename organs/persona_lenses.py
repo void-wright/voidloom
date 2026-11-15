@@ -65,6 +65,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -203,7 +212,7 @@ def _compute_recency_boost(result: dict, boost_recent_days: Optional[int]) -> fl
 
     try:
         created = datetime.fromisoformat(created_at)
-        now = datetime.now()
+        now = brain_clock.utc_now()                 # created_at is a UTC stamp: aged on the brain's own clock
         age_days = max(0, (now - created).days)
 
         # Exponential decay from 1.5 to 0.5, with half-life = boost_recent_days.

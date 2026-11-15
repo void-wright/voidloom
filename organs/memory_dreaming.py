@@ -102,6 +102,15 @@ logger = logging.getLogger(__name__)
 # failure marks the row with the 'embedding-missing' tag so the gap is queryable
 # from the DATA, not only from the journal. Stdlib-only at module scope.
 import os as _vl_os, sys as _vl_sys
+
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
 _vl_d = _vl_os.path.dirname(_vl_os.path.abspath(__file__))
 if _vl_d not in _vl_sys.path:
     _vl_sys.path.insert(0, _vl_d)
@@ -1561,7 +1570,7 @@ def get_dream_digest(
     Mixes dream types for variety (not all divergent, not all close).
     Prioritizes flagged-interesting, then recency.
     """
-    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    cutoff = brain_clock.utc_cutoff(days)
 
     rows = conn.execute(
         """SELECT dl.id, dl.dream_type, dl.memory_a_id, dl.memory_b_id,

@@ -69,6 +69,15 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 logger = logging.getLogger("assayer")
 
 # ============================================================
@@ -346,8 +355,7 @@ def score_pending_dreams(
     if model is None:
         return {"status": "noop", "reason": f"no scorer: {reason}", "scored": 0}
 
-    from datetime import timedelta
-    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    cutoff = brain_clock.utc_cutoff(days)
 
     rows = conn.execute(
         """SELECT dl.id, dl.dream_type, dl.cosine_distance, dl.dream_content,
@@ -537,7 +545,7 @@ def _augment_with_wild_pool(
     if not _table_exists(conn, "dream_log"):
         return list(digest)
     have_keys = {_digest_key(e) for e in digest}
-    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    cutoff = brain_clock.utc_cutoff(days)
     rows = conn.execute(
         """SELECT dl.id, dl.dream_type, dl.memory_a_id, dl.memory_b_id,
                   dl.cosine_distance, dl.dream_content, dl.dream_memory_id,
@@ -649,7 +657,7 @@ def run_bakeoff(
         result["verdict"] = "insufficient_signal"
         return result
 
-    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    cutoff = brain_clock.utc_cutoff(days)
     # The candidate pool: meaningful dreams in-window, with their flag + divergence.
     rows = conn.execute(
         """SELECT dl.id, dl.dream_type, dl.memory_a_id, dl.memory_b_id,

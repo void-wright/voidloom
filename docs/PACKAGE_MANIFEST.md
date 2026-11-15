@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-15T13:41:18Z from the working tree whose HEAD was `91d2d59`
+> Generated 2026-11-15T13:50:35Z from the working tree whose HEAD was `244bf83`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,14 +12,14 @@
 
 | | |
 |---|---|
-| files tracked | 547 |
-| files hashed | 547 |
-| total bytes | 11742526 |
+| files tracked | 548 |
+| files hashed | 548 |
+| total bytes | 11755895 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4885706 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4890013 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -29,14 +29,14 @@
 | `organs/anti_recency.py` | 52698 | `fa3f190996c58a3f` |
 | `organs/approvals_policy.py` | 19760 | `24c40935d5ad4a73` |
 | `organs/arcane_manifest.py` | 70881 | `c7433aa7cee72baa` |
-| `organs/assayer.py` | 33829 | `d08c60f7a8cc53a2` |
+| `organs/assayer.py` | 34059 | `846120a6f379d260` |
 | `organs/belief_cli.py` | 19439 | `b9cd462cb7127977` |
 | `organs/belief_engine.py` | 74397 | `e443a0bb2ed2310e` |
 | `organs/brain_clock.py` | 1944 | `62be8c0542fae70f` |
 | `organs/calibration_memory.py` | 47528 | `c619e8c1ad72f77c` |
-| `organs/claude_memory.py` | 231060 | `0027988a1c3629ec` |
+| `organs/claude_memory.py` | 231470 | `b245949ae243d520` |
 | `organs/claude_memory_lite.py` | 64095 | `2a77a8077b17a8f6` |
-| `organs/cognitive_map.py` | 40561 | `33b52acc76aa6d9f` |
+| `organs/cognitive_map.py` | 40924 | `8794bbbfc76e920d` |
 | `organs/communities.py` | 50195 | `bd94f5c4c5fe74a6` |
 | `organs/council.py` | 50065 | `570feac66706d322` |
 | `organs/counterfactual_memory.py` | 73874 | `a1a149e9049ffe07` |
@@ -48,25 +48,25 @@
 | `organs/embed_resolver.py` | 10765 | `41961c7562f8cee4` |
 | `organs/embedder_lock.py` | 77103 | `d88c64d000ee7046` |
 | `organs/embedders.lock.json` | 2557 | `6247a9cbb5988828` |
-| `organs/embedding_upgrade.py` | 72683 | `d3b6bbb1c5afb5d6` |
+| `organs/embedding_upgrade.py` | 74170 | `8f2fa268d5bd46a2` |
 | `organs/gap_mapping.py` | 107682 | `b72a0d6bd94c01d8` |
 | `organs/governance.py` | 46295 | `ea70b57a2ff92acf` |
 | `organs/gpu_guard.py` | 61054 | `cf4f73e60743669d` |
 | `organs/hybrid_retrieval.py` | 88034 | `6020956090f9e76c` |
 | `organs/kind_taxonomy.py` | 30780 | `042ae8556f4600df` |
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
-| `organs/memory_dreaming.py` | 107507 | `fa52e4a89424b500` |
+| `organs/memory_dreaming.py` | 107818 | `feefe873b6110c2d` |
 | `organs/memory_write.py` | 143461 | `e77adba106992f21` |
 | `organs/model_fetch.py` | 8995 | `faf76bcf1a2b2418` |
 | `organs/model_garden.py` | 42154 | `a1278c6297f38640` |
 | `organs/monthly_self_eval.py` | 204854 | `47fb5420d97a52a2` |
 | `organs/organ_run_log.py` | 32195 | `639ae883bd29794c` |
 | `organs/organ_yield_sentinel.py` | 53311 | `8e2ab17718c0ef40` |
-| `organs/persona_lenses.py` | 39932 | `a76126c29dedc8cf` |
+| `organs/persona_lenses.py` | 40348 | `67f41a305c7dce12` |
 | `organs/ppr_recall.py` | 19953 | `c6c0f448cc86288a` |
 | `organs/pre_cognitive_recall.py` | 54781 | `014de8698fe3d4f8` |
 | `organs/precognitive_cache_refresh.py` | 9977 | `194e5de402673738` |
-| `organs/procedural_memory.py` | 39134 | `3a8103a356ee5a1a` |
+| `organs/procedural_memory.py` | 39459 | `52e35247afe495a0` |
 | `organs/provenance_graph.py` | 37519 | `0a38b1d3d957ecad` |
 | `organs/quickening.py` | 35181 | `3ecdc9f98dfa369a` |
 | `organs/qwen_reranker.py` | 27221 | `657583633d1f1691` |
@@ -75,7 +75,7 @@
 | `organs/recall_explain.py` | 24994 | `7e470866c6f0c802` |
 | `organs/schema_migrator.py` | 25230 | `fea20209240e0e9d` |
 | `organs/seed_loader.py` | 21280 | `4c10283eb0dd2765` |
-| `organs/skill_graduation.py` | 55320 | `39acab23e3f999ef` |
+| `organs/skill_graduation.py` | 55675 | `d7d500e863eeae71` |
 | `organs/sleep_loop.py` | 116214 | `6bafd6e29b17cb72` |
 | `organs/temporal_edges.py` | 107944 | `b946bcb472bc3dee` |
 | `organs/temporal_rerank.py` | 22495 | `46da7426f9965325` |
@@ -98,12 +98,12 @@
 | `organs/voidloom_persona.py` | 31042 | `4edd49d4e5a4da86` |
 | `organs/voidloom_preamble.py` | 163579 | `5750a672df37ba11` |
 | `organs/warden.py` | 17331 | `c6647d919efc8204` |
-| `organs/website_memory.py` | 38810 | `f669a3cf2dce5499` |
+| `organs/website_memory.py` | 39220 | `915a70459633b5e4` |
 | `organs/whisper_network.py` | 45507 | `1b4b9245dd294d52` |
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  271 files, 3692153 bytes
+### `voidloom` — The CLI facade  ·  272 files, 3700943 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -197,7 +197,7 @@
 | `voidloom/tests/test_dream_watch_unconfigured_r2.py` | 1498 | `bce1e4d75dce79ed` |
 | `voidloom/tests/test_dream_windows_are_utc.py` | 4412 | `f8268a27a30ee5e9` |
 | `voidloom/tests/test_dreamfix_r2w2a.py` | 38506 | `d1fc63957206abb3` |
-| `voidloom/tests/test_dreamfix_tranche_a.py` | 47679 | `9f7662f79e213d29` |
+| `voidloom/tests/test_dreamfix_tranche_a.py` | 49500 | `b36a386b88b63d03` |
 | `voidloom/tests/test_dreaming_starved_r1.py` | 7060 | `888848a8cc53e96a` |
 | `voidloom/tests/test_edge_decay_idempotent_r2.py` | 6853 | `0856a5cd52e0e2c0` |
 | `voidloom/tests/test_edge_decay_repair_r2d.py` | 12088 | `f11bcc716ead2301` |
@@ -290,6 +290,7 @@
 | `voidloom/tests/test_raptor_one_node_per_group.py` | 5604 | `37b166735e6aed33` |
 | `voidloom/tests/test_re_embed_prelock.py` | 16147 | `61a6585956c3fe6f` |
 | `voidloom/tests/test_read_never_fetches.py` | 7232 | `74534555cb0f5a40` |
+| `voidloom/tests/test_readers_age_on_the_brain_clock.py` | 6969 | `18162279373715ad` |
 | `voidloom/tests/test_readers_count_the_brains_table.py` | 7747 | `1bec17ce2bc31b16` |
 | `voidloom/tests/test_readers_lock_first.py` | 8699 | `2c622570e4347fd4` |
 | `voidloom/tests/test_recall_carries_coverage.py` | 11053 | `24d4f4ba01deb761` |
@@ -423,7 +424,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1012932 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1013203 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -441,7 +442,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 150395 | `9aa11a8fa788b40a` |
+| `install/lay_manifest.json` | 150666 | `7a0f90e2b2cdbbf3` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -584,7 +585,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 227553 bytes
+### `docs` — Documentation  ·  12 files, 227554 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -592,10 +593,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19765 | `f22116939a3af066` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `fe0a174906ecdb25` |
+| `docs/LAYOUT.md` | 8372 | `9a01b921f978e9f0` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 42311 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 42312 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

@@ -46,6 +46,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -286,7 +295,7 @@ def compute_promotion_score(
     last_used_str = events[-1][1]  # Last event (sorted ASC)
     try:
         last_used = datetime.fromisoformat(last_used_str)
-        days_since = (datetime.now() - last_used).days
+        days_since = (brain_clock.utc_now() - last_used).days
     except (ValueError, TypeError):
         days_since = 180  # Worst case if parse fails
 
@@ -404,7 +413,7 @@ def get_review_candidates(
             candidates.append(result)
 
     # Path 2: Old procedural memories with NO usage data at all.
-    cutoff = (datetime.now() - timedelta(days=min_age_days)).isoformat()
+    cutoff = brain_clock.utc_cutoff(min_age_days)
     rows_no_usage = conn.execute(
         """SELECT m.id, m.summary, m.importance, m.created_at
            FROM memories m
@@ -418,7 +427,7 @@ def get_review_candidates(
     for mem_id, summary, importance, created_at in rows_no_usage:
         try:
             created = datetime.fromisoformat(created_at)
-            age_days = (datetime.now() - created).days
+            age_days = (brain_clock.utc_now() - created).days
         except (ValueError, TypeError):
             age_days = min_age_days + 1
 

@@ -31,6 +31,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 
 # ---------------------------------------------------------------------------
 # Section 1: Data Extraction (testable independently of rendering)
@@ -132,7 +141,7 @@ def get_edge_graph(conn: sqlite3.Connection, limit: int = 100) -> Dict[str, Any]
 
 def get_temporal_heatmap(conn: sqlite3.Connection, weeks: int = 26) -> List[Dict[str, Any]]:
     """Get memory creation counts per ISO week for the last N weeks."""
-    cutoff = (datetime.now() - timedelta(weeks=weeks)).strftime("%Y-%m-%d")
+    cutoff = (brain_clock.utc_now() - timedelta(weeks=weeks)).strftime("%Y-%m-%d")   # created_at is UTC
     rows = conn.execute("""
         SELECT strftime('%Y', created_at) as yr,
                strftime('%W', created_at) as wk,

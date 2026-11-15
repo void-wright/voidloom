@@ -61,6 +61,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -255,7 +264,7 @@ def _get_usage_stats_for_memory(
     last_used_str = events[-1][1]
     try:
         last_used = datetime.fromisoformat(last_used_str)
-        days_since = (datetime.now() - last_used).days
+        days_since = (brain_clock.utc_now() - last_used).days
     except (ValueError, TypeError):
         days_since = 999
         last_used_str = None
@@ -295,7 +304,7 @@ def _get_memory_age_days(conn: sqlite3.Connection, memory_id: int) -> int:
         return 0
     try:
         created = datetime.fromisoformat(row[0])
-        return (datetime.now() - created).days
+        return (brain_clock.utc_now() - created).days
     except (ValueError, TypeError):
         return 0
 
@@ -453,7 +462,7 @@ def evaluate_memory(
         if review_entry:
             try:
                 entry_dt = datetime.fromisoformat(review_entry)
-                days_in_review = (datetime.now() - entry_dt).days
+                days_in_review = (brain_clock.utc_now() - entry_dt).days
             except (ValueError, TypeError):
                 days_in_review = 0
         else:

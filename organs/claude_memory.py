@@ -98,6 +98,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+# The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
+try:
+    import brain_clock
+except ImportError:  # imported from outside the organ directory
+    import sys as _bc_sys
+    from pathlib import Path as _BcPath
+    _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import brain_clock
+
 # rho-2: the pin is RESOLVED, never hardcoded. apply_cuda_pin() reads
 # WIZARD_CUDA_DEVICE (and the declaring env-file/config) and falls back to
 # PACKAGE_SAFE_DEFAULT = "0" -- correct on every machine but the author's,
@@ -3273,7 +3282,7 @@ def cmd_maintain(args):
     actions = []
 
     # 1. Decay: reduce importance based on time since last access
-    now = datetime.now()
+    now = brain_clock.utc_now()        # last_accessed is a UTC stamp: aged on the brain's own clock
     memories = conn.execute(
         "SELECT id, importance, last_accessed, access_count, foundation_score, kind "
         "FROM memories WHERE is_archived = 0"
