@@ -6,6 +6,64 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-11-15
+
+### Changed
+
+- **A missing embedding runtime is reported, typed, at the top of every surface.** When the interpreter can't
+  import what runs the verified model bytes, the loader refuses `EMBEDDER_UNAVAILABLE`.
+  - `recall` and `anticipate` degrade at the top (`status: ok`, `degraded: true`, answered by keyword).
+  - `doctor` and `status` no longer read healthy.
+  - `status` and `inspect` name a lost lock or a dropped vector table at the top level.
+  - Every failure that reaches the engine's callers carries a typed code.
+- **A locked brain whose embedder can't load refuses to store**, typed, and writes nothing. Before, `store`
+  and `batch-store` answered ok while writing a memory with no vector. A keyword-only (Tier-0) brain keeps
+  storing.
+- **A dream night with a failed phase reads `degraded`.** The summary carries `degraded: true` and names the
+  failed phases in `degraded_phases`, and both dream entry points exit 1 so a scheduler records it.
+  - A declined thinker (`unconfigured`) and a dry run read as before.
+  - A starved night with a failed phase reads degraded.
+- **On a host with two or more GPUs, nothing declared, and no card reporting an active display** (for example,
+  a monitor asleep), no card is chosen and `doctor` warns, naming `WIZARD_CUDA_DEVICE` and
+  `WIZARD_DISPLAY_INDEX`. Before, the fallback took card 0, which may drive the display. A one-card host and
+  a host that declares its cards are unchanged.
+
+### Fixed
+
+- **A missing lock file is never read as a brain that never had one, at install time too.**
+  - `brain_is_new.py`, `install.sh`'s model reader and the bootstrap's model detector first ask the record a
+    lock leaves behind.
+  - A lost lock keeps the tier its record names.
+  - One whose record names none reads `LOCK_MISSING`, which both installers refuse by name.
+- **A lock written without the brain's record of it is answered, typed.**
+  - `init` says `degraded: true` with the code `init_degraded`.
+  - A `tier set` whose record can't be written is refused inside its transaction.
+  - Running the verb again when the brain is free writes only the record.
+- **The installer's self-check never loads an embedder whose bytes weren't checked.** On a brain with no lock,
+  a model the shipped catalogue carries is verified against its checksum; one it doesn't carry is refused
+  `LOCK_NOT_SHIPPED`.
+- **An orphan lock stamp no longer makes a table the lock's own.** A stamp counts only when its memory holds
+  a vector in that table.
+- **A brain whose tier can't be read** answers `TIER_UNRESOLVED`, not a lost lock.
+- **The readers that age the brain's UTC rows use the brain's clock:** the heatmap window, the recency
+  boost, procedural memory, skill graduation, the dream digest, the assayer and the engine's maintenance
+  decay.
+- **The engine hands the embedder each text exactly as `sentence-transformers` 5.1.2 tokenizes it**
+  (edge whitespace stripped, batches grouped as 5.1.2 groups them). Vectors are bit-identical under the
+  pinned 5.1.2, and a later library version can't move them through that difference.
+- **The `memory-operator` skill has a conforming `SKILL.md`**, and a test holds every shipped skill folder
+  to the same standard.
+
+### Known issues
+
+- The assayer still writes its `scored_at` stamp in local time.
+- `inspect` stays ok when a brain's only vectored rows are archived.
+- The run ledger's own unit still records its runs as `ended-unobserved`. systemd resets a service's result
+  when it starts, so a run cannot read its predecessor's outcome from the inside, and the ledger never guesses
+  a success.
+- `sentence-transformers` stays at 5.1.2. See the 1.1.2 Security note: the advisory's listed fix (5.6.0)
+  only warns, and the real fix is 6.0.
+
 ## [1.1.2] — 2026-11-14
 
 ### Changed
@@ -590,7 +648,8 @@ The first public release, under the Apache License 2.0.
 - Some schema fields and built-in labels carry names from the system's first
   installation; [`NOTICE`](./NOTICE) explains why they are kept.
 
-[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/void-wright/voidloom/releases/tag/v1.1.3
 [1.1.2]: https://github.com/void-wright/voidloom/releases/tag/v1.1.2
 [1.1.1]: https://github.com/void-wright/voidloom/releases/tag/v1.1.1
 [1.1.0]: https://github.com/void-wright/voidloom/releases/tag/v1.1.0
