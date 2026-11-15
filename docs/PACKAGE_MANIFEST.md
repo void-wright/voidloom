@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-14T23:57:00Z from the working tree whose HEAD was `5b73fef`
+> Generated 2026-11-15T00:15:44Z from the working tree whose HEAD was `47177d6`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 539 |
 | files hashed | 539 |
-| total bytes | 11640755 |
+| total bytes | 11643665 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  264 files, 3619803 bytes
+### `voidloom` — The CLI facade  ·  264 files, 3622713 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -117,7 +117,7 @@
 | `voidloom/_facade.py` | 42347 | `5d86f3db5bef7de5` |
 | `voidloom/_guard.py` | 11713 | `11461a1e7bd1ef77` |
 | `voidloom/_paths.py` | 6956 | `5e32ae0a9515cb3c` |
-| `voidloom/cli.py` | 189033 | `609892d0fd492f15` |
+| `voidloom/cli.py` | 189654 | `9304cda9c2ec790a` |
 | `voidloom/tests/__init__.py` | 29 | `c00b7e2467584fad` |
 | `voidloom/tests/_owned_brain.py` | 4509 | `e550d2b14985ecb6` |
 | `voidloom/tests/_thinker_fakes.py` | 15135 | `d63b82c100143add` |
@@ -214,7 +214,7 @@
 | `voidloom/tests/test_env_file_reader.py` | 112024 | `b594afd253b5038a` |
 | `voidloom/tests/test_env_sidecar_discovery.py` | 8371 | `86acb3159b1d2b62` |
 | `voidloom/tests/test_every_armed_unit_has_a_dry_run.py` | 5001 | `e49840549c10e78e` |
-| `voidloom/tests/test_export_names_unverified_text.py` | 6132 | `2101df3094543d3b` |
+| `voidloom/tests/test_export_names_unverified_text.py` | 8421 | `b637547ecac6f18a` |
 | `voidloom/tests/test_first_night_is_derived.py` | 10458 | `2b9b097840fdfcaf` |
 | `voidloom/tests/test_front_door_refusals.py` | 4916 | `1c2cf686f6e3efda` |
 | `voidloom/tests/test_fts_any_word.py` | 9287 | `7c6676405f55cef5` |
@@ -434,7 +434,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 148225 | `bc8c4d7bce22373f` |
+| `install/lay_manifest.json` | 148225 | `c8ef8e91a1acc978` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |

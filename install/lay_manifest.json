@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "5b73fef",
+  "derived_at_head": "47177d6",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 539,
   "not_laid": {
@@ -2917,13 +2917,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 189033,
+   "bytes": 189654,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "609892d0fd492f1531ada0d49abc944ef4de02758ba998b7f6ed1ef1a0e37257",
+   "sha256": "9304cda9c2ec790a7d317fd9935fb3437f7572f1a5821f6da790535aa6ae5434",
    "src": "voidloom/cli.py"
   },
   {
@@ -3887,13 +3887,13 @@
    "src": "voidloom/tests/test_every_armed_unit_has_a_dry_run.py"
   },
   {
-   "bytes": 6132,
+   "bytes": 8421,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2101df3094543d3bfd010e109a9bc3dc0a8b7bab3d4215253204e3c6809563c7",
+   "sha256": "b637547ecac6f18ac2c407afeda638a1d98bee20d1c6d5ce3d4c8ce51decea6f",
    "src": "voidloom/tests/test_export_names_unverified_text.py"
   },
   {

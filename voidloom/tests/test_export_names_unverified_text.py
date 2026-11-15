@@ -110,5 +110,46 @@ class AText(_Export):
         self.assertIs(env["data"]["text_matches_stamp"], False, env)
 
 
+
+class BDreams(_Export):
+    """Both dream writers stamp the text the vector was computed from: the dream's body with its header and the
+    thinker's framing removed (dream_ledger.embedding_text(dream_body(content))), not the stored content. That is by
+    design, so an untouched dream verifies; a dream whose text changed behind the writer is still named."""
+
+    DREAM = ("[Dream synthesis \u2014 divergent]\nSource memories: #11, #12\n\n"
+             "Both memories describe a rhythm: the tide tables and the bell schedule both count the same hours, so "
+             "a change to one is a change to the other.")
+
+    def dream_stamp(self, mid):
+        import dream_ledger
+        text = self.conn.execute("SELECT content FROM memories WHERE id = ?", (mid,)).fetchone()[0]
+        ident = mw.model_identity(self.TABLE)
+        embedded = dream_ledger.embedding_text(dream_ledger.dream_body(text))
+        self.assertNotEqual(embedded, text)          # the fixture really exercises the derived-text path
+        self.conn.execute(
+            f"INSERT OR REPLACE INTO {mw.PROVENANCE_TABLE} ({', '.join(mw.PROVENANCE_COLUMNS)}) "
+            "VALUES (?, ?, ?, 'ref', ?, ?, ?, '2026-01-01T00:00:00+00:00', 'test', 'text', NULL)",
+            (mid, self.TABLE, ident["model_id"], self.h, self.DIM, mw.content_hash(embedded)))
+        self.conn.commit()
+
+    def test_an_untouched_dream_verifies(self):
+        d = self.memory(self.DREAM)
+        self.dream_stamp(d)
+        env = self.export(self.ids + [d])
+        self.assertEqual((env["status"], env["code"], env.get("degraded")), ("ok", "export_ok", None), env)
+        chk = env["data"]["text_check"]
+        self.assertEqual((chk["verified"], chk["not_matching"]), (4, 0), chk)
+
+    def test_saboteur_a_dream_changed_behind_the_writer_is_still_named(self):
+        d = self.memory(self.DREAM)
+        self.dream_stamp(d)
+        self.conn.execute("UPDATE memories SET content = ? WHERE id = ?",
+                          (self.DREAM.replace("bell schedule", "ferry timetable"), d))
+        self.conn.commit()
+        env = self.export(self.ids + [d])
+        self.assertEqual((env["code"], env.get("degraded")), ("export_text_unverified", True), env)
+        self.assertEqual(env["data"]["text_check"]["not_matching_ids"], [d])
+
+
 if __name__ == "__main__":
     unittest.main()

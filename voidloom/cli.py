@@ -2456,7 +2456,19 @@ def _text_matches_stamp(conn: sqlite3.Connection, memory_id: int, stamp: Any) ->
     if not isinstance(stamp, dict) or not stamp.get("content_hash") or (stamp.get("input_kind") or "text") != "text":
         return None
     raw = conn.execute("SELECT CAST(content AS BLOB) FROM memories WHERE id = ?", (memory_id,)).fetchone()
-    return hashlib.sha256(bytes((raw[0] if raw else None) or b"")).hexdigest() == stamp["content_hash"]
+    data = bytes((raw[0] if raw else None) or b"")
+    if hashlib.sha256(data).hexdigest() == stamp["content_hash"]:
+        return True
+    # A dream's vector is computed from its body without the header and the thinker's framing
+    # (dream_ledger.embedding_text), and both dream writers stamp that text, never the stored one.
+    try:
+        import dream_ledger
+    except ImportError:
+        return False
+    text = data.decode("utf-8", "surrogateescape")
+    derived = dream_ledger.embedding_text(dream_ledger.dream_body(text))
+    return derived != text and hashlib.sha256(
+        derived.encode("utf-8", "surrogateescape")).hexdigest() == stamp["content_hash"]
 
 
 def _memory_record(conn: sqlite3.Connection, memory_id: int, active_table: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -2581,7 +2593,7 @@ def verb_export(args) -> Dict[str, Any]:
     text_check = {"verified": sum(1 for r in records if r.get("text_matches_stamp") is True),
                   "not_matching": len(not_matching), "not_matching_ids": not_matching,
                   "no_text_stamp": unchecked, "could_not_verify": len(not_matching) + unchecked,
-                  "basis": "sha256 of each record's stored bytes against its stamp's content_hash"}
+                  "basis": "sha256 of each record's stored bytes (for a dream, the text its vector was embedded from) against its stamp's content_hash"}
     env = ok("export_ok", {"selection": "explicit", "requested": len(ids), "exported": len(records),
                            "missing_ids": missing, "records": records, "text_check": text_check, "db_path": db},
              verb="export")
