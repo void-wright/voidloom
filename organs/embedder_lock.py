@@ -114,7 +114,8 @@ REFUSALS = ("LOCK_MISSING", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED",
             "NO_ROWS_FOR_LOCK", "WEIGHTS_MISMATCH", "STAMP_INCONSISTENT",
             "SNAPSHOT_ABSENT",     # M1 round 5 #6: the pin is not on disk and fetching is not allowed
             "MODELS_ABSENT",       # M1 round 6 #1: the INSTALL could not fetch what the memory needs
-            "EMBEDDER_UNAVAILABLE")  # the bytes are verified, and this interpreter cannot load what runs them
+            "EMBEDDER_UNAVAILABLE",  # the bytes are verified, and this interpreter cannot load what runs them
+            "LOCK_UNMARKED")       # the lock is written and the brain's own record of it is not
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _LOCK_REQUIRED = ("tier", "model_id", "revision", "weights_hash", "dim", "vec_table", "files")
 _ENTRY_REQUIRED = ("model_id", "revision", "weights_hash", "dim", "vec_table", "files")
@@ -540,9 +541,11 @@ def fetch_command(db: Optional[Union[str, Path]] = None) -> str:
 def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str]) -> None:
     """Say inside the brain whether a lock was written for it: `metadata.embedder_lock_written` holds the tier, and an
     empty value says a rollback took the brain back to having none. Deleting the lock and its history leaves this row
-    behind. A connection takes the row in its own transaction; a path writes it now, and a brain too busy or too damaged
-    to take it loses only this second record, never the lock. A row that already says so is left alone: its table
-    stamps every write, and an install run twice must leave the brain's bytes as they were."""
+    behind. A connection takes the row in its own transaction; a path writes it now. A brain too busy or too damaged to
+    take it refuses LOCK_UNMARKED, typed, so the verb that wrote the lock says so in its own answer: the lock stands,
+    and the record that outlives it does not, until the verb is run again when the brain is free. A row that already
+    says so is left alone: its table stamps every write, and an install run twice must leave the brain's bytes as they
+    were."""
     value = tier or ""
     own = not isinstance(brain, sqlite3.Connection)
     conn: Optional[sqlite3.Connection] = None
@@ -557,7 +560,10 @@ def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str])
         if own:
             conn.commit()
     except sqlite3.Error as e:
-        print(f"[embedder_lock] the lock is written, but its row in the brain is not: {e}", file=sys.stderr)
+        raise EmbedderLockError(
+            "LOCK_UNMARKED", f"the lock is written, but its row in the brain is not ({type(e).__name__}: {e}): if the "
+            "lock file were later lost, nothing would say this brain was locked. Run the same verb again when the "
+            "brain is free and writable; it writes only the row", brain=str(brain) if own else None) from e
     finally:
         if own and conn is not None:
             conn.close()

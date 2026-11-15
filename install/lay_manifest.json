@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 525,
+    "core": 526,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 480,
+    "all": 481,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 266,
+    "null": 267,
     "skills": 18
    }
   },
-  "derived_at_head": "7dd4082",
+  "derived_at_head": "ef849a4",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 543,
+  "entries": 544,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 255,
+     "count": 256,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 266
+   "total": 267
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ec122568a459cda073408faa98d8d225350e56f6ae1f3aa57f734eece583d323",
+   "sha256": "4332e14f9354e8e1eca328074420b9d23367cd24c9b54a46d0bf49fad1cf1001",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1777,13 +1777,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 75511,
+   "bytes": 76033,
    "component": "core",
    "dst": "organs/embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ff34d5aa5b92a274d14e3ba9bced5ee64bd023615678ebff5e334c141f18ece9",
+   "sha256": "2e9a75017ee449fface1b4d64f866f7751328e2ff7db129087e6a0903afc5de2",
    "src": "organs/embedder_lock.py"
   },
   {
@@ -3777,13 +3777,13 @@
    "src": "voidloom/tests/test_edge_retire_readers_writers_r2d.py"
   },
   {
-   "bytes": 41281,
+   "bytes": 41427,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "b9809b135b65b582d46e4d1d69b895fa0191f591483b99efe269fceca8f1e098",
+   "sha256": "21efe1791c484b1e04b63fa1f729707605a17c74d1cf8ea2d83dc9aa76095792",
    "src": "voidloom/tests/test_embedder_lock.py"
   },
   {
@@ -4305,6 +4305,16 @@
    "root": null,
    "sha256": "49e62fa66d81eb92a004067a54e98ad58e62e6a704c877dc4a20c2691b5a720c",
    "src": "voidloom/tests/test_lock_table_checked_once.py"
+  },
+  {
+   "bytes": 3537,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "d09215cec4446e6341529e1447469c3764d26a3854808874873ad2f7fe0b3daa",
+   "src": "voidloom/tests/test_lock_unmarked_is_typed.py"
   },
   {
    "bytes": 3991,

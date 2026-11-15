@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-15T12:56:11Z from the working tree whose HEAD was `7dd4082`
+> Generated 2026-11-15T12:57:35Z from the working tree whose HEAD was `ef849a4`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,14 +12,14 @@
 
 | | |
 |---|---|
-| files tracked | 543 |
-| files hashed | 543 |
-| total bytes | 11703878 |
+| files tracked | 544 |
+| files hashed | 544 |
+| total bytes | 11708436 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4877350 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4877872 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -46,7 +46,7 @@
 | `organs/dry_plan.py` | 1995 | `d6e1274adcc77603` |
 | `organs/embed_backfill.py` | 20330 | `7f83d78d92914736` |
 | `organs/embed_resolver.py` | 10765 | `41961c7562f8cee4` |
-| `organs/embedder_lock.py` | 75511 | `ff34d5aa5b92a274` |
+| `organs/embedder_lock.py` | 76033 | `2e9a75017ee449ff` |
 | `organs/embedders.lock.json` | 2557 | `6247a9cbb5988828` |
 | `organs/embedding_upgrade.py` | 71132 | `cd039aca9733ddf9` |
 | `organs/gap_mapping.py` | 107682 | `b72a0d6bd94c01d8` |
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  268 files, 3667197 bytes
+### `voidloom` — The CLI facade  ·  269 files, 3670880 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -203,7 +203,7 @@
 | `voidloom/tests/test_edge_decay_repair_r2d.py` | 12088 | `f11bcc716ead2301` |
 | `voidloom/tests/test_edge_decay_retires_r2d.py` | 8536 | `e02347b289a12a4c` |
 | `voidloom/tests/test_edge_retire_readers_writers_r2d.py` | 12353 | `d6752d4b2e2d7720` |
-| `voidloom/tests/test_embedder_lock.py` | 41281 | `b9809b135b65b582` |
+| `voidloom/tests/test_embedder_lock.py` | 41427 | `21efe1791c484b1e` |
 | `voidloom/tests/test_embedding_provenance.py` | 47949 | `bafb18b3076b0f44` |
 | `voidloom/tests/test_embedding_upgrade_verbs.py` | 10779 | `a8e73b1c50408940` |
 | `voidloom/tests/test_enacted_proposals_await_work.py` | 4978 | `38cf657cbda471ab` |
@@ -256,6 +256,7 @@
 | `voidloom/tests/test_lite_and_fetch_behaviours.py` | 8846 | `454377498ccfeba7` |
 | `voidloom/tests/test_lock_refusals_name_the_fault.py` | 3013 | `c728636f6e615b0a` |
 | `voidloom/tests/test_lock_table_checked_once.py` | 7210 | `49e62fa66d81eb92` |
+| `voidloom/tests/test_lock_unmarked_is_typed.py` | 3537 | `d09215cec4446e63` |
 | `voidloom/tests/test_locked_reads_stay_cheap.py` | 3991 | `d40cddc8b2ee26ef` |
 | `voidloom/tests/test_lockless_coverage_counts_reach.py` | 3522 | `f09973179c0334df` |
 | `voidloom/tests/test_lost_lock.py` | 7458 | `e0aa8ccc55845c62` |
@@ -420,7 +421,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1011047 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1011310 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -438,7 +439,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 149306 | `7c354e76800195b7` |
+| `install/lay_manifest.json` | 149569 | `d142ac9daa74ce18` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -580,7 +581,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 227133 bytes
+### `docs` — Documentation  ·  12 files, 227223 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -588,10 +589,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19765 | `f22116939a3af066` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `ec122568a459cda0` |
+| `docs/LAYOUT.md` | 8372 | `4332e14f9354e8e1` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 41891 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 41981 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
