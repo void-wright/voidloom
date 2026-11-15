@@ -56,7 +56,9 @@ class LockWrittenThenGone(_Lost):
 
     def test_saboteur_status_reports_the_refusal_and_no_lockless_note(self):
         data = self.status()
-        self.assertIsNone(data["lock"]["present"], data["lock"])
+        # the file is gone and the brain's record says one was written: present false, was_locked true, never "none"
+        self.assertEqual((data["lock"]["present"], data["lock"]["was_locked"]), (False, True), data["lock"])
+        self.assertNotIn("note", data["lock"])
         self.assertEqual(data["lock"]["refusal"], "LOCK_MISSING")
         self.assertEqual(data["coverage"]["error"], "LOCK_MISSING")
 

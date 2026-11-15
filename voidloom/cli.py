@@ -335,6 +335,19 @@ def _flag_degraded(env: Dict[str, Any], degraded_code: str) -> Dict[str, Any]:
     return env
 
 
+def _lift_fault(env: Dict[str, Any], degraded_code: str, faulted: bool) -> Dict[str, Any]:
+    """Every envelope builder's way to the one contract: a surface that answers over a fault it found says so at the top
+    (`_flag_degraded`), never only inside its payload."""
+    return _flag_degraded(env, degraded_code) if faulted else env
+
+
+def _engine_degraded(res: Any) -> bool:
+    """Did the engine answer by a degraded path the brain did not declare? A keyword answer on a brain installed
+    keyword-only is what it was asked for, and is not this."""
+    deg = res.get("degraded") if isinstance(res, dict) else None
+    return deg is True or (isinstance(deg, dict) and not deg.get("requested"))
+
+
 def _degrade_banner(data: Dict[str, Any]) -> Optional[str]:
     """One line naming a degraded answer, for the surface a HUMAN reads.
 
@@ -920,6 +933,60 @@ def _holds_vectors(db: Optional[str], coherence: Dict[str, Any]) -> bool:
             conn.close()
     except sqlite3.Error:
         return False
+
+
+def _runtime_missing(models: Dict[str, Any], db: Optional[str], coherence: Dict[str, Any]) -> Optional[str]:
+    """The embedding runtime, asked of THIS interpreter by find_spec (nothing imported, so the check stays cheap). A
+    brain that needs a model needs what loads it: a locked brain, or a lockless one holding vectors. A keyword-only
+    brain needs neither, so it is never refused for their absence (the rule _absent_model applies to the bytes)."""
+    if coherence.get("tier0_only"):
+        return None
+    if not models.get("lock") and not _holds_vectors(db, coherence):
+        return None
+    import importlib.util as _ilu
+    gone = [m for m in ("torch", "sentence_transformers") if _ilu.find_spec(m) is None]
+    if not gone:
+        return None
+    return (f"EMBEDDER_UNAVAILABLE: {sys.executable} cannot import {', '.join(gone)}: recall answers by keyword and a "
+            f"store {'refuses' if models.get('lock') else 'writes no vector'}. Fix: re-provision this environment from "
+            "its lock (re-run the install verb)")
+
+
+def _read_only(writable: Optional[bool]) -> Optional[str]:
+    """A brain this process cannot write: every store refuses readonly_db, so it is not a sound brain whatever its
+    recall does. `writable` is the local-filesystem guard's own probe (None: not measured, which claims nothing)."""
+    if writable is False:
+        return ("DB_READ_ONLY: this process cannot write the brain, so every store refuses readonly_db. Fix: make the "
+                "file and its directory writable by this user")
+    return None
+
+
+def _coverage_faulted(coverage: Any, db: Optional[str]) -> bool:
+    """Does this coverage name a fault in the brain, rather than a state it was built in? A refusal is a fault, except
+    the states a search has nothing to cover in: a lock with no row to search because no vector or no live memory is
+    held (the engine's recall answers a brain with no vector the same way), and a brain declared keyword-only, which has
+    no search set by construction."""
+    if not isinstance(coverage, dict) or coverage.get("degraded") is not True:
+        return False
+    if coverage.get("error") == "NO_ROWS_FOR_LOCK" and not (coverage.get("vectors") and coverage.get("total")):
+        return False
+    return not _declared_keyword_only(db)
+
+
+def _declared_keyword_only(db: Optional[str]) -> bool:
+    """Is this brain DECLARED keyword-only (Tier 0)? Its coverage refuses by construction (no tier, no vectors), and that
+    is the state it was installed in, not a fault in it."""
+    if not db:
+        return False
+    try:
+        conn = _open_brain_ro(db)
+        try:
+            row = conn.execute("SELECT value FROM metadata WHERE key = 'tier0_only'").fetchone()
+        finally:
+            conn.close()
+    except (sqlite3.Error, OSError):
+        row = None
+    return _keyword_only(row[0] if row else None)
 
 
 def _schema_gap(db: Optional[str]) -> Optional[str]:
@@ -1606,8 +1673,10 @@ def verb_batch_store(args) -> Dict[str, Any]:
     summary = _batch.summarize(results)
     # C5: the verdict is taken from the SAME count this envelope prints.
     _env = (incomplete if summary.get("failed") else ok)
-    return _env("batch_store_incomplete" if summary.get("failed") else "batch_store_ok",
-                {**summary, "results": results}, verb="batch-store")
+    env = _env("batch_store_incomplete" if summary.get("failed") else "batch_store_ok",
+               {**summary, "results": results}, verb="batch-store")
+    return _lift_fault(env, "batch_store_degraded",
+                       any(_engine_degraded(r.get("result")) for r in results if isinstance(r, dict)))
 
 
 # Accepted approval ref shapes, verified against voidloom_approvals._parse_ref:
@@ -2085,7 +2154,8 @@ def verb_doctor(args) -> Dict[str, Any]:
         _db = brain.get("db_path")
         # A refusal with a printed repair is said in the self-check's own words; a lock defect keeps the lock's repairs.
         _model, _repair = _recall_model_refusal(_db, _coh)
-        _reason = (_foreign_env_dir() or _incomplete_model(models) or _schema_gap(_db) or (_model if _repair else None)
+        _reason = (_foreign_env_dir() or _runtime_missing(models, _db, _coh) or _read_only(guard.writable)
+                   or _incomplete_model(models) or _schema_gap(_db) or (_model if _repair else None)
                    or _brain_fault(_coh) or _model or _absent_model(models, _db, _coh))
         if not _reason and "peft" in (models.get("missing_modules") or []):
             _organs_importable()
@@ -2362,7 +2432,10 @@ def _status_lock(memory_write: Any, conn: sqlite3.Connection) -> Dict[str, Any]:
         if code == "LOCK_MISSING" and not detail.get("was_locked") and not (path and os.path.lexists(path)):
             return {"present": False, "note": "no lock on this brain: it predates the lock, or its tier is not one "
                                               "the package ships. It is searched as a whole table"}
-        return {"present": None, "refusal": code, "message": str(e)}
+        # Present says whether the file is there; was_locked whether the brain's own record says one was written. A lost
+        # lock is the two disagreeing, and never reads as a brain that had none.
+        return {"present": bool(path and os.path.lexists(path)) if path else None, "refusal": code,
+                "message": str(e), "was_locked": bool(detail.get("was_locked"))}
 
 
 def _status_faults(db: str) -> List[str]:
@@ -2379,7 +2452,8 @@ def _status_faults(db: str) -> List[str]:
     except sqlite3.Error:
         pass
     models = _bootstrap._detect_models(Path(db))
-    return [f for f in (_schema_gap(db), _incomplete_model(models), _absent_model(models, db, meta)) if f]
+    return [f for f in (_schema_gap(db), _runtime_missing(models, db, meta), _read_only(_guard.check(db).writable),
+                        _incomplete_model(models), _absent_model(models, db, meta)) if f]
 
 
 def verb_status(args) -> Dict[str, Any]:
@@ -2416,10 +2490,12 @@ def verb_status(args) -> Dict[str, Any]:
         conn.close()
     flag = memory_write.degrade_of(coverage, "the counts beside it are read straight from the brain; the search set "
                                              "could not be built, so nothing here is covered by a search")
-    return ok("status_ok", {"db_path": db, "lock": lock, "coverage": coverage, "derived_layer": derived,
-                            "seed": seed, "counts": counts, "line": derived.get("line"), "faults": _status_faults(db),
-                            **({"degraded": flag} if flag else {})},
-              verb="status")
+    faults = _status_faults(db)
+    env = ok("status_ok", {"db_path": db, "lock": lock, "coverage": coverage, "derived_layer": derived,
+                           "seed": seed, "counts": counts, "line": derived.get("line"), "faults": faults,
+                           **({"degraded": flag} if flag else {})},
+             verb="status")
+    return _lift_fault(env, "status_degraded", bool(faults) or _coverage_faulted(coverage, db))
 
 
 def _visibility(tags: List[str]) -> Tuple[str, str]:
@@ -2531,7 +2607,8 @@ def verb_inspect(args) -> Dict[str, Any]:
                  "index_coverage": {k: coverage.get(k) for k in ("ok", "matched", "total", "coverage", "error")
                                     if k in coverage},
                  "db_path": db})
-    return ok("inspect_ok", data, verb="inspect")
+    env = ok("inspect_ok", data, verb="inspect")
+    return _lift_fault(env, "inspect_degraded", _coverage_faulted(coverage, db))
 
 
 def verb_export(args) -> Dict[str, Any]:
@@ -3073,7 +3150,8 @@ def _wrap_engine_result(res: Dict[str, Any], *, verb: str,
                      "engine returned a non-dict result", data=res, verb=verb)
     status = res.get("status")
     if status == "ok":
-        return ok(ok_code, res, verb=verb)
+        return _lift_fault(ok(ok_code, res, verb=verb), ok_code[:-3] + "_degraded" if ok_code.endswith("_ok")
+                           else ok_code, _engine_degraded(res))
     # Engine error (printed by _error / a failure path).
     msg = res.get("message") or res.get("error") or "engine reported an error"
     typed = res.get("error")                    # a typed refusal keeps its name: LOCK_MISSING, SCHEMA_DAMAGED, ...

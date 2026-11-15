@@ -393,6 +393,10 @@ GAP_MAPPING_MIGRATION_SQL = Path(__file__).parent.parent / "migrations" / "migra
 # L4 Pre-Cognitive Recall — migration SQL.
 PRECOGNITIVE_MIGRATION_SQL = Path(__file__).parent.parent / "migrations" / "migration_016_pre_cognitive_recall.sql"
 
+# The codes that say the encoder is absent rather than wrong: its bytes are not on this disk (SNAPSHOT_ABSENT), or this
+# interpreter cannot load what runs them (EMBEDDER_UNAVAILABLE). A recall answers by keyword, flagged; a write refuses.
+ENCODER_ABSENT = ("SNAPSHOT_ABSENT", "EMBEDDER_UNAVAILABLE")
+
 CATEGORIES = [
     "user_preference", "technical_decision", "project_knowledge",
     "error_pattern", "skill_lesson", "workflow_pattern",
@@ -810,7 +814,17 @@ def _load_model():
     except Exception as e:
         if getattr(e, "code", None):
             raise                       # a typed lock refusal: main() makes the envelope
-        _error(f"Failed to load embedding model: {e}")
+        raise _embedder_unavailable(e) from e
+
+
+def _embedder_unavailable(e: BaseException) -> Exception:
+    """A load that failed for a reason the loader did not type: the same code a runtime that cannot import carries, so a
+    caller that degrades on the encoder's absence degrades on this one too, and none of them reads an untyped error."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embedder_lock
+    return embedder_lock.EmbedderLockError(
+        "EMBEDDER_UNAVAILABLE", f"failed to load the embedding model: {type(e).__name__}: {e}",
+        reason=type(e).__name__)
 
 
 def _encode(text: str, prefix: str = "search_document", *,
@@ -1893,7 +1907,7 @@ def cmd_recall(args):
         except Exception as _e:  # noqa: BLE001
             # Bytes that are absent are not bytes that are wrong: the words still answer, flagged. `--vector-only` asked
             # for no keyword, so it refuses.
-            if getattr(_e, "code", None) != "SNAPSHOT_ABSENT" or mode == "vector-only":
+            if getattr(_e, "code", None) not in ENCODER_ABSENT or mode == "vector-only":
                 conn.close()
                 raise
             _vector_arm_out, mode = _e.code, "bm25-only"
@@ -2463,6 +2477,25 @@ def _degraded_flag(coverage: Any, means: str, verb: str) -> Dict[str, Any]:
     import memory_write
     flag = memory_write.degrade_of(coverage, means)
     return {"degraded": True, "code": f"{verb}_degraded", "degradation": flag} if flag else {}
+
+
+def _encoder_out_flag(arm_out: Dict[str, Any], verb: str) -> Dict[str, Any]:
+    """The top of an answer the words gave alone because the encoder was absent: the same shape `_degraded_flag` gives
+    for a coverage refusal, with the encoder's own code as the reason."""
+    flag = {"reason": arm_out["code"], "message": arm_out.get("message"),
+            "means": "the encoder could not run, so no vector was searched: these are keyword matches"}
+    if arm_out.get("fix"):
+        flag["fix"] = arm_out["fix"]
+    return {"degraded": True, "code": f"{verb}_degraded", "vector_arm": arm_out["code"], "degradation": flag}
+
+
+def _arm_out_error(arm_out: Dict[str, Any]) -> Exception:
+    """The encoder's own refusal, re-raised where no keyword path exists to answer instead."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import embedder_lock
+    msg = arm_out.get("message") or arm_out["code"]
+    return embedder_lock.EmbedderLockError(arm_out["code"], msg.split(": ", 1)[1] if msg.startswith(arm_out["code"] + ": ")
+                                           else msg)
 
 
 def _degraded_key(coverage: Any, means: str) -> Dict[str, Any]:
@@ -3850,8 +3883,18 @@ def cmd_anticipate(args):
     project_root = getattr(args, 'project_root', None)
     signals = pre_cognitive_recall.collect_signals(project_root=project_root)
 
-    # 2. Compute focus vector.
-    focus_vec = pre_cognitive_recall.compute_focus_vector(signals, _encode)
+    # 2. Compute focus vector. An encoder that is absent (not wrong) takes the vector arm out: the tier queries are then
+    # answered by their words, the focus tier has no vector to search, and the answer says so at its top.
+    encode_fn = _encode
+    _arm_out = None
+    try:
+        focus_vec = pre_cognitive_recall.compute_focus_vector(signals, _encode)
+    except Exception as _e:  # noqa: BLE001
+        if getattr(_e, "code", None) not in ENCODER_ABSENT:
+            raise
+        focus_vec, _arm_out = None, {"code": _e.code, "message": str(_e),
+                                     "fix": ((getattr(_e, "detail", None) or {}).get("retry") or [None])[0]}
+        encode_fn = lambda _text, _prefix="search_query": None  # noqa: E731
 
     # 3. Open DB connection.
     conn = _get_conn()
@@ -3866,6 +3909,14 @@ def cmd_anticipate(args):
             import functools
             recall_fn = functools.partial(hybrid_retrieval.recall_hybrid,
                                           divert=_lane_divert(conn, True)[0])   # R2-08: never fails open
+    if _arm_out is not None:
+        if recall_fn is None:
+            conn.close()
+            raise _arm_out_error(_arm_out)
+        _words = recall_fn
+
+        def recall_fn(c, query, query_vec, top_k=10, mode="hybrid", **kw):   # noqa: E306 -- the words alone
+            return _words(c, query=query, query_vec=None, top_k=top_k, mode="bm25-only", **kw) if query else []
 
     # 5. Run anticipatory recall.
     top_k = getattr(args, 'top_k', 15) or 15
@@ -3873,7 +3924,7 @@ def cmd_anticipate(args):
     result = pre_cognitive_recall.anticipatory_recall(
         conn=conn,
         focus_vec=focus_vec,
-        encode_fn=_encode,
+        encode_fn=encode_fn,
         top_k=top_k,
         show_anticipated=show,
         recall_hybrid_fn=recall_fn,
@@ -3916,8 +3967,9 @@ def cmd_anticipate(args):
             "status": "ok",
             "action": "anticipate",
             "coverage": _coverage,
-            **_degraded_flag(_coverage, "anticipation reads the brain's own rows; no vector was searched for it",
-                             "anticipate"),
+            **(_encoder_out_flag(_arm_out, "anticipate") if _arm_out is not None else
+               _degraded_flag(_coverage, "anticipation reads the brain's own rows; no vector was searched for it",
+                              "anticipate")),
             "memories_loaded": result["memories_loaded"],
             "ambiguous": result["ambiguous"],
             "tiers": result["tiers"],

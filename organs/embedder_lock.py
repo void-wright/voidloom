@@ -113,7 +113,8 @@ DEFAULT_TIER = "cpu"
 REFUSALS = ("LOCK_MISSING", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED",
             "NO_ROWS_FOR_LOCK", "WEIGHTS_MISMATCH", "STAMP_INCONSISTENT",
             "SNAPSHOT_ABSENT",     # M1 round 5 #6: the pin is not on disk and fetching is not allowed
-            "MODELS_ABSENT")       # M1 round 6 #1: the INSTALL could not fetch what the memory needs
+            "MODELS_ABSENT",       # M1 round 6 #1: the INSTALL could not fetch what the memory needs
+            "EMBEDDER_UNAVAILABLE")  # the bytes are verified, and this interpreter cannot load what runs them
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _LOCK_REQUIRED = ("tier", "model_id", "revision", "weights_hash", "dim", "vec_table", "files")
 _ENTRY_REQUIRED = ("model_id", "revision", "weights_hash", "dim", "vec_table", "files")

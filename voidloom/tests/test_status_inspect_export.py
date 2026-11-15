@@ -274,9 +274,10 @@ class StatusNoLock(_Brain):
 class Inspect(_Brain):
     SHAPE = {"id", "text", "seed", "origin", "visibility", "model_stamp", "index_coverage"}
 
-    def check(self, mid):
+    def check(self, mid, code="inspect_ok"):
         rc, env = run("inspect", str(mid), "--db", str(self.db), "--json")
-        self.assertEqual((rc, env["code"]), (0, "inspect_ok"), env)
+        self.assertEqual((rc, env["code"]), (0, code), env)
+        self.assertIs(env.get("degraded"), True if code == "inspect_degraded" else None, env)
         d = env["data"]
         self.assertLessEqual(self.SHAPE, set(d))
         self.assertEqual(d["id"], mid)
@@ -368,7 +369,7 @@ class Inspect(_Brain):
         mid = self.memory(whash=self.h)
         self.conn.execute(f"DROP TABLE {mw.PROVENANCE_TABLE}")
         self.conn.commit()
-        d = self.check(mid)
+        d = self.check(mid, "inspect_degraded")     # named at the top, and still an answer: status ok, exit 0
         self.assertIn("unreadable", d["model_stamp"])
         self.assertFalse(d["index_coverage"]["ok"])
 

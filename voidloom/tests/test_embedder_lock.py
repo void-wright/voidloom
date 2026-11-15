@@ -313,14 +313,15 @@ class L5_ProcessRegister(_Tmp):
             with self.assertRaises(el.EmbedderLockError, msg=repr(bad)):
                 el.register_loaded(model_id="m", revision="r", weights_hash=bad, dim=768, vec_table="memory_embeddings")
 
-    def test_control_exactly_eight_refusal_names(self):
+    def test_control_exactly_nine_refusal_names(self):
         # SNAPSHOT_ABSENT joined in M1 round 5 (#6): the pin is not on disk and this
         # process may not fetch -- distinct from WEIGHTS_MISMATCH (bytes disagree).
         # MODELS_ABSENT joined in M1 round 6 (#1): the INSTALL could not fetch what
         # the memory needs -- the fetch lane's refusal, naming every absent pin.
+        # EMBEDDER_UNAVAILABLE: the bytes verify and this interpreter cannot load what runs them.
         self.assertEqual(set(el.REFUSALS), {"LOCK_MISSING", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED",
                                             "NO_ROWS_FOR_LOCK", "WEIGHTS_MISMATCH", "STAMP_INCONSISTENT",
-                                            "SNAPSHOT_ABSENT", "MODELS_ABSENT"})
+                                            "SNAPSHOT_ABSENT", "MODELS_ABSENT", "EMBEDDER_UNAVAILABLE"})
         with self.assertRaises(ValueError):
             el.EmbedderLockError("SOMETHING_ELSE", "x")
 

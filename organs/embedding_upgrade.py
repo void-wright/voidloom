@@ -283,8 +283,7 @@ def _get_jina_model():
     if "model" in _jina_model_cache:
         return _jina_model_cache["model"]
 
-    import torch
-    from sentence_transformers import SentenceTransformer
+    torch, SentenceTransformer = _embedding_runtime(_lock_module())
 
     _quiet_model_load_noise()  # H3: keep load INFO + ST version warning off default stderr
     device = _torch_device(torch)
@@ -455,6 +454,24 @@ def brain_lock(target, *, tier: str) -> Dict[str, Any]:
     return lock
 
 
+def _embedding_runtime(embedder_lock):
+    """(torch, SentenceTransformer), or the typed refusal EMBEDDER_UNAVAILABLE naming what this interpreter cannot
+    import. The refusal is raised here, in the loader, so every caller of the loader receives the same code a failure
+    in the encode stage carries, and none of them sees a bare ImportError."""
+    try:
+        import torch
+        from sentence_transformers import SentenceTransformer
+    except ImportError as e:
+        missing = getattr(e, "name", None) or str(e)
+        raise embedder_lock.EmbedderLockError(
+            "EMBEDDER_UNAVAILABLE",
+            f"failed to load the embedding model: {sys.executable} cannot import {missing} ({e}). The model's bytes "
+            "are on disk and verified; the runtime that loads them is not. Re-provision this environment from its "
+            "lock (re-run the install verb)",
+            missing=missing, interpreter=sys.executable) from e
+    return torch, SentenceTransformer
+
+
 def get_locked_embedder(lock: Dict[str, Any]):
     """The embedder `lock` names, loaded once per process, checksum-verified BEFORE
     instantiation and registered with the COMPUTED checksum. Returns (model, lock).
@@ -479,8 +496,7 @@ def get_locked_embedder(lock: Dict[str, Any]):
 
     snapshot, computed = embedder_lock.verify_snapshot_against_lock(lock)   # refuses, typed
 
-    import torch
-    from sentence_transformers import SentenceTransformer
+    torch, SentenceTransformer = _embedding_runtime(embedder_lock)
     _quiet_model_load_noise()
     device = _torch_device(torch)
     logger.info("Loading %s@%s on %s (weights %s…)", lock["model_id"], lock["revision"][:12],

@@ -161,13 +161,36 @@ def _tier1_unavailable(exc) -> bool:
 
 def _brain_is_locked(db_path: Optional[str]) -> bool:
     """A lock is a promise of semantic recall: on such a brain a store with no vector is a memory recall cannot reach, so
-    an absent model is a refusal, not a keyword store. A brain with no lock made no such promise."""
+    an absent model is a refusal, not a keyword store. A brain with no lock made no such promise. Only the lock reader's
+    own word that none was ever written (LOCK_MISSING without `was_locked`) reads as no promise: a lock that was written
+    and is gone, one that is there and cannot be read, and a check that could not run all still hold the brain to it."""
     try:
         import embedder_lock  # type: ignore
         embedder_lock.resolve(db_path)
         return True
-    except Exception:
-        return False
+    except Exception as e:  # noqa: BLE001
+        never = getattr(e, "code", None) == "LOCK_MISSING" and not (getattr(e, "detail", None) or {}).get("was_locked")
+        return not never
+
+
+# The engine's codes for an encoder that is absent rather than wrong. A recall answers by keyword, flagged; a store on a
+# locked brain refuses, typed, and writes nothing.
+_ENCODER_ABSENT = ("SNAPSHOT_ABSENT", "EMBEDDER_UNAVAILABLE")
+
+
+def _keyword_store_refused(cmd_name: str, db_path: Optional[str]) -> bool:
+    """Would a keyword-only store break this brain's promise? Read from the brain's declaration (its lock), never from
+    the symptom, so a brain installed keyword-only keeps storing and a locked one refuses whatever failed to load."""
+    return cmd_name == "store" and _brain_is_locked(db_path)
+
+
+def _encoder_refusal(cmd_name: str, code: str, message: str) -> str:
+    """The typed refusal a store on a locked brain answers when its encoder cannot run: one JSON line, as the engine's own
+    door prints it. Nothing was written."""
+    text = message if message.startswith(code) else f"{code}: {message}"
+    return json.dumps({"status": "error", "error": code, "action": cmd_name,
+                       "message": (f"{text}. This brain's install lock promises semantic recall, so a memory with no "
+                                   "vector is refused rather than stored by keyword; nothing was written.")}) + "\n"
 
 
 def _foreign_env_refusal() -> Optional[Dict[str, Any]]:
@@ -406,7 +429,12 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
             # is genuinely absent; a brain-level engine_error still propagates.
             if raised_exit and not getattr(engine, "_VOIDLOOM_TIER0", False):
                 _payload = buf.getvalue()
-                if _embedding_capability_error(_payload) and _tier1_unavailable(OSError(_payload)):
+                if _embedding_capability_error(_payload) and _tier1_unavailable(OSError(_payload)) \
+                        and _keyword_store_refused(cmd_name, db_path):
+                    _said = _parse_last_json(_payload.strip())
+                    buf = io.StringIO(_encoder_refusal(cmd_name, "EMBEDDER_UNAVAILABLE", str(
+                        (_said or {}).get("message") or _payload.strip()[:400])))
+                elif _embedding_capability_error(_payload) and _tier1_unavailable(OSError(_payload)):
                     lite = _import_tier0()
                     lite_fn = getattr(lite, f"cmd_{cmd_name.replace('-', '_')}", None) if lite else None
                     if lite_fn is not None:
@@ -425,6 +453,10 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
         except (ImportError, OSError) as ie:
             if not _tier1_unavailable(ie):
                 raise
+            if _keyword_store_refused(cmd_name, db_path):
+                return dict(_parse_last_json(_encoder_refusal(cmd_name, "EMBEDDER_UNAVAILABLE",
+                                                              f"{type(ie).__name__}: {ie}").strip()) or {},
+                            tier=1, engine="claude_memory")
             # C3 -- THE TIER-1 STACK IS MISSING, AT CALL TIME.
             #
             # The first version of this degrade sat in `_import_engine`, which
@@ -464,7 +496,7 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
             _code = getattr(te, "code", None)
             if not _code:
                 raise                                       # not ours to rephrase
-            if _code != "SNAPSHOT_ABSENT" or (cmd_name == "store" and _brain_is_locked(db_path)):
+            if _code not in _ENCODER_ABSENT or _keyword_store_refused(cmd_name, db_path):
                 payload = {"status": "error", "error": _code, "action": cmd_name, "message": str(te)}
                 cov = getattr(te, "coverage", None)
                 if cov is not None and hasattr(cov, "as_dict"):
@@ -529,7 +561,8 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
                 # nothing failed -- saying "unavailable at call time" would report a
                 # fault where there was a choice, which is the same defect class
                 # this cycle removed from the degrade reason in the first place.
-                if isinstance(_err, str) and "tier 0 requested" in _err.lower():
+                _requested = isinstance(_err, str) and "tier 0 requested" in _err.lower()
+                if _requested:
                     _reason = ("Tier 0 was REQUESTED by the operator; Tier 1 was not "
                                "attempted and no model was resolved or fetched")
                 elif _kind == "ImportError" or _kind == "ModuleNotFoundError":
@@ -547,6 +580,8 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
                     "tier1_error": (str(_err) if _err is not None else None),
                     "means": ("keyword (FTS5) recall over the same brain; no "
                               "semantic ranking"),
+                    # the brain was installed keyword-only: what it declared, not a fault in it
+                    **({"requested": True} if _requested else {}),
                 })
         return parsed
 
