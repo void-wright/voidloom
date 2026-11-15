@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-15T15:32:43Z from the working tree whose HEAD was `1b14077`
+> Generated 2026-11-15T16:52:09Z from the working tree whose HEAD was `8a66d83`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,12 +14,12 @@
 |---|---|
 | files tracked | 549 |
 | files hashed | 549 |
-| total bytes | 11764679 |
+| total bytes | 11765684 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4890222 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  79 files, 4890387 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -60,7 +60,7 @@
 | `organs/model_fetch.py` | 8995 | `faf76bcf1a2b2418` |
 | `organs/model_garden.py` | 42154 | `a1278c6297f38640` |
 | `organs/monthly_self_eval.py` | 204854 | `47fb5420d97a52a2` |
-| `organs/organ_run_log.py` | 32195 | `639ae883bd29794c` |
+| `organs/organ_run_log.py` | 32360 | `2e233ec6bcf133f4` |
 | `organs/organ_yield_sentinel.py` | 53311 | `8e2ab17718c0ef40` |
 | `organs/persona_lenses.py` | 40348 | `67f41a305c7dce12` |
 | `organs/ppr_recall.py` | 19953 | `c6c0f448cc86288a` |
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  273 files, 3708932 bytes
+### `voidloom` — The CLI facade  ·  273 files, 3709770 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -302,7 +302,7 @@
 | `voidloom/tests/test_release_gates_execute.py` | 3803 | `e8ae84f6b38ab25e` |
 | `voidloom/tests/test_reranker_gate.py` | 27921 | `77c41f4d1b428239` |
 | `voidloom/tests/test_reranker_pin_at_load.py` | 13502 | `1c88778b7c175dc4` |
-| `voidloom/tests/test_run_ledger_settles_in_flight_runs.py` | 9526 | `3b81aa7cdc335007` |
+| `voidloom/tests/test_run_ledger_settles_in_flight_runs.py` | 10364 | `0e4486be39b0300a` |
 | `voidloom/tests/test_run_log_follows_the_writer.py` | 4515 | `68ae69676126998d` |
 | `voidloom/tests/test_schema_migrator.py` | 8188 | `6aa0410c65f897ea` |
 | `voidloom/tests/test_search_set_foreign_stamps.py` | 9430 | `56e9d71dc5da5e88` |
@@ -425,7 +425,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1013619 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1013620 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -443,7 +443,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 150931 | `d57b6eaf842886a5` |
+| `install/lay_manifest.json` | 150932 | `c8e0db3c033535ce` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -586,7 +586,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 227724 bytes
+### `docs` — Documentation  ·  12 files, 227725 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -597,7 +597,7 @@
 | `docs/LAYOUT.md` | 8372 | `e24b345a9f58ee9c` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 42482 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 42483 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

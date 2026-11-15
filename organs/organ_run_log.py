@@ -462,21 +462,22 @@ def observe(db: Optional[str] = None, *, unit_dir: str = DEFAULT_UNIT_DIR,
             except (ProbeError, subprocess.SubprocessError, OSError):
                 result, ended = None, None
             started = _utc_stamp(u.last_trigger)
-            if _is_this_run(shown):
-                # The ledger observing its OWN unit, from inside the run: this run is in flight by construction, and
-                # what the manager shows as Result is the PREVIOUS run's -- which is exactly the run this unit's last
-                # look recorded running. That row is settled with it (once), instead of being superseded unobserved.
+            first = lambda k: (shown.get(k) or [None])[0]   # noqa: E731
+            prev_end = _parse_systemd_ts(first("ExecMainExitTimestamp"))
+            if _is_this_run(shown) and prev_end is not None and prev_end < u.last_trigger:
+                # The ledger observing its OWN unit, from inside the run. Only when the manager still shows the
+                # PREVIOUS run's exit stamp (before this trigger) is the Result shown that run's, and then the row its
+                # last look recorded running is settled with it, once. systemd resets Result to success and clears the
+                # exit status and stamp when a run starts, so there this does not fire and the previous run reads
+                # ended-unobserved below: an unknown result is never written as a success.
                 prev = conn.execute(
                     "SELECT run_started_at FROM organ_run_log WHERE unit_name = ? AND result = ? AND run_started_at < ? "
                     "ORDER BY run_started_at DESC LIMIT 1", (u.unit_name, RUNNING, started)).fetchone()
                 if prev is not None:
-                    first = lambda k: (shown.get(k) or [None])[0]   # noqa: E731
-                    prev_end = _parse_systemd_ts(first("ExecMainExitTimestamp"))
                     conn.execute(
                         "UPDATE organ_run_log SET result = ?, run_ended_at = COALESCE(run_ended_at, ?), "
                         "observed_at = datetime('now') WHERE unit_name = ? AND run_started_at = ? AND result = ?",
-                        (classify_result(first("Result"), first("ExecMainStatus")),
-                         _utc_stamp(prev_end) if prev_end and prev_end < u.last_trigger else None,
+                        (classify_result(first("Result"), first("ExecMainStatus")), _utc_stamp(prev_end),
                          u.unit_name, prev[0], RUNNING))
             # A run of this unit still open from an EARLIER trigger was superseded before any look saw it end: its
             # result is unknown, and the ledger says so instead of leaving it running or calling it a success.

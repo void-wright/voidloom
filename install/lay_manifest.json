@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "1b14077",
+  "derived_at_head": "8a66d83",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 549,
   "not_laid": {
@@ -1917,13 +1917,13 @@
    "src": "organs/monthly_self_eval.py"
   },
   {
-   "bytes": 32195,
+   "bytes": 32360,
    "component": "core",
    "dst": "organs/organ_run_log.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "639ae883bd29794cd79a68ed8e7ed3826101f0c1e8e436be073e0145ce31970c",
+   "sha256": "2e233ec6bcf133f4743486d9e59055dd1211bef3dc7082858f2c718997d2a72a",
    "src": "organs/organ_run_log.py"
   },
   {
@@ -4777,13 +4777,13 @@
    "src": "voidloom/tests/test_reranker_pin_at_load.py"
   },
   {
-   "bytes": 9526,
+   "bytes": 10364,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "3b81aa7cdc3350073f0abfe1e8562e4030d41798f58a4349919e7e724fd842d5",
+   "sha256": "0e4486be39b0300a34b5944b540bcc63281efdcec819a7a5d05a29faf966484e",
    "src": "voidloom/tests/test_run_ledger_settles_in_flight_runs.py"
   },
   {

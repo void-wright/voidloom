@@ -151,8 +151,9 @@ class DoctorAndTheSentinelSeeTheFailure(_Ledger):
 class TheLedgerObservingItsOwnUnit(_Ledger):
     """The ledger's own unit is in flight whenever it looks at itself: its run reads `running`, and the next look used to
     supersede that row as ended-unobserved, so the ledger's own runs never read success. From inside its run (the
-    service's InvocationID is this process's $INVOCATION_ID) the Result shown is the PREVIOUS run's, and that is the
-    row it settles."""
+    service's InvocationID is this process's $INVOCATION_ID) it settles its previous run only when the manager still
+    shows that run's exit stamp, before this trigger. systemd clears it when a run starts, so there the previous
+    run stays ended-unobserved: an unknown result is never written as a success."""
 
     def own(self, inv, trigger, **service):
         self.trigger = trigger
@@ -173,6 +174,14 @@ class TheLedgerObservingItsOwnUnit(_Ledger):
         self.own("bbb2", T1 + timedelta(hours=1), Result="exit-code", ExecMainStatus="1",
                  ExecMainExitTimestamp=_sd(T1 + timedelta(seconds=40)))
         self.assertEqual([r[1] for r in self.rows()][0], "exit-code")
+
+    def test_saboteur_systemd_resets_the_result_when_the_run_starts(self):
+        # systemd resets Result to success and clears the exit status and stamp when a service starts, so from inside
+        # its own run the ledger sees nothing of the previous run. It must not settle that run as a success: with no
+        # exit stamp before this trigger, the previous run's result is unknown and reads ended-unobserved.
+        self.own("aaa1", T1, Result="success", ExecMainStatus="0")
+        self.own("bbb2", T1 + timedelta(hours=1), Result="success", ExecMainStatus="0")
+        self.assertEqual([r[1] for r in self.rows()], [ORL.ENDED_UNOBSERVED, ORL.RUNNING])
 
     def test_control_another_units_superseded_run_is_still_unobserved(self):
         self.own("aaa1", T1, Result="success", ExecMainStatus="0")
