@@ -986,12 +986,7 @@ def check_models(checks: Checks, db_path: Path):
             _emb = (f"{_lock['model_id']}@{_lock['revision'][:12]} verifies against the install lock "
                     f"({_computed[:12]}..., tier '{_lock['tier']}', instantiated nothing)")
         else:
-            from sentence_transformers import SentenceTransformer
-            # device="cpu": this verifies the CACHE; with no device, SentenceTransformer probes CUDA in
-            # THIS process, and under a CUDA_VISIBLE_DEVICES that selects no device the WSL2 driver's
-            # cuInit segfaults (reflector-4, executed)
-            SentenceTransformer(EMBED_MODEL, trust_remote_code=True, local_files_only=True, device="cpu")
-            _emb = f"{EMBED_MODEL} cached ({EMBED_SOURCE}; no install lock for this tier)"
+            _emb = _lockless_embedder_present(_el, EMBED_MODEL, EMBED_SOURCE)
         if _rr_on:
             _pins = ([e for e in _el.catalogue_rerankers().values() if e["model_id"] == RERANKER_MODEL]
                      if _el is not None else [])
@@ -1024,6 +1019,38 @@ def check_models(checks: Checks, db_path: Path):
         "full L4 models load (embedder + reranker)", ok, required=False,
         detail=detail, fix=fix,
     )
+
+
+def _lockless_embedder_present(el, model_id: str, source: str) -> str:
+    """The embedder of a brain with no install lock, checked without instantiating anything. A model the shipped
+    catalogue carries is verified against that entry's checksum, as a lock would be. One it does not carry (jina) has no
+    checksum to verify against, so only its files are looked for, at the revision the engine pins, and the line says the
+    bytes are unverified. Any other name is refused, typed: no model is loaded whose bytes cannot be checked."""
+    if el is None:
+        raise RuntimeError("organs/embedder_lock.py is not importable, so no model can be checked")
+    entry = next((dict(e) for e in el.catalogue_tiers().values() if e.get("model_id") == model_id), None)
+    if entry is not None:
+        _snap, computed = el.verify_snapshot_against_lock(entry, allow_fetch=False)
+        return (f"{model_id} verifies against the shipped catalogue entry ({computed[:12]}...; {source}; no install "
+                "lock, instantiated nothing)")
+    import ast
+    try:
+        tree = ast.parse((Path(__file__).resolve().parent.parent / "organs" / "embedding_upgrade.py")
+                         .read_text(encoding="utf-8", errors="replace"))
+        pins = {n.targets[0].id: ast.literal_eval(n.value) for n in tree.body
+                if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)
+                and n.targets[0].id in ("JINA_MODEL_NAME", "JINA_REVISION", "JINA_SNAPSHOT_FILES")}
+    except (OSError, SyntaxError, ValueError):
+        pins = {}
+    if pins.get("JINA_MODEL_NAME") == model_id:
+        snap = el.snapshot_dir_for(model_id, pins["JINA_REVISION"])
+        if not el.snapshot_complete(snap, pins.get("JINA_SNAPSHOT_FILES")):
+            raise el.EmbedderLockError("SNAPSHOT_ABSENT", f"{model_id}@{pins['JINA_REVISION'][:12]} is not whole in "
+                                       f"{el.hf_hub_cache()}", model_id=model_id)
+        return (f"{model_id} present at the engine's pin {pins['JINA_REVISION'][:12]} ({source}; no install lock and "
+                "no shipped checksum: its bytes are NOT verified, and nothing was instantiated)")
+    raise el.EmbedderLockError("LOCK_NOT_SHIPPED", f"{model_id} has no install lock and no shipped checksum; this check "
+                               "loads no model whose bytes it cannot verify", model_id=model_id)
 
 
 # ---------------------------------------------------------------------------

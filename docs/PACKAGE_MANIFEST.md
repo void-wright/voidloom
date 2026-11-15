@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-15T12:51:16Z from the working tree whose HEAD was `15b26f6`
+> Generated 2026-11-15T12:51:38Z from the working tree whose HEAD was `1008c72`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,9 +12,9 @@
 
 | | |
 |---|---|
-| files tracked | 541 |
-| files hashed | 541 |
-| total bytes | 11692941 |
+| files tracked | 542 |
+| files hashed | 542 |
+| total bytes | 11697818 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  266 files, 3657725 bytes
+### `voidloom` — The CLI facade  ·  267 files, 3662247 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -307,6 +307,7 @@
 | `voidloom/tests/test_seed_delete_stays_deleted.py` | 2406 | `2b4d6431006cae5d` |
 | `voidloom/tests/test_seed_doctrine_and_denylist.py` | 12192 | `aee753312feb6a74` |
 | `voidloom/tests/test_seed_load_is_one_transaction.py` | 11452 | `88b9ec8c64b8a500` |
+| `voidloom/tests/test_self_check_lockless_never_loads.py` | 4522 | `2bb70a66fa7664af` |
 | `voidloom/tests/test_self_check_models_lock.py` | 4278 | `40ce1e1805941fda` |
 | `voidloom/tests/test_self_check_recall_gate.py` | 19142 | `fe8da6376a20c5cb` |
 | `voidloom/tests/test_self_check_scale.py` | 7970 | `1f90a2e72b949c63` |
@@ -418,7 +419,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1010502 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1010774 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -436,7 +437,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 148761 | `688b30d9dfd2cf77` |
+| `install/lay_manifest.json` | 149033 | `b843236f9001c95b` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -578,7 +579,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 226961 bytes
+### `docs` — Documentation  ·  12 files, 227044 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -586,10 +587,10 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19765 | `f22116939a3af066` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `dd2a192adea26b77` |
+| `docs/LAYOUT.md` | 8372 | `bb9390ed85d2c063` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 41719 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 41802 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

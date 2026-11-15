@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 523,
+    "core": 524,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 478,
+    "all": 479,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 264,
+    "null": 265,
     "skills": 18
    }
   },
-  "derived_at_head": "15b26f6",
+  "derived_at_head": "1008c72",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 541,
+  "entries": 542,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 253,
+     "count": 254,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 264
+   "total": 265
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "dd2a192adea26b77445e708897fdabaea05444505472ea3944361ee52a304fd8",
+   "sha256": "bb9390ed85d2c063b3ec929a31382574a4593f893623cfb61492fc2e20e608d1",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -4815,6 +4815,16 @@
    "root": null,
    "sha256": "88b9ec8c64b8a50030ee752c3b510f0943ab904a3662566bb9b4a4b78a100744",
    "src": "voidloom/tests/test_seed_load_is_one_transaction.py"
+  },
+  {
+   "bytes": 4522,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "2bb70a66fa7664af3eba6337203b1909709aba18ae20b816e8459fa010f246fa",
+   "src": "voidloom/tests/test_self_check_lockless_never_loads.py"
   },
   {
    "bytes": 4278,
