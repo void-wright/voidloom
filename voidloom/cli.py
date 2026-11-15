@@ -2138,6 +2138,13 @@ def verb_doctor(args) -> Dict[str, Any]:
     if _acc.get("degraded"):
         _warnings = _warnings + ["accelerator: %s -- %s" % (
             "unavailable" if _acc.get("unavailable") else "degraded", _acc.get("line") or _acc.get("basis") or "")]
+    # The package's fallback card refused because the host's cards cannot be told apart: no job gets a GPU until the
+    # owner declares which card computes, and the warning names the two declarations.
+    _pin = _doctor_gpu_pin()
+    if _pin.get("refused") and "cannot be told apart" in str(_pin.get("basis")):
+        _warnings = _warnings + ["gpu: no card is used: this host has two or more cards and none is declared -- set "
+                                 "WIZARD_CUDA_DEVICE=<index> for the compute card and WIZARD_DISPLAY_INDEX=<index> "
+                                 "(or none) for the display, in the env file"]
     # A unit that FAILED is a warning, never a quiet line: the ledger records each run's own result.
     _runs = _doctor_organ_runs(brain.get("db_path") or db)
     if _runs.get("failed"):
@@ -2192,7 +2199,7 @@ def verb_doctor(args) -> Dict[str, Any]:
             # the lock and the provenance reader's coverage, from the reader itself
             "embedding_coherence": _coh,
             "gpu_declaration": _gpu_decl,
-            "gpu_pin": _doctor_gpu_pin(),
+            "gpu_pin": _pin,
             # round 2, M5: the backend, cpu_only and the proof label, beside the pin
             "accelerator": _acc,
             # handoff round 1 (L2): the accelerator and the reranker decision WITH its reason and proof label

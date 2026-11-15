@@ -116,7 +116,9 @@ __all__ = [
 
 # The package-safe default.  0 is correct for ~99% of machines: one GPU, index
 # 0, nothing else to pick.  This constant is the ONLY device literal that may
-# appear anywhere in the packaged tree, and it is the safe one.
+# appear anywhere in the packaged tree, and it is the safe one. On a host with
+# two or more cards and nothing declared it is never taken blind: it is refused
+# when it drives a display, or when no card can be told to (_fallback_reaches_display).
 PACKAGE_SAFE_DEFAULT = "0"
 
 _ENV_KEY = "CUDA_VISIBLE_DEVICES"
@@ -356,14 +358,27 @@ def _fallback_reaches_display(value: str) -> Optional[str]:
         fault = smi_fault()
         if fault:
             return "%s, so whether card %s drives a display cannot be told" % (fault, value)
-    if not table or not value.isdigit() or int(value) not in _display_cards(table):
+    if not table or not value.isdigit():
         return None
     missing = _unlisted_cards(table)
     if len(table) < 2 and not missing:
         return None
-    return ("card %s drives a display and nvidia-smi counts %d card(s) but lists %d (%s): nothing declares a compute "
-            "card, so none is chosen" % (value, len(table) + missing, len(table),
-                                         ("%d unreadable" % missing) if missing else "more than one card"))
+    display = _display_cards(table)
+    if int(value) in display:
+        return ("card %s drives a display and nvidia-smi counts %d card(s) but lists %d (%s): nothing declares a "
+                "compute card, so none is chosen" % (value, len(table) + missing, len(table),
+                                                     ("%d unreadable" % missing) if missing else "more than one card"))
+    if not display and declared_display()[0] is None:
+        # No card reports display_active=Enabled, and a monitor that is asleep reads Disabled too: with two or more
+        # cards and nothing declared, the display card cannot be told apart from the others, so none is chosen.
+        return (UNDECLARED_CARDS_WHY % (len(table) + missing))
+    return None
+
+
+UNDECLARED_CARDS_WHY = ("nvidia-smi counts %d cards, none reports display_active=Enabled (a monitor that is asleep "
+                        "reads Disabled too), and nothing declares which card drives a display or which computes: the "
+                        "cards cannot be told apart, so none is chosen. Declare WIZARD_CUDA_DEVICE=<index> for the "
+                        "compute card, and WIZARD_DISPLAY_INDEX=<index> (or none) for the display")
 
 
 def _uuid_to_index(entry: str) -> Optional[Tuple[int, str]]:

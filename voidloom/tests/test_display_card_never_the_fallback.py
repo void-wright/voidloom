@@ -153,5 +153,95 @@ class TheDisplayCardIsNeverTheFallback(_Child):
         self.assertEqual(out["cvd"], "0", out)
 
 
+class TheCardsCannotBeToldApart(_Child):
+    """A monitor that is asleep reads display_active=Disabled, so a host with two or more cards where no card reports
+    Enabled and nothing is declared cannot tell its display card from the others: the fallback card is refused, no
+    device is used, and doctor names the two declarations. A one-card host and any declared host are unchanged."""
+
+    def two_disabled(self):
+        d = self.tmp / "two_disabled"
+        d.mkdir(exist_ok=True)
+        (d / "nvidia-smi").write_text(
+            "#!/bin/sh\n# two readable cards; the monitor is asleep, so neither reports Enabled\n"
+            "case \"$*\" in\n"
+            "  *--query-gpu=count*) printf '2\\n2\\n' ;;\n"
+            "  *--query-gpu=index,uuid,display_active*) printf '0, GPU-00000000-fake-a, Disabled\\n"
+            "1, GPU-11111111-fake-b, Disabled\\n' ;;\n"
+            "  *--query-gpu=index*) printf '0\\n1\\n' ;;\n"
+            "  *) exit 0 ;;\nesac\n", encoding="utf-8")
+        os.chmod(str(d / "nvidia-smi"), 0o755)
+        return d
+
+    def test_saboteur_c_undeclared_two_cards_none_enabled_refuses_to_no_device(self):
+        out, err = self.run_probe(self.two_disabled())
+        TheDisplayCardIsNeverTheFallback._assert_refused(self, out, err)
+        self.assertIn("cannot be told apart", out["pin"][1], out)
+        self.assertIn("WIZARD_CUDA_DEVICE", out["pin"][1])
+        self.assertIn("WIZARD_DISPLAY_INDEX", out["pin"][1])
+
+    def test_control_a_declared_host_with_every_card_disabled_gets_its_declared_card(self):
+        smi = self.two_disabled()
+        out, err = self.run_probe(smi, WIZARD_CUDA_DEVICE="1", WIZARD_DISPLAY_INDEX="0")
+        self.assertEqual(out["pin"], ["1", "env"], out)
+        out, err = self.run_probe(smi, WIZARD_CUDA_DEVICE="1")
+        self.assertEqual(out["pin"], ["1", "env"], out)
+        env_file = self.tmp / "declared.env"
+        env_file.write_text("WIZARD_CUDA_DEVICE=1\nWIZARD_DISPLAY_INDEX=0\n", encoding="utf-8")
+        out, err = self.run_probe(smi, WIZARD_ENV_FILE=str(env_file))
+        self.assertEqual(out["pin"], ["1", "env-file"], out)
+
+    def test_control_a_declared_display_lets_the_fallback_stand_when_it_is_not_the_display(self):
+        out, err = self.run_probe(self.two_disabled(), WIZARD_DISPLAY_INDEX="1")
+        self.assertEqual(out["pin"], ["0", "default"], out)
+        out, err = self.run_probe(self.two_disabled(), WIZARD_DISPLAY_INDEX="none")
+        self.assertEqual(out["pin"], ["0", "default"], out)
+
+    def test_control_b_a_one_card_host_is_unchanged(self):
+        out, err = self.run_probe(ONE_CARD)
+        self.assertEqual(out["pin"], ["0", "default"], out)
+
+    def test_saboteur_doctor_names_the_two_declarations(self):
+        env = {k: v for k, v in os.environ.items() if k not in _STRIP}
+        env.update({"PATH": "%s:/usr/bin:/bin" % self.two_disabled(), "HOME": str(self.tmp),
+                    "PYTHONDONTWRITEBYTECODE": "1", "WIZARD_ENV_FILE": str(self.tmp / "absent-env"),
+                    "WIZARD_CONFIG_PATH": str(self.tmp / "absent-config.json"), "PYTHONPATH": str(ROOT)})
+        code = ("import json, sys; sys.path.insert(0, sys.argv[1]); from voidloom import cli; "
+                "print(json.dumps(cli._doctor_gpu_pin()))")
+        p = subprocess.run([sys.executable, "-c", code, str(ROOT)], env=env, capture_output=True, text=True,
+                           timeout=120, stdin=subprocess.DEVNULL)
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        pin = json.loads(p.stdout.strip().splitlines()[-1])
+        self.assertTrue(pin.get("refused"), pin)
+        self.assertIn("cannot be told apart", pin.get("basis", ""))
+
+
+class DoctorWarnsWhenTheCardsCannotBeToldApart(unittest.TestCase):
+    def test_saboteur_the_warning_names_both_declarations_and_the_brain_stays_sound(self):
+        sys.path.insert(0, str(ROOT))
+        from unittest import mock
+        from voidloom import cli
+        from voidloom.tests.test_doctor_brain_verdict import _Brain
+
+        class B(_Brain):
+            def runTest(self):
+                pass
+        b = B()
+        b.setUp()
+        try:
+            refused = {"refused": True, "value": "", "basis": "default+fallback-display-refused: nvidia-smi counts 2 "
+                       "cards ... the cards cannot be told apart, so none is chosen"}
+            with mock.patch.object(cli, "_doctor_gpu_pin", return_value=refused):
+                d = b.doctor()
+            line = [w for w in d["warnings"] if w.startswith("gpu: no card is used")]
+            self.assertEqual(len(line), 1, d["warnings"])
+            self.assertIn("WIZARD_CUDA_DEVICE=<index>", line[0])
+            self.assertIn("WIZARD_DISPLAY_INDEX=<index>", line[0])
+            self.assertIs(d["brain_healthy"], True, d["reason"])
+            with mock.patch.object(cli, "_doctor_gpu_pin", return_value={"refused": False, "basis": "env"}):
+                self.assertFalse([w for w in b.doctor()["warnings"] if w.startswith("gpu:")])
+        finally:
+            b.tearDown()
+
+
 if __name__ == "__main__":
     unittest.main()
