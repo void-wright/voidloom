@@ -23,7 +23,7 @@ from typing import Any, Dict, List
 # verb here is dispatchable, and vice-versa).
 TOOLKIT: Dict[str, Any] = {
     "toolkit": "voidloom",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "summary": (
         "LLM execution surface over the local wizard-library memory brain; a thin "
         "facade over claude_memory.py. Every verb takes --json. Ungated locally; "

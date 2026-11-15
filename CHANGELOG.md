@@ -6,6 +6,51 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-11-14
+
+### Changed
+
+- **`export` checks each record's text against the stamp its vector was embedded from.** Each record
+  carries `text_matches_stamp` (`true`, `false`, or `null` when there is no text stamp to check), and the
+  envelope carries `text_check` with the counts and the ids that do not match. A dream is checked against
+  the text its vector is computed from, its body without the header. When any record does not match,
+  `status` stays `ok` but the envelope adds `degraded: true` and the code `export_text_unverified`
+  instead of `export_ok`.
+
+### Fixed
+
+- **A lost install lock is no longer read as a brain that never had one.** When `embedder.lock.json` was
+  written and is now gone, every reader refuses with `LOCK_MISSING` and the way out, including `tier status`,
+  `tier set --plan`, `dream backfill --plan`, `embedding_upgrade stats`, writes with the caller's own
+  encoder, and both installers. The nightly backfill and the dream cycle exit 1 on a lost lock, so a
+  scheduler does not record the night as a success. A plain `init` on a lost lock refuses and names
+  `init --tier cpu`. A brain that never had a lock reads exactly as before.
+- **A lock re-pointed at another tier's table finds no rows and refuses**, instead of serving that table's
+  unstamped vectors as its own legacy. An unstamped vector now counts as legacy only in the lock's own
+  table, or on a brain that holds no stamp under another checksum.
+- The hint beside a legacy-vector count says only what the brain recorded: the vectors carry no stamp
+  under this lock.
+
+### Security
+
+- **`sentence-transformers` stays at 5.1.2** in this release, although advisory
+  [GHSA-jhr6-gm9c-rqjv](https://github.com/advisories/GHSA-jhr6-gm9c-rqjv) names 5.6.0 as patched:
+  - **5.6.0 does not close the hole.** It only warns when it loads a local model's custom code; the refusal
+    arrives in 6.0.
+  - **Moving to 5.6.0 changes vectors.** It stops trimming whitespace at the edges of input text, so the
+    Qwen tier's vectors move for those inputs (1 of 30 recalls changed in testing).
+  - **It loosens the `transformers` ceiling**, so a fresh install would pull a release under which the
+    nomic tier no longer loads.
+  - **What limits the exposure:** the embedding models load from pinned revisions whose files are checked
+    against the shipped checksums before loading, and the model garden loads from the local cache only.
+    Don't point Voidloom at model folders you did not fetch yourself.
+
+### Known issues
+
+- A few install-time readers (`install.sh`'s embed-model probe and `install/brain_is_new.py`) still read a
+  missing lock file as "never locked". `init`'s weights check stops a wrong model from being written.
+- A non-lock refusal inside one dream phase can still end a night reported as ok.
+
 ## [1.1.1] — 2026-11-14
 
 ### Changed
@@ -545,7 +590,8 @@ The first public release, under the Apache License 2.0.
 - Some schema fields and built-in labels carry names from the system's first
   installation; [`NOTICE`](./NOTICE) explains why they are kept.
 
-[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/void-wright/voidloom/releases/tag/v1.1.2
 [1.1.1]: https://github.com/void-wright/voidloom/releases/tag/v1.1.1
 [1.1.0]: https://github.com/void-wright/voidloom/releases/tag/v1.1.0
 [1.0.0]: https://github.com/void-wright/voidloom/releases/tag/v1.0.0
