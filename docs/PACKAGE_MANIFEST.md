@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-15T13:50:35Z from the working tree whose HEAD was `244bf83`
+> Generated 2026-11-15T13:50:37Z from the working tree whose HEAD was `51c8592`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 548 |
 | files hashed | 548 |
-| total bytes | 11755895 |
+| total bytes | 11755983 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -442,7 +442,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 150666 | `7a0f90e2b2cdbbf3` |
+| `install/lay_manifest.json` | 150666 | `3f595697444b52a2` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -585,7 +585,7 @@
 | `tools/release_check.py` | 8923 | `c100a51e03cfd409` |
 | `tools/token_doctor.py` | 10778 | `4db1a76ccd8ae406` |
 
-### `docs` — Documentation  ·  12 files, 227554 bytes
+### `docs` — Documentation  ·  12 files, 227642 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -596,7 +596,7 @@
 | `docs/LAYOUT.md` | 8372 | `9a01b921f978e9f0` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
-| `docs/PACKAGE_MANIFEST.md` | 42312 | (self -- not pinnable) |
+| `docs/PACKAGE_MANIFEST.md` | 42400 | (self -- not pinnable) |
 | `docs/PERSONA_FORGE.md` | 12359 | `ddff9923016d7145` |
 | `docs/RESTORE_MANIFEST.md` | 9212 | `88d64a31c6f01063` |
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |

@@ -633,17 +633,34 @@ class TestTensionFadeEvidence(_TmpCase):
         for with_leads in (False, True):
             b = Brain(Path(tempfile.mkdtemp(dir=str(self.tmp))), at=anchor)
             ids = _plant_channel_brain(b, n_dreams=1)
-            for i in range(6):
+            # Every reader must have something to say, or a reader that counted the leads would read the same empty
+            # answer on both arms: tags for the per-tag spike and cadence, a multi-day baseline with a spike on the
+            # last day, and a genuinely weak human query for gap mapping.
+            for m in (ids["m1"], ids["m2"], ids["d0"]):
+                for tag in ("gradle", "build"):
+                    b.c.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)", (m, tag))
+            for day in range(1, 21, 2):                                     # a baseline: one recall every other day
+                for m in (ids["m1"], ids["m2"]):
+                    b.c.execute("INSERT INTO access_log (memory_id, access_type, query_text, relevance_score, "
+                                "accessed_at) VALUES (?, 'recall:hybrid', 'gradle build question', -0.9, ?)",
+                                (m, _ts(day + 0.25, anchor)))
+            for i in range(6):                                              # the spike, today, minutes apart
                 for m in (ids["m1"], ids["m2"]):
                     b.c.execute("INSERT INTO access_log (memory_id, access_type, query_text, relevance_score, "
                                 "accessed_at) VALUES (?, 'recall:hybrid', 'gradle build question', -0.9, ?)",
                                 (m, _ts(0.01 * i, anchor)))
+            for i in range(3):                                              # a weak human question: a real gap
+                b.c.execute("INSERT INTO access_log (memory_id, access_type, query_text, relevance_score, "
+                            "accessed_at) VALUES (?, 'recall:hybrid', 'how does the compost heap settle', -0.1, ?)",
+                            (ids["m2"], _ts(1 + 0.01 * i, anchor)))
             if with_leads:
+                # leads carry a relevance score and fall on every day, so a reader that counted them would see a
+                # weak query, a bigger spike and a different cadence
                 for i in range(30):
                     for m in (ids["d0"], ids["m1"]):
                         b.c.execute("INSERT INTO access_log (memory_id, access_type, query_text, relevance_score, "
-                                    "accessed_at) VALUES (?, ?, 'a lead query here', NULL, ?)",
-                                    (m, lead_type, _ts(0.001 * i, anchor)))
+                                    "accessed_at) VALUES (?, ?, 'a lead query here', -0.05, ?)",
+                                    (m, lead_type, _ts(0.003 * i + (i % 5) * 1.5, anchor)))
             b.c.commit()
             cfg = {**dp.DEFAULT_CONFIG}
             r = {}
@@ -664,6 +681,8 @@ class TestTensionFadeEvidence(_TmpCase):
                 r["self_eval_recall_count"] = mse._score_module_only_piece(
                     b.c, "hybrid_retrieval", anchor.strftime("%Y-%m"), "recall")
             outs.append(json.loads(json.dumps(r, default=str)))
+        for k in ("spike", "cadence", "gaps"):
+            self.assertTrue(outs[0][k], f"{k} is empty on the fixture: a reader that counted leads could not be caught")
         self.assertEqual(outs[0], outs[1], lead_type)
 
 
