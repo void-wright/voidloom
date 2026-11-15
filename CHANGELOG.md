@@ -64,6 +64,11 @@ All notable changes to Voidloom are recorded here. The format follows
 - `sentence-transformers` stays at 5.1.2. See the 1.1.2 Security note: the advisory's listed fix (5.6.0)
   only warns, and the real fix is 6.0.
 
+### Notes
+
+- The release commit's test suite was corrected after it was pushed: one control test assumed the model files
+  were cached on the machine running it, and is now independent of that. No product code changed.
+
 ## [1.1.2] — 2026-11-14
 
 ### Changed

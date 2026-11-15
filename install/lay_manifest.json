@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "1b4bb59",
+  "derived_at_head": "46cf268",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 549,
   "not_laid": {
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 50343,
+   "bytes": 50563,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "fffef48ec89e50c665a1d70a949c65784c96efdc6ee56d2b7eaeefecc7befd16",
+   "sha256": "c3e8d0f51050fbc3ff0d3cda85dec478d3b6579c9f4a1b140f550494ef9a20cf",
    "src": "CHANGELOG.md"
   },
   {
