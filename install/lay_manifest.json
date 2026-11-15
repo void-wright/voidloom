@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 526,
+    "core": 527,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 481,
+    "all": 482,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 267,
+    "null": 268,
     "skills": 18
    }
   },
-  "derived_at_head": "1e88812",
+  "derived_at_head": "1f590b8",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 544,
+  "entries": 545,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 256,
+     "count": 257,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 267
+   "total": 268
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "4332e14f9354e8e1eca328074420b9d23367cd24c9b54a46d0bf49fad1cf1001",
+   "sha256": "c491c76d07534110642a5d171dcec1471f3b8633c8f1ecde71ce0e113cc3efe3",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -5435,6 +5435,16 @@
    "root": null,
    "sha256": "bac97880aad95ab92fdabfc9bf816ce12acdaac3403f0ea94d3226b2b5670fd5",
    "src": "voidloom/tests/test_tier_verbs_tell_the_whole_story.py"
+  },
+  {
+   "bytes": 4305,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "fdf502d7c7bd9cb0dfae734b2c32781af5ed565a3b9958b66c0ec8823ff4e622",
+   "src": "voidloom/tests/test_unreadable_lockless_brain_says_tier_unresolved.py"
   },
   {
    "bytes": 5578,

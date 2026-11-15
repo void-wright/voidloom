@@ -141,6 +141,13 @@ class TierRefused(RuntimeError):
         return {"status": "error", "error": self.code, "message": self.message, **self.detail}
 
 
+def _unmarked(note: Optional[Dict[str, Any]]) -> None:
+    """A lock move whose record in the brain could not be written is refused inside its own transaction, typed, so the
+    move rolls back whole and the lock and the brain's record never disagree."""
+    if note:
+        raise TierRefused(note["code"], note["message"])
+
+
 # ----------------------------------------------------------------------------
 # The two seams a test replaces: load the target model, encode a batch with it.
 # ----------------------------------------------------------------------------
@@ -993,10 +1000,11 @@ def _set_tier_locked(db: Path, data_dir: Path, lock: Dict[str, Any], engine_tier
             env_change = _move_env_pin(db, engine_tier)
             if already:
                 written = embedder_lock.resolve(db)     # nothing moves: the lock file is left byte for byte
-                embedder_lock.mark_brain(conn, lock["tier"])
+                _unmarked(embedder_lock.mark_brain(conn, lock["tier"]))
             else:
                 written = embedder_lock.write_lock(data_dir, lock["tier"], replace=True, locked_by="tier set",
                                                    brain=conn)
+                _unmarked(written.get("_unmarked"))
             lock_moved = True
             conn.execute("COMMIT")
         except BaseException as e:
@@ -1111,12 +1119,12 @@ def _rollback_locked(db: Path) -> Dict[str, Any]:
             _set_metadata(conn, pre["previous_metadata"])
             lock_path = embedder_lock.lock_path_for(db)
             if pre["previous_lock_raw"] is None:
-                embedder_lock.mark_brain(conn, None)
+                _unmarked(embedder_lock.mark_brain(conn, None))
                 if lock_path.exists():
                     os.replace(lock_path, data_dir / f"embedder.lock.rolled-back.{stamp}.json")
                     embedder_lock._fsync_dir(data_dir)
             else:
-                embedder_lock.mark_brain(conn, json.loads(pre["previous_lock_raw"]).get("tier"))
+                _unmarked(embedder_lock.mark_brain(conn, json.loads(pre["previous_lock_raw"]).get("tier")))
                 _atomic_write(lock_path, pre["previous_lock_raw"])
             env_change = _move_env_pin(db, pre.get("previous_env_pin") or TABLE_TIER.get(restored, ""))
             conn.execute("COMMIT")

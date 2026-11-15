@@ -280,7 +280,9 @@ class OnlyWhatWriteLockLeftProvesALock(_Room):
         db = make_brain(self.dir, "nomic")
         (self.dir / "embedder.lock.json").unlink()
         c = sqlite3.connect(str(db)); c.execute("DROP TABLE metadata"); c.commit(); c.close()
-        self.assertEqual(self.el.write_lock(self.dir, "cpu", brain=db)["tier"], "cpu")
+        # the lock is written; the row is not, and the answer says so, typed, rather than stderr alone
+        lock = self.el.write_lock(self.dir, "cpu", brain=db)
+        self.assertEqual((lock["tier"], lock["_unmarked"]["code"]), ("cpu", "LOCK_UNMARKED"))
         self.assertTrue((self.dir / "embedder.lock.json").exists())
 
     def test_control_a_brain_too_busy_for_the_row_still_gets_its_lock(self):
@@ -290,9 +292,13 @@ class OnlyWhatWriteLockLeftProvesALock(_Room):
         c.execute("BEGIN EXCLUSIVE")
         real = sqlite3.connect
         with mock.patch.object(self.el.sqlite3, "connect", lambda *a, **k: real(*a, **{**k, "timeout": 0.1})):
-            self.assertEqual(self.el.write_lock(self.dir, "cpu", brain=db)["tier"], "cpu")
+            lock = self.el.write_lock(self.dir, "cpu", brain=db)
         c.rollback(); c.close()
+        self.assertEqual((lock["tier"], lock["_unmarked"]["code"]), ("cpu", "LOCK_UNMARKED"))
         self.assertTrue((self.dir / "embedder.lock.json").exists())
+        again = self.el.write_lock(self.dir, "cpu", brain=db)   # run again once the brain is free: the row is written
+        self.assertNotIn("_unmarked", again)
+        self.assertEqual(self.el.lost_lock(self.dir, db), {"tier": "cpu"})
 
     def test_saboteur_an_unreadable_brain_is_not_a_brain_with_no_record(self):
         db = make_brain(self.dir, "nomic")
@@ -304,13 +310,19 @@ class OnlyWhatWriteLockLeftProvesALock(_Room):
             with self.assertRaises(self.el.EmbedderLockError) as cm:
                 self.el.resolve(db)
         c.rollback(); c.close()
-        self.assertEqual((cm.exception.code, cm.exception.detail["was_locked"]), ("LOCK_MISSING", True))
-        self.assertIn("did not answer", str(cm.exception))
+        # what was measured: no file, no history, a brain that would not answer. Neither "lost" nor "never had one" is
+        # claimed; the tier is unresolved, and every reader refuses on it
+        self.assertEqual((cm.exception.code, cm.exception.detail["was_locked"]), ("TIER_UNRESOLVED", None))
+        self.assertTrue(cm.exception.detail["unreadable"])
+        self.assertIn("could not be read", str(cm.exception))
+        self.assertIn("database is locked", str(cm.exception))
 
     def test_saboteur_bytes_that_are_no_database_are_not_a_brain_with_no_record(self):
         db = self.dir / "claude_memory.db"
         db.write_bytes(b"this is not a database at all, and it is longer than a header")
-        self.assertEqual(self.el.lost_lock(self.dir), {"tier": None, "unreadable": True})
+        lost = self.el.lost_lock(self.dir)
+        self.assertEqual((lost["tier"], lost["unreadable"]), (None, True), lost)
+        self.assertIn("DatabaseError", lost["why"])                 # what the brain said, kept for the refusal
 
     def test_control_a_brain_with_no_metadata_table_holds_no_record(self):
         db = self.dir / "claude_memory.db"

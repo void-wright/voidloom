@@ -115,10 +115,12 @@ class ALostLockThatRecordsNoTier(_Brains):
     def test_saboteur_install_sh_reads_lock_missing_and_refuses_it_by_name(self):
         self.assertEqual(self.install_sh("hd_embed_model_from_db"), "LOCK_MISSING")
         sh = (ROOT / "install.sh").read_text(encoding="utf-8")
-        self.assertIn("LOCK_MALFORMED|LOCK_MISSING) echo \"$m\"; return ;;", sh)
+        self.assertIn("LOCK_MALFORMED|LOCK_MISSING|TIER_UNRESOLVED) echo \"$m\"; return ;;", sh)
         self.assertIn('if [ "$EMBED_MODEL" = "LOCK_MISSING" ]; then', sh)
         ps1 = (ROOT / "install" / "install.ps1").read_text(encoding="utf-8-sig")
         self.assertIn('if ($BrainTier -eq "LOCK_MISSING") { Die ', ps1)
+        self.assertIn('if ($BrainTier -eq "TIER_UNRESOLVED") { Die ', ps1)
+        self.assertIn('if [ "$EMBED_MODEL" = "TIER_UNRESOLVED" ]; then', sh)
 
 
 class ABrainThatNeverHadALock(_Brains):

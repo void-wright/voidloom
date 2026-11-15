@@ -37,6 +37,7 @@ def is_new(db: str) -> bool:
 
 
 LOST = "LOCK_MISSING"         # the brain records a lock that is not beside it, and records no tier: the caller refuses
+UNREAD = "TIER_UNRESOLVED"    # no lock file, no history, and a brain that could not be read to ask: the caller refuses
 
 
 def lost_lock_tier(db: str):
@@ -51,6 +52,8 @@ def lost_lock_tier(db: str):
         try:
             import embedder_lock
             lost = embedder_lock.lost_lock(data_dir, db)
+            if lost is not None and lost.get("unreadable"):
+                return UNREAD
             return None if lost is None else {"cpu": "nomic", "gpu": "qwen"}.get(lost.get("tier") or "", "")
         except Exception:                       # noqa: BLE001 -- fall through to the records themselves
             pass
@@ -67,7 +70,9 @@ def lost_lock_tier(db: str):
             finally:
                 c.close()
         except sqlite3.Error:
-            return ""                           # a brain that does not answer is not a brain with no record
+            hist = os.path.join(data_dir, "embedder.lock.history.jsonl")
+            # a brain that does not answer is not a brain with no record: the history decides, else nothing can
+            return "" if os.path.isfile(hist) and os.path.getsize(hist) else UNREAD
     if mark == "":
         return None                             # a rollback took the brain back to having no lock
     if mark:

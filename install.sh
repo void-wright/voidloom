@@ -1315,7 +1315,7 @@ resolve_embed_model() {
     [ -f "${BRAIN_READ:-$DB_PATH}" ] && m="$(hd_embed_model_from_db)"
     if [ -n "${WIZARD_EMBED_MODEL:-}" ]; then want="$WIZARD_EMBED_MODEL"; elif [ "$FORCE_CPU" -eq 1 ]; then want="nomic"; fi
     case "$m" in
-        LOCK_MALFORMED|LOCK_MISSING) echo "$m"; return ;;
+        LOCK_MALFORMED|LOCK_MISSING|TIER_UNRESOLVED) echo "$m"; return ;;
         qwen|jina|nomic)
             if [ -z "$want" ] || [ "$want" = "$m" ]; then echo "$m"; return; fi
             if [ "$(hd_brain_embedded "$m")" = "yes" ]; then echo "BRAIN_TIER_CONFLICT:${m}:${want}"; return; fi ;;
@@ -1370,7 +1370,9 @@ _tier_row="$(printf '%s\n' "$ENGINE_REGISTRY" | awk -F'\t' -v m="$EMBED_MODEL" '
 if [ -z "$_tier_row" ]; then
     # An unknown model is REFUSED BY NAME (owner decision D2), never swapped for the CPU tier: installing a
     # tier the operator did not ask for and reporting success is the "success that changes the wrong thing".
-    if [ "$EMBED_MODEL" = "LOCK_MISSING" ]; then
+    if [ "$EMBED_MODEL" = "TIER_UNRESOLVED" ]; then
+        echo "[install] REFUSED: there is no install lock beside ${DB_PATH} and no lock history, and the brain could not be read to ask which tier it embeds under (busy, damaged, or not readable by this user). Nothing was touched. Re-run when the brain can be read; \`voidloom doctor\` names what is wrong." >&2
+    elif [ "$EMBED_MODEL" = "LOCK_MISSING" ]; then
         echo "[install] REFUSED: this brain's records say an install lock was written for it (embedder.lock.json beside ${DB_PATH}), and the file is gone, and nothing records which tier its vectors came from. Nothing was touched. Restore the file from a backup, or re-run this installer with WIZARD_EMBED_MODEL naming the tier the brain was embedded under (nomic or qwen), which writes the lock again." >&2
     elif [ "$EMBED_MODEL" = "LOCK_MALFORMED" ]; then
         echo "[install] REFUSED: the install lock beside ${DB_PATH} (embedder.lock.json) is unreadable or names a tier this package does not ship. Nothing was touched. Restore it from a backup, or move it aside and re-run this installer without --tier0-only, which writes it again from the tier the brain declares: mv '$(dirname "$(real_path "$DB_PATH")")/embedder.lock.json' '$(dirname "$(real_path "$DB_PATH")")/embedder.lock.json.malformed'" >&2

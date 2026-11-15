@@ -334,7 +334,7 @@ def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple
             return
         mod = _lock_reader()
         lost = mod.lost_lock(lock_path.parent, db) if mod is not None else None
-        if lost is not None:
+        if lost is not None and not lost.get("unreadable"):     # unreadable: no record either way, read as below
             # the brain's own record says a lock was written: it is a locked brain whose lock is gone, never one that
             # had none, and no model can be vouched for until the lock is back
             out.update({"lock": str(lock_path), "lock_snapshots": {}, "present": False, "lock_refusal": "LOCK_MISSING",

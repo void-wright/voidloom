@@ -115,7 +115,7 @@ REFUSALS = ("LOCK_MISSING", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED",
             "SNAPSHOT_ABSENT",     # M1 round 5 #6: the pin is not on disk and fetching is not allowed
             "MODELS_ABSENT",       # M1 round 6 #1: the INSTALL could not fetch what the memory needs
             "EMBEDDER_UNAVAILABLE",  # the bytes are verified, and this interpreter cannot load what runs them
-            "LOCK_UNMARKED")       # the lock is written and the brain's own record of it is not
+            "TIER_UNRESOLVED")     # no lock file, no history, and a brain that could not be read to ask
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _LOCK_REQUIRED = ("tier", "model_id", "revision", "weights_hash", "dim", "vec_table", "files")
 _ENTRY_REQUIRED = ("model_id", "revision", "weights_hash", "dim", "vec_table", "files")
@@ -538,38 +538,47 @@ def fetch_command(db: Optional[Union[str, Path]] = None) -> str:
     return organ_command("model_fetch.py", "--db", db or brain_db())
 
 
-def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str]) -> None:
+def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str]) -> Optional[Dict[str, Any]]:
     """Say inside the brain whether a lock was written for it: `metadata.embedder_lock_written` holds the tier, and an
     empty value says a rollback took the brain back to having none. Deleting the lock and its history leaves this row
     behind. A connection takes the row in its own transaction; a path writes it now. A brain too busy or too damaged to
-    take it refuses LOCK_UNMARKED, typed, so the verb that wrote the lock says so in its own answer: the lock stands,
-    and the record that outlives it does not, until the verb is run again when the brain is free. A row that already
-    says so is left alone: its table stamps every write, and an install run twice must leave the brain's bytes as they
-    were."""
+    take it is answered with a typed note, {"code": "LOCK_UNMARKED", "message": ...}, which the verb that wrote the
+    lock carries in its own envelope: the lock stands, and the record that outlives it does not, until the verb is run
+    again when the brain is free. None when the row was written or already said so: its table stamps every write, and
+    an install run twice must leave the brain's bytes as they were."""
     value = tier or ""
     own = not isinstance(brain, sqlite3.Connection)
     conn: Optional[sqlite3.Connection] = None
     try:
         if own and not Path(brain).is_file():
-            return
+            return None
         conn = sqlite3.connect(str(brain), timeout=60.0) if own else brain
         held = conn.execute("SELECT value FROM metadata WHERE key = ?", (BRAIN_LOCK_KEY,)).fetchone()
         if held is not None and held[0] == value:
-            return
+            return None
         conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (BRAIN_LOCK_KEY, value))
         if own:
             conn.commit()
+        return None
     except sqlite3.Error as e:
-        raise EmbedderLockError(
-            "LOCK_UNMARKED", f"the lock is written, but its row in the brain is not ({type(e).__name__}: {e}): if the "
-            "lock file were later lost, nothing would say this brain was locked. Run the same verb again when the "
-            "brain is free and writable; it writes only the row", brain=str(brain) if own else None) from e
+        return {"code": "LOCK_UNMARKED",
+                "message": (f"the lock is written, but its row in the brain is not ({type(e).__name__}: {e}): if the "
+                            "lock file were later lost, nothing would say this brain was locked. Run the same verb "
+                            "again when the brain is free and writable; it writes only the row"),
+                "brain": str(brain) if own else None}
     finally:
         if own and conn is not None:
             conn.close()
 
 
-_BRAIN_UNREADABLE = object()
+class _Unreadable:
+    """A brain that did not answer, and the error it gave: what was measured, kept for the refusal that says so."""
+
+    def __init__(self, why: str):
+        self.why = why
+
+
+_BRAIN_UNREADABLE = _Unreadable("the brain did not answer")
 
 
 def _read_brain(brain: Union[None, str, Path, sqlite3.Connection], sql: str, args: Sequence[Any]) -> Optional[Any]:
@@ -585,9 +594,9 @@ def _read_brain(brain: Union[None, str, Path, sqlite3.Connection], sql: str, arg
         row = conn.execute(sql, args).fetchone()
         return None if row is None else row[0]
     except sqlite3.OperationalError as e:
-        return None if "no such table" in str(e) else _BRAIN_UNREADABLE
-    except (sqlite3.Error, OSError, ValueError):
-        return _BRAIN_UNREADABLE
+        return None if "no such table" in str(e) else _Unreadable(f"{type(e).__name__}: {e}")
+    except (sqlite3.Error, OSError, ValueError) as e:
+        return _Unreadable(f"{type(e).__name__}: {e}")
     finally:
         if own and conn is not None:
             conn.close()
@@ -626,8 +635,8 @@ def lost_lock(data_dir: Union[str, Path], brain: Union[None, str, Path, sqlite3.
     if mark == "":
         return None
     written = _lock_in_history(d)
-    if mark is _BRAIN_UNREADABLE:
-        return written if written is not None else {"tier": None, "unreadable": True}
+    if isinstance(mark, _Unreadable):
+        return written if written is not None else {"tier": None, "unreadable": True, "why": mark.why}
     if written is None and mark:
         return {"tier": str(mark)}
     if written is not None and not written.get("tier") and mark:
@@ -678,7 +687,7 @@ def refuse_lost_lock(target: Any) -> None:
     try:
         resolve(target)
     except EmbedderLockError as e:
-        if e.code == "LOCK_MISSING" and e.detail.get("was_locked"):
+        if (e.code == "LOCK_MISSING" and e.detail.get("was_locked")) or e.code == "TIER_UNRESOLVED":
             raise
 
 
@@ -693,11 +702,15 @@ def read_lock(path: Union[str, Path], *, brain: Union[None, str, Path, sqlite3.C
     except FileNotFoundError:
         lost = lost_lock(p.parent, brain)
         if lost is not None and lost.get("unreadable"):
+            # What was measured: no lock file, no history, and a brain that could not be read ({why}). Whether a lock
+            # was ever written cannot be told, so neither "lost" nor "never had one" is claimed: the tier is unresolved,
+            # and every reader refuses on it as on a lost lock.
             raise EmbedderLockError(
-                "LOCK_MISSING", f"no embedder lock at {p}, and this brain did not answer when asked whether one was "
-                "written: it is busy or damaged, and that is not a record of having none. Nothing was changed. Try "
-                "again when it is free; `voidloom doctor` names what is wrong if it stays this way.",
-                lock=str(p), was_locked=True, tier=None, unreadable=True)
+                "TIER_UNRESOLVED", f"no embedder lock at {p}, no lock history beside it, and the brain could not be read "
+                f"({lost.get('why') or 'it did not answer'}) to ask whether a lock was ever written for it, so its tier "
+                "cannot be resolved. That is not a record of having none: nothing was changed. Try again when it can be "
+                "read; `voidloom doctor` names what is wrong if it stays this way.",
+                lock=str(p), was_locked=None, tier=None, unreadable=True)
         if lost is not None:
             tier = lost.get("tier") or _tier_of_brain(brain if brain is not None else _brain_beside(p.parent))
             said = f"tier {tier}" if tier else "its tier is not recorded"
@@ -847,8 +860,8 @@ def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Uni
                     "Re-pointing an install without re-embedding is the defect this file exists "
                     "to make impossible; `voidloom tier set <tier>` is the path that re-embeds.",
                     lock=str(target), existing_tier=previous["tier"], requested_tier=tier)
-            mark_brain(home, tier)              # the row, for a brain locked before it existed
-            return previous                     # same tier: idempotent, no file written
+            unmarked = mark_brain(home, tier)   # the row, for a brain locked before it existed
+            return {**previous, **({"_unmarked": unmarked} if unmarked else {})}   # same tier: no file written
     entry = tiers[tier]
     lock: Dict[str, Any] = {
         "schema": LOCK_SCHEMA,
@@ -893,8 +906,10 @@ def write_lock(data_dir: Union[str, Path], tier: str, *, catalogue: Optional[Uni
                      if previous else None),
     }
     append_receipt(d, receipt)
-    mark_brain(home, tier)
+    unmarked = mark_brain(home, tier)
     lock["_path"] = str(target)
+    if unmarked:
+        lock["_unmarked"] = unmarked            # the verb that wrote the lock says so in its own answer
     return lock
 
 

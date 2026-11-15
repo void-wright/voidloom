@@ -319,11 +319,11 @@ class L5_ProcessRegister(_Tmp):
         # MODELS_ABSENT joined in M1 round 6 (#1): the INSTALL could not fetch what
         # the memory needs -- the fetch lane's refusal, naming every absent pin.
         # EMBEDDER_UNAVAILABLE: the bytes verify and this interpreter cannot load what runs them.
-        # LOCK_UNMARKED: the lock is written and the brain's own record of it is not.
+        # TIER_UNRESOLVED: no lock file, no history, and a brain that could not be read to ask.
         self.assertEqual(set(el.REFUSALS), {"LOCK_MISSING", "LOCK_MALFORMED", "LOCK_NOT_SHIPPED",
                                             "NO_ROWS_FOR_LOCK", "WEIGHTS_MISMATCH", "STAMP_INCONSISTENT",
                                             "SNAPSHOT_ABSENT", "MODELS_ABSENT", "EMBEDDER_UNAVAILABLE",
-                                            "LOCK_UNMARKED"})
+                                            "TIER_UNRESOLVED"})
         with self.assertRaises(ValueError):
             el.EmbedderLockError("SOMETHING_ELSE", "x")
 

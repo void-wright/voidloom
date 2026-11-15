@@ -1427,9 +1427,12 @@ def _cmd_init_body(args):
     ).fetchall()]
     conn.close()
 
+    _unmarked = (_lock or {}).get("_unmarked")
     _output({
         "status": "ok",
         "action": "init",
+        # the lock is written and the brain's own record of it is not: said at the top, typed, never only on stderr
+        **({"degraded": True, "code": "init_degraded", "lock_unmarked": _unmarked} if _unmarked else {}),
         "database": str(DB_PATH),
         "embedder_lock": ({k: _lock[k] for k in ("tier", "model_id", "revision", "weights_hash",
                                                  "dim", "vec_table", "locked_at", "catalogue_hash")}
