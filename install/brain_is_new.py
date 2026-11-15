@@ -47,7 +47,8 @@ def lost_lock_tier(db: str):
     beside this script, else by the same two records read here."""
     data_dir = os.path.dirname(os.path.realpath(os.path.abspath(db)))
     organs = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "organs")
-    if os.path.isfile(os.path.join(organs, "embedder_lock.py")):
+    # A snapshot is read immutable (BRAIN_READ_Q), which the lock module's own read does not do: read the records here.
+    if os.path.isfile(os.path.join(organs, "embedder_lock.py")) and not os.environ.get("BRAIN_READ_Q"):
         sys.path.insert(0, organs)
         try:
             import embedder_lock

@@ -561,7 +561,7 @@ def mark_brain(brain: Union[str, Path, sqlite3.Connection], tier: Optional[str])
             conn.commit()
         return None
     except sqlite3.Error as e:
-        return {"code": "LOCK_UNMARKED",
+        return {"code": "LOCK_UNMARKED", "no_record_table": "no such table" in str(e),
                 "message": (f"the lock is written, but its row in the brain is not ({type(e).__name__}: {e}): if the "
                             "lock file were later lost, nothing would say this brain was locked. Run the same verb "
                             "again when the brain is free and writable; it writes only the row"),

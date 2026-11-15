@@ -63,6 +63,7 @@ class TheUnmarkedLockIsTyped(unittest.TestCase):
             tier_set._unmarked(el.mark_brain(self.d / "no_such.db", "cpu") or {"code": "LOCK_UNMARKED", "message": "x"})
         self.assertEqual(cm.exception.code, "LOCK_UNMARKED")
         tier_set._unmarked(None)                                # a written row moves nothing
+        tier_set._unmarked({"code": "LOCK_UNMARKED", "message": "x", "no_record_table": True})   # nowhere to keep it
 
     def init(self):
         env = {k: v for k, v in os.environ.items() if k not in ("WIZARD_LIBRARY_DB", "WIZARD_EMBED_MODEL")}

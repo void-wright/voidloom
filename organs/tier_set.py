@@ -143,8 +143,9 @@ class TierRefused(RuntimeError):
 
 def _unmarked(note: Optional[Dict[str, Any]]) -> None:
     """A lock move whose record in the brain could not be written is refused inside its own transaction, typed, so the
-    move rolls back whole and the lock and the brain's record never disagree."""
-    if note:
+    move rolls back whole and the lock and the brain's record never disagree. A brain with no metadata table keeps no
+    such record at all, so there is nothing for the move to disagree with: it goes on."""
+    if note and not note.get("no_record_table"):
         raise TierRefused(note["code"], note["message"])
 
 

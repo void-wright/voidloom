@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "7759b7a",
+  "derived_at_head": "359160f",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 549,
   "not_laid": {
@@ -937,13 +937,13 @@
    "src": "install/accelerator_plan.py"
   },
   {
-   "bytes": 5995,
+   "bytes": 6154,
    "component": "core",
    "dst": "install/brain_is_new.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "2c9cbab049529e9733a433bd36ed462ec85bf76d4a0947e5fbf355a4bc984e4f",
+   "sha256": "c455dcaa9283c5257d3243faa20ce735c5c5b3dd0a0daa27abb6416428090955",
    "src": "install/brain_is_new.py"
   },
   {
@@ -1007,13 +1007,13 @@
    "src": "install/golden_vectors.py"
   },
   {
-   "bytes": 74965,
+   "bytes": 74957,
    "component": "core",
    "dst": "install/install.ps1",
    "exec": false,
    "platform": "windows",
    "root": "brain",
-   "sha256": "3434c318580d6fef70c316c8ae11d7955d3d29818e7a45dd91c84ae20a00839f",
+   "sha256": "38dcffc2f722eb43953ab46dece7c5c481ca530b8594dc20d3e56c890e5df622",
    "src": "install/install.ps1"
   },
   {
@@ -1777,13 +1777,13 @@
    "src": "organs/embed_resolver.py"
   },
   {
-   "bytes": 77103,
+   "bytes": 77149,
    "component": "core",
    "dst": "organs/embedder_lock.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "d88c64d000ee70466bb232f486a6e84de019bee46b4f5eca0452c29a9d16d37a",
+   "sha256": "2a93d619968760da5a6f0a045d7899e4979aff0faa137b2120f00ed33d194d9f",
    "src": "organs/embedder_lock.py"
   },
   {
@@ -2137,13 +2137,13 @@
    "src": "organs/thinkers.json"
   },
   {
-   "bytes": 67150,
+   "bytes": 67313,
    "component": "core",
    "dst": "organs/tier_set.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e4ea838021ca6706c07aae8ef2383f7733ee81d9b5af6dd6443d0ebdeec70757",
+   "sha256": "74123a0c7053ec36fd2f02a32abb966be2e743a525e5c5e946dca88d00181140",
    "src": "organs/tier_set.py"
   },
   {
@@ -4327,13 +4327,13 @@
    "src": "voidloom/tests/test_lock_table_checked_once.py"
   },
   {
-   "bytes": 5311,
+   "bytes": 5429,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "a8495a80af0fb219b9410a6c2f28bb9ba326777ee0aaab697006946ceb7ea7bd",
+   "sha256": "050edb0a33e0a8a56d7c673404cf12028b33e0f60ca7d0091b56e25be1f7862c",
    "src": "voidloom/tests/test_lock_unmarked_is_typed.py"
   },
   {
