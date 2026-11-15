@@ -332,6 +332,15 @@ def _brain_model(out: Dict[str, Any], db: Optional[Path], tiers: Dict[str, tuple
     if not lock_path.exists():
         if not db.is_file():
             return
+        mod = _lock_reader()
+        lost = mod.lost_lock(lock_path.parent, db) if mod is not None else None
+        if lost is not None:
+            # the brain's own record says a lock was written: it is a locked brain whose lock is gone, never one that
+            # had none, and no model can be vouched for until the lock is back
+            out.update({"lock": str(lock_path), "lock_snapshots": {}, "present": False, "lock_refusal": "LOCK_MISSING",
+                        "was_locked": True, "lock_tier": lost.get("tier"),
+                        "present_semantics": "the lock's: it was written and is gone, so no model can be vouched for"})
+            return
         tier, how = _brain_tier(db, tiers)
         out["brain_tier"] = tier
         loadable = _loadable_at_pin(tier, tiers)

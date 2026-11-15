@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 522,
+    "core": 523,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 477,
+    "all": 478,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 263,
+    "null": 264,
     "skills": 18
    }
   },
-  "derived_at_head": "039cd2f",
+  "derived_at_head": "15b26f6",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 540,
+  "entries": 541,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 252,
+     "count": 253,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 263
+   "total": 264
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "508c0fdf1499a5e127d42b20506a6b73e49840c960a939027307cc1687674863",
+   "sha256": "dd2a192adea26b77445e708897fdabaea05444505472ea3944361ee52a304fd8",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -4335,6 +4335,16 @@
    "root": null,
    "sha256": "2c57fad02d75dbff9dfc90eb6ad0a014890f3a60de2da6b487c0fe04e2278302",
    "src": "voidloom/tests/test_lost_lock_every_reader.py"
+  },
+  {
+   "bytes": 7656,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "987c444c31c0de58dbf605f62d2b5cea42b85b7c1a23e2a98c3d9f4b904f7687",
+   "src": "voidloom/tests/test_lost_lock_install_readers.py"
   },
   {
    "bytes": 5030,

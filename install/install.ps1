@@ -238,6 +238,8 @@ $EmbedTier = "nomic"
 # the one verb that does. `init` refuses a tier the brain does not hold, so choosing for it here would stop the install.
 if (-not $BrainIsNew) {
     $BrainTier = ("" + (Invoke-PyOut $PySys @((Join-Path $PkgRoot "install\brain_is_new.py"), $DbPath, "--tier") 2>$null | Select-Object -Last 1)).Trim()
+    # LOCK_MISSING: the brain's records say an install lock was written, the file is gone, and nothing names its tier.
+    if ($BrainTier -eq "LOCK_MISSING") { Die "this brain's records say an install lock was written for it (embedder.lock.json beside $DbPath) and the file is gone, and nothing records which tier its vectors came from. Nothing was touched. Restore the file from a backup, or re-run with WIZARD_EMBED_MODEL naming the tier the brain was embedded under (nomic), which writes the lock again." }
     if ($BrainTier) { $EmbedTier = $BrainTier }
 }
 function Get-EngineTier {

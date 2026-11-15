@@ -1218,13 +1218,14 @@ if [ ! -f "$DB_PATH" ]; then
 fi
 export BRAIN_READ_Q
 hd_embed_model_from_db() {   # bash 3.2 (macOS /bin/bash) cannot parse a heredoc inside $( ): the command and its heredoc live here, called as $(hd_embed_model_from_db) (round 2, B2)
-    "$PY_SYS" - "${BRAIN_READ:-$DB_PATH}" <<'PYEOF' 2>/dev/null || true
+    "$PY_SYS" - "${BRAIN_READ:-$DB_PATH}" "$PKG_ROOT" <<'PYEOF' 2>/dev/null || true
 import json, os, sqlite3, sys, urllib.request   # escaped URI (iteration 4, LOW 2)
 # THE INSTALL LOCK FIRST (owner decision D2): <brain-dir>/embedder.lock.json, beside the
 # database file with symlinks followed (the rule organs/embedder_lock.py applies). A lock
 # names only a SHIPPED tier; a lock that is unreadable or names anything else prints
-# LOCK_MALFORMED, which the tier-facts block refuses by name. No lock -> the brain predates
-# it, and its metadata row is read as before.
+# LOCK_MALFORMED, which the tier-facts block refuses by name. No lock file -> the record a
+# lock leaves behind is asked next: a lost lock keeps the tier it recorded, or prints
+# LOCK_MISSING when it recorded none. Only a brain that never had one is read from metadata.
 _lock = os.path.join(os.path.dirname(os.path.realpath(os.path.abspath(sys.argv[1]))), "embedder.lock.json")
 if os.path.exists(_lock):
     try:
@@ -1233,6 +1234,15 @@ if os.path.exists(_lock):
     except Exception:
         _tab = None
     print({"memory_embeddings_v3": "qwen", "memory_embeddings": "nomic"}.get(_tab, "LOCK_MALFORMED"))
+    sys.exit(0)
+sys.path.insert(0, os.path.join(sys.argv[2], "install"))
+try:
+    import brain_is_new as _bin
+    _lost = _bin.lost_lock_tier(sys.argv[1])
+except Exception:
+    _lost = ""                       # the record could not be asked: never read as a brain that had no lock
+if _lost is not None:
+    print(_lost or "LOCK_MISSING")
     sys.exit(0)
 try:
     c = sqlite3.connect("file:%s?mode=ro%s" % (urllib.request.pathname2url(os.path.abspath(sys.argv[1])), os.environ.get("BRAIN_READ_Q", "")), uri=True)
@@ -1250,11 +1260,20 @@ PYEOF
 # hd_brain_embedded TIER -- "yes" when this brain holds a promise to that tier: an install lock, or a row in its table
 # (read from vec0's own rowid table, so no extension is needed). A brain with neither has nothing a change could orphan.
 hd_brain_embedded() {
-    "$PY_SYS" - "${BRAIN_READ:-$DB_PATH}" "$1" <<'PYEOF' 2>/dev/null || true
+    "$PY_SYS" - "${BRAIN_READ:-$DB_PATH}" "$1" "$PKG_ROOT" <<'PYEOF' 2>/dev/null || true
 import os, sqlite3, sys, urllib.request
 db, tier = sys.argv[1], sys.argv[2]
 if os.path.exists(os.path.join(os.path.dirname(os.path.realpath(os.path.abspath(db))), "embedder.lock.json")):
     print("yes"); sys.exit(0)
+sys.path.insert(0, os.path.join(sys.argv[3], "install"))
+try:
+    import brain_is_new as _bin
+    if _bin.lost_lock_tier(db) is not None:
+        print("yes"); sys.exit(0)        # a lock that was written and is gone is still a promise
+except SystemExit:
+    raise
+except Exception:
+    print("yes"); sys.exit(0)            # the record could not be asked: hold the brain to a promise it may have made
 table = {"qwen": "memory_embeddings_v3", "jina": "memory_embeddings_v2", "nomic": "memory_embeddings"}[tier]
 try:
     c = sqlite3.connect("file:%s?mode=ro%s" % (urllib.request.pathname2url(os.path.abspath(db)), os.environ.get("BRAIN_READ_Q", "")), uri=True)
@@ -1296,7 +1315,7 @@ resolve_embed_model() {
     [ -f "${BRAIN_READ:-$DB_PATH}" ] && m="$(hd_embed_model_from_db)"
     if [ -n "${WIZARD_EMBED_MODEL:-}" ]; then want="$WIZARD_EMBED_MODEL"; elif [ "$FORCE_CPU" -eq 1 ]; then want="nomic"; fi
     case "$m" in
-        LOCK_MALFORMED) echo "$m"; return ;;
+        LOCK_MALFORMED|LOCK_MISSING) echo "$m"; return ;;
         qwen|jina|nomic)
             if [ -z "$want" ] || [ "$want" = "$m" ]; then echo "$m"; return; fi
             if [ "$(hd_brain_embedded "$m")" = "yes" ]; then echo "BRAIN_TIER_CONFLICT:${m}:${want}"; return; fi ;;
@@ -1351,7 +1370,9 @@ _tier_row="$(printf '%s\n' "$ENGINE_REGISTRY" | awk -F'\t' -v m="$EMBED_MODEL" '
 if [ -z "$_tier_row" ]; then
     # An unknown model is REFUSED BY NAME (owner decision D2), never swapped for the CPU tier: installing a
     # tier the operator did not ask for and reporting success is the "success that changes the wrong thing".
-    if [ "$EMBED_MODEL" = "LOCK_MALFORMED" ]; then
+    if [ "$EMBED_MODEL" = "LOCK_MISSING" ]; then
+        echo "[install] REFUSED: this brain's records say an install lock was written for it (embedder.lock.json beside ${DB_PATH}), and the file is gone, and nothing records which tier its vectors came from. Nothing was touched. Restore the file from a backup, or re-run this installer with WIZARD_EMBED_MODEL naming the tier the brain was embedded under (nomic or qwen), which writes the lock again." >&2
+    elif [ "$EMBED_MODEL" = "LOCK_MALFORMED" ]; then
         echo "[install] REFUSED: the install lock beside ${DB_PATH} (embedder.lock.json) is unreadable or names a tier this package does not ship. Nothing was touched. Restore it from a backup, or move it aside and re-run this installer without --tier0-only, which writes it again from the tier the brain declares: mv '$(dirname "$(real_path "$DB_PATH")")/embedder.lock.json' '$(dirname "$(real_path "$DB_PATH")")/embedder.lock.json.malformed'" >&2
     else
         echo "[install] REFUSED: unknown embedding model '${EMBED_MODEL}' (WIZARD_EMBED_MODEL). This engine's tiers are: $(printf '%s\n' "$ENGINE_REGISTRY" | cut -f1 | tr '\n' ' ')-- nothing was touched." >&2
@@ -4396,7 +4417,11 @@ GATE
             # a personal install) is fetched at the engine's pin.
             LOCK_DIR="$(dirname "$(real_path "$DB_PATH" 2>/dev/null || printf '%s' "$DB_PATH")")"
             if [ ! -f "${LOCK_DIR}/embedder.lock.json" ]; then
-                say "  no install lock beside the brain; running init under the venv to write it..."
+                if [ -n "$(hd_lost_lock)" ]; then
+                    say "  this brain's install lock was written and is gone; running init under the venv to write it again for the ${EMBED_MODEL} tier its records name..."
+                else
+                    say "  no install lock beside the brain; running init under the venv to write it..."
+                fi
                 _init_log="$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/tmp.voidloom_init.$$")"
                 if WIZARD_EMBED_MODEL="$EMBED_MODEL" WIZARD_LIBRARY_DB="$DB_PATH" "$VENV_PY" "${BRAIN_DIR}/organs/claude_memory.py" init >"$_init_log" 2>&1; then
                     rm -f "$_init_log"

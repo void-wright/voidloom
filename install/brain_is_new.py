@@ -36,14 +36,60 @@ def is_new(db: str) -> bool:
         c.close()
 
 
+LOST = "LOCK_MISSING"         # the brain records a lock that is not beside it, and records no tier: the caller refuses
+
+
+def lost_lock_tier(db: str):
+    """None when nothing says a lock was ever written for this brain. Otherwise the engine tier the lock's own record
+    names (the brain's row, then the history beside it), or "" when the record names none. A missing lock file alone is
+    never read as a brain that had none: the record is asked first, by the package's own lock reader when it is laid
+    beside this script, else by the same two records read here."""
+    data_dir = os.path.dirname(os.path.realpath(os.path.abspath(db)))
+    organs = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "organs")
+    if os.path.isfile(os.path.join(organs, "embedder_lock.py")):
+        sys.path.insert(0, organs)
+        try:
+            import embedder_lock
+            lost = embedder_lock.lost_lock(data_dir, db)
+            return None if lost is None else {"cpu": "nomic", "gpu": "qwen"}.get(lost.get("tier") or "", "")
+        except Exception:                       # noqa: BLE001 -- fall through to the records themselves
+            pass
+        finally:
+            sys.path.remove(organs)
+    mark = None
+    if os.path.isfile(db):
+        try:
+            c = sqlite3.connect("file:%s?mode=ro%s" % (urllib.request.pathname2url(os.path.abspath(db)),
+                                                       os.environ.get("BRAIN_READ_Q", "")), uri=True)
+            try:
+                row = c.execute("SELECT value FROM metadata WHERE key = 'embedder_lock_written'").fetchone()
+                mark = row[0] if row else None
+            finally:
+                c.close()
+        except sqlite3.Error:
+            return ""                           # a brain that does not answer is not a brain with no record
+    if mark == "":
+        return None                             # a rollback took the brain back to having no lock
+    if mark:
+        return {"cpu": "nomic", "gpu": "qwen"}.get(str(mark), "")
+    hist = os.path.join(data_dir, "embedder.lock.history.jsonl")
+    return "" if os.path.isfile(hist) and os.path.getsize(hist) else None
+
+
 def declared_tier(db: str) -> str:
-    """The tier this brain embeds under, as both installers read it: the lock beside it first, then its own metadata row.
-    Empty when it declares none. Windows asks here with `--tier`; a brain that has a tier keeps it."""
+    """The tier this brain embeds under, as both installers read it: the lock beside it first; with no lock file, the
+    record a lock leaves behind (a lost lock keeps the tier it recorded, or reads LOCK_MISSING when it recorded none);
+    only a brain that never had a lock is read from its metadata row. Empty when it declares none. Windows asks here
+    with `--tier`; a brain that has a tier keeps it."""
     tiers = {"memory_embeddings_v3": "qwen", "memory_embeddings_v2": "jina", "memory_embeddings": "nomic"}
     lock = os.path.join(os.path.dirname(os.path.realpath(os.path.abspath(db))), "embedder.lock.json")
     try:
         with open(lock, encoding="utf-8") as f:
             return tiers.get(json.load(f).get("vec_table"), "")
+    except FileNotFoundError:
+        lost = lost_lock_tier(db)
+        if lost is not None:
+            return lost or LOST
     except (OSError, ValueError, AttributeError):
         pass
     c = sqlite3.connect("file:%s?mode=ro" % urllib.request.pathname2url(os.path.abspath(db)), uri=True)
