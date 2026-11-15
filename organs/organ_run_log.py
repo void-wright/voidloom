@@ -395,6 +395,14 @@ def _utc_stamp(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _is_this_run(shown: Dict[str, List[str]]) -> bool:
+    """Is the service shown the one this process is running in? systemd names each run by an InvocationID and gives it
+    to the run as $INVOCATION_ID; an empty or absent id matches nothing."""
+    mine = (os.environ.get("INVOCATION_ID") or "").strip()
+    theirs = ((shown.get("InvocationID") or [""])[0] or "").strip()
+    return bool(mine) and mine == theirs
+
+
 def observe(db: Optional[str] = None, *, unit_dir: str = DEFAULT_UNIT_DIR,
             pattern: str = DEFAULT_GLOB,
             now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -446,14 +454,30 @@ def observe(db: Optional[str] = None, *, unit_dir: str = DEFAULT_UNIT_DIR,
                     sched = None
                     print(f"[organ_run_log] schedule probe failed for {u.unit_name}: "
                           f"{type(e).__name__}: {e}", file=sys.stderr)
-            result, ended = None, None
+            result, ended, shown = None, None, {}
             try:
                 shown = _show(u.service_name, ["Result", "ExecMainStatus", "ActiveState",
-                                               "ExecMainStartTimestamp", "ExecMainExitTimestamp"])
+                                               "ExecMainStartTimestamp", "ExecMainExitTimestamp", "InvocationID"])
                 result, ended = run_outcome(shown, u.last_trigger)
             except (ProbeError, subprocess.SubprocessError, OSError):
                 result, ended = None, None
             started = _utc_stamp(u.last_trigger)
+            if _is_this_run(shown):
+                # The ledger observing its OWN unit, from inside the run: this run is in flight by construction, and
+                # what the manager shows as Result is the PREVIOUS run's -- which is exactly the run this unit's last
+                # look recorded running. That row is settled with it (once), instead of being superseded unobserved.
+                prev = conn.execute(
+                    "SELECT run_started_at FROM organ_run_log WHERE unit_name = ? AND result = ? AND run_started_at < ? "
+                    "ORDER BY run_started_at DESC LIMIT 1", (u.unit_name, RUNNING, started)).fetchone()
+                if prev is not None:
+                    first = lambda k: (shown.get(k) or [None])[0]   # noqa: E731
+                    prev_end = _parse_systemd_ts(first("ExecMainExitTimestamp"))
+                    conn.execute(
+                        "UPDATE organ_run_log SET result = ?, run_ended_at = COALESCE(run_ended_at, ?), "
+                        "observed_at = datetime('now') WHERE unit_name = ? AND run_started_at = ? AND result = ?",
+                        (classify_result(first("Result"), first("ExecMainStatus")),
+                         _utc_stamp(prev_end) if prev_end and prev_end < u.last_trigger else None,
+                         u.unit_name, prev[0], RUNNING))
             # A run of this unit still open from an EARLIER trigger was superseded before any look saw it end: its
             # result is unknown, and the ledger says so instead of leaving it running or calling it a success.
             conn.execute(

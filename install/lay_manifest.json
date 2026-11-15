@@ -23,7 +23,7 @@
     "skills": 18
    }
   },
-  "derived_at_head": "1f590b8",
+  "derived_at_head": "5fab267",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 545,
   "not_laid": {
@@ -1147,13 +1147,13 @@
    "src": "install/wire_persona.sh"
   },
   {
-   "bytes": 34420,
+   "bytes": 34523,
    "component": "core",
    "dst": "install/write_set.json",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "5b0dd0930d92dde44c1fcb5e96249e0eb65c65d9a4281360ca68c701b69fc2df",
+   "sha256": "c43f58b72163f466694aeedbe4ccf296d590eb2ae11870f5ba7c624bb2464567",
    "src": "install/write_set.json"
   },
   {
@@ -1797,13 +1797,13 @@
    "src": "organs/embedders.lock.json"
   },
   {
-   "bytes": 71132,
+   "bytes": 72683,
    "component": "core",
    "dst": "organs/embedding_upgrade.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "cd039aca9733ddf9e8e6d6981cd2751d7b9f66b5691c693ea423244c332dbaab",
+   "sha256": "d3b6bbb1c5afb5d697a20793c140d5d1ed46cba7fea90370bb2bb07995e2b1d6",
    "src": "organs/embedding_upgrade.py"
   },
   {
@@ -1917,13 +1917,13 @@
    "src": "organs/monthly_self_eval.py"
   },
   {
-   "bytes": 30403,
+   "bytes": 32195,
    "component": "core",
    "dst": "organs/organ_run_log.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f826017f0cd5782d0f9b427ac07017b0117e8e94926f6b66937fa191dce9de67",
+   "sha256": "639ae883bd29794cd79a68ed8e7ed3826101f0c1e8e436be073e0145ce31970c",
    "src": "organs/organ_run_log.py"
   },
   {
@@ -2297,13 +2297,13 @@
    "src": "organs/warden.py"
   },
   {
-   "bytes": 38407,
+   "bytes": 38810,
    "component": "core",
    "dst": "organs/website_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "606e55386a9ac3cbc7e0528d8fcea00b0d161bea5376e4b834766d5634f0fcf8",
+   "sha256": "f669a3cf2dce549953f9ef8bc19cf5c18bf2671bd299715c8228e5d93ed230be",
    "src": "organs/website_memory.py"
   },
   {
@@ -4747,13 +4747,13 @@
    "src": "voidloom/tests/test_reranker_pin_at_load.py"
   },
   {
-   "bytes": 6940,
+   "bytes": 9526,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "804eb968bbad79efdde31e3bf483c7b178895c1cd884c1e1691fcc3911f49eed",
+   "sha256": "3b81aa7cdc3350073f0abfe1e8562e4030d41798f58a4349919e7e724fd842d5",
    "src": "voidloom/tests/test_run_ledger_settles_in_flight_runs.py"
   },
   {

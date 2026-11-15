@@ -696,11 +696,11 @@
    "step": "run-time",
    "when": "run-time",
    "platform": "Linux",
-   "call": "systemctl --user show wizard-library-{unit}.service -pResult -pExecMainStatus -pActiveState -pExecMainStartTimestamp -pExecMainExitTimestamp",
+   "call": "systemctl --user show wizard-library-{unit}.service -pResult -pExecMainStatus -pActiveState -pExecMainStartTimestamp -pExecMainExitTimestamp -pInvocationID",
    "expand": "armed_units",
    "effect": "read-only",
    "made_by": "organs/organ_run_log.py (the organ-run-log roster unit, at run-time; not install.sh)",
-   "why": "organ_run_log reads a service's last result, its state and its exit stamp for each run it records, so a run still in flight is recorded running and settled later; read-only, declared for the same reason as the timer read"
+   "why": "organ_run_log reads a service's last result, its state, its exit stamp and its invocation id for each run it records, so a run still in flight is recorded running and settled later, and its own unit's previous run is settled from inside the next one; read-only, declared for the same reason as the timer read"
   }
  ],
  "untouched": [

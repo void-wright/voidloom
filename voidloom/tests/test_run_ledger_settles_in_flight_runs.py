@@ -148,5 +148,47 @@ class DoctorAndTheSentinelSeeTheFailure(_Ledger):
         self.assertIn("FAILED", note)
 
 
+class TheLedgerObservingItsOwnUnit(_Ledger):
+    """The ledger's own unit is in flight whenever it looks at itself: its run reads `running`, and the next look used to
+    supersede that row as ended-unobserved, so the ledger's own runs never read success. From inside its run (the
+    service's InvocationID is this process's $INVOCATION_ID) the Result shown is the PREVIOUS run's, and that is the
+    row it settles."""
+
+    def own(self, inv, trigger, **service):
+        self.trigger = trigger
+        with mock.patch.dict(os.environ, {"INVOCATION_ID": inv}):
+            return self.look(InvocationID=inv, ActiveState="active", ExecMainStartTimestamp=_sd(trigger), **service)
+
+    def test_saboteur_its_own_previous_run_is_settled_with_its_own_result(self):
+        T2 = T1 + timedelta(hours=1)
+        self.own("aaa1", T1, Result="success", ExecMainStatus="0", ExecMainExitTimestamp=_sd(T1 - timedelta(minutes=58)))
+        self.assertEqual([r[1] for r in self.rows()], [ORL.RUNNING])
+        self.own("bbb2", T2, Result="success", ExecMainStatus="0", ExecMainExitTimestamp=_sd(T1 + timedelta(seconds=40)))
+        rows = self.rows()
+        self.assertEqual([r[1] for r in rows], ["success", ORL.RUNNING], rows)
+        self.assertIsNotNone(rows[0][2], "the settled run carries its exit stamp")
+
+    def test_saboteur_a_failed_previous_run_is_settled_failed(self):
+        self.own("aaa1", T1, Result="success", ExecMainStatus="0")
+        self.own("bbb2", T1 + timedelta(hours=1), Result="exit-code", ExecMainStatus="1",
+                 ExecMainExitTimestamp=_sd(T1 + timedelta(seconds=40)))
+        self.assertEqual([r[1] for r in self.rows()][0], "exit-code")
+
+    def test_control_another_units_superseded_run_is_still_unobserved(self):
+        self.own("aaa1", T1, Result="success", ExecMainStatus="0")
+        self.trigger = T1 + timedelta(hours=1)
+        with mock.patch.dict(os.environ, {"INVOCATION_ID": "not-this-unit"}):
+            self.look(InvocationID="bbb2", ActiveState="active", Result="success", ExecMainStatus="0",
+                      ExecMainStartTimestamp=_sd(self.trigger))
+        self.assertEqual([r[1] for r in self.rows()], [ORL.ENDED_UNOBSERVED, ORL.RUNNING])
+
+    def test_control_no_invocation_id_matches_nothing(self):
+        with mock.patch.dict(os.environ, {"INVOCATION_ID": ""}):
+            self.assertFalse(ORL._is_this_run({"InvocationID": [""]}))
+        with mock.patch.dict(os.environ, {"INVOCATION_ID": "x"}):
+            self.assertFalse(ORL._is_this_run({}))
+            self.assertTrue(ORL._is_this_run({"InvocationID": ["x"]}))
+
+
 if __name__ == "__main__":
     unittest.main()
