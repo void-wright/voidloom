@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-15T13:37:56Z from the working tree whose HEAD was `5fab267`
+> Generated 2026-11-15T13:38:51Z from the working tree whose HEAD was `7a0f006`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -12,9 +12,9 @@
 
 | | |
 |---|---|
-| files tracked | 545 |
-| files hashed | 545 |
-| total bytes | 11728693 |
+| files tracked | 547 |
+| files hashed | 547 |
+| total bytes | 11735690 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -103,7 +103,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  270 files, 3682697 bytes
+### `voidloom` — The CLI facade  ·  271 files, 3686507 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -318,6 +318,7 @@
 | `voidloom/tests/test_sentinel_live_run_r2.py` | 7816 | `1846f74567a4003a` |
 | `voidloom/tests/test_sentinel_sleep_runs_r1.py` | 12467 | `76e8e3c731a4ad7d` |
 | `voidloom/tests/test_side_stores_load_by_pin.py` | 5211 | `a0463b7abe996243` |
+| `voidloom/tests/test_skills_conform.py` | 3810 | `9540370ed866c0a7` |
 | `voidloom/tests/test_skip_is_not_success_r3g3.py` | 14612 | `712de358722adec4` |
 | `voidloom/tests/test_sleep_catch_up_verb.py` | 3143 | `72a16ab29090aae0` |
 | `voidloom/tests/test_sleep_loop_brain_lock_r3.py` | 12800 | `60d19e34fd22831c` |
@@ -422,7 +423,7 @@
 | `migrations/migration_045_derived_layer_stamp.sql` | 1317 | `e3c2a801859f297d` |
 | `migrations/schema.sql` | 2640 | `1413cd5027588589` |
 
-### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1012393 bytes
+### `install` — Installers, wiring, acceptance gate, pinned requirements  ·  24 files, 1012931 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -440,7 +441,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 149856 | `c781f60fc04a6d1d` |
+| `install/lay_manifest.json` | 150394 | `9510ed75d3122e39` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -529,7 +530,7 @@
 | `capability/detect.py` | 37930 | `2ae313a71674c0b3` |
 | `capability/detect_embed_model.sh` | 3531 | `280d2751714b3675` |
 
-### `persona` — Persona skills, council voices, slash commands  ·  20 files, 88002 bytes
+### `persona` — Persona skills, council voices, slash commands  ·  21 files, 90651 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -542,6 +543,7 @@
 | `persona/council_skills/council-synthesizer/SKILL.md` | 6174 | `7a974ec29665188e` |
 | `persona/skills/memory-operator/IDENTITY_OUTLINE.md` | 2120 | `d5ab527b2499bca6` |
 | `persona/skills/memory-operator/RECALL_MAP_OUTLINE.md` | 2123 | `5c994596e93e076c` |
+| `persona/skills/memory-operator/SKILL.md` | 2649 | `13bf697b3e52f8e4` |
 | `persona/skills/persona-forge/BASELINE.md` | 5268 | `9fd9653dd94caafc` |
 | `persona/skills/persona-forge/QUESTIONNAIRE.md` | 12786 | `f31084bb89331c6b` |
 | `persona/skills/persona-forge/SKILL.md` | 12345 | `6feeb9128e58f399` |
@@ -590,7 +592,7 @@
 | `docs/FIRST_NIGHT.md` | 16123 | `c35368333c8d2beb` |
 | `docs/GETTING_STARTED.md` | 19765 | `f22116939a3af066` |
 | `docs/INSTRUCTIONS.md` | 4513 | `dc86c655f4b97c83` |
-| `docs/LAYOUT.md` | 8372 | `c491c76d07534110` |
+| `docs/LAYOUT.md` | 8372 | `fe0a174906ecdb25` |
 | `docs/ONBOARDING_GUIDE.md` | 57944 | `1d874da2fc948b57` |
 | `docs/OVERNIGHT_THINKER_SETUP.md` | 32164 | `520a6cb49c7aa880` |
 | `docs/PACKAGE_MANIFEST.md` | 42165 | (self -- not pinnable) |

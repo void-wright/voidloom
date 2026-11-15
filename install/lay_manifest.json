@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 527,
+    "core": 529,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 482,
+    "all": 484,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 268,
-    "skills": 18
+    "null": 269,
+    "skills": 19
    }
   },
-  "derived_at_head": "5fab267",
+  "derived_at_head": "7a0f006",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 545,
+  "entries": 547,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 257,
+     "count": 258,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 268
+   "total": 269
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "c491c76d07534110642a5d171dcec1471f3b8633c8f1ecde71ce0e113cc3efe3",
+   "sha256": "fe0a174906ecdb2506996dd0f44356d5f797804b26de1ac4c3b03b07cce60229",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -2425,6 +2425,16 @@
    "root": "skills",
    "sha256": "5c994596e93e076c530e95f05d54a38e663e540d6ea45192ea4dd32e72822f65",
    "src": "persona/skills/memory-operator/RECALL_MAP_OUTLINE.md"
+  },
+  {
+   "bytes": 2649,
+   "component": "core",
+   "dst": "memory-operator/SKILL.md",
+   "exec": false,
+   "platform": "all",
+   "root": "skills",
+   "sha256": "13bf697b3e52f8e4e120b61b26743ddf0ec7edd81293555fe01a0a337e4b85c1",
+   "src": "persona/skills/memory-operator/SKILL.md"
   },
   {
    "bytes": 5268,
@@ -4925,6 +4935,16 @@
    "root": null,
    "sha256": "a0463b7abe99624382755540ba4aacd950edfc6e31815d743ef8736437af2894",
    "src": "voidloom/tests/test_side_stores_load_by_pin.py"
+  },
+  {
+   "bytes": 3810,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "9540370ed866c0a7698c74305cfeaa3e03262208ac8ceb8de07a678f46f3aaab",
+   "src": "voidloom/tests/test_skills_conform.py"
   },
   {
    "bytes": 14612,
