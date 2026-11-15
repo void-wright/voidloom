@@ -2566,9 +2566,17 @@ def run_dream_cycle(db_path: str, config: Optional[dict] = None,
         _SEED_CACHE.pop(id(conn), None)
         starved_reason = cfg.get("_thinker_starved")
         declined = bool(cfg.get("_thinker_declined"))
+        # Each phase is fail-soft, so the night goes on past a phase that failed -- and is never then reported as ok:
+        # it is `degraded`, at the top, naming each phase, and the CLI exits 1 so a scheduler records it.
+        failed_phases = [p["phase"] for p in phase_outcomes if p["status"] == "error"]
         return {
-            "status": (("unconfigured" if declined else "starved" if starved_reason else "ok")
+            "status": (("unconfigured" if declined else "degraded" if failed_phases
+                        else "starved" if starved_reason else "ok")
                        if not dry_run else "dry-run"),
+            **({"degraded": True, "degraded_phases": failed_phases,
+                "degraded_note": "%d phase(s) failed and the night went on without them: %s; each phase's error is "
+                                 "in `phases` and in dream_phase_log" % (len(failed_phases), ", ".join(failed_phases))}
+               if failed_phases and not declined and not dry_run else {}),
             **({"unconfigured_note": _UNCONFIGURED_NOTE} if declined and not dry_run else {}),
             **({"starved_reason": starved_reason,
                 "starved_note": "the thinker was unavailable (%s): no dream was written for the pairs it could "

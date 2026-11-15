@@ -184,7 +184,10 @@ def two():
 
 
 def _ran(p, res):
-    return p.returncode == 0 and res.get("status") == "ok"
+    """The night ran rather than being refused for a lock: ok (exit 0), or degraded (exit 1) when one of its phases
+    failed on these keyword-only fixture brains, which a night names and is never then reported as ok."""
+    status = res.get("status")
+    return status in ("ok", "degraded") and p.returncode == {"ok": 0, "degraded": 1}[status]
 
 
 def test_a_running_scratch_home_dream_never_takes_the_host_brains_dream_lock(two):
@@ -193,7 +196,7 @@ def test_a_running_scratch_home_dream_never_takes_the_host_brains_dream_lock(two
     with _Held(scratch, "scratch") as h:
         p, res = host.unit("wizard-library-dreaming.service")
         assert _ran(p, res), ("the host brain's dream was refused while a SCRATCH-HOME dream ran", res, p.stderr[-800:])
-    assert h.result.get("status") == "ok", ("the scratch dream's own run did not complete", h.result, h.err[-600:])
+    assert h.result.get("status") in ("ok", "degraded"), ("the scratch dream's own run did not complete", h.result, h.err[-600:])
     assert not os.listdir(str(shared)), ("a lock was left in the machine's temp dir", os.listdir(str(shared)))
     assert host.calls() == 0 and scratch.calls() == 0
 
@@ -204,7 +207,7 @@ def test_a_running_host_dream_never_blocks_a_scratch_home_dream(two):
         p, res = scratch.unit("wizard-library-dream-daytime.service")
         assert _ran(p, res), ("a scratch-HOME dream was refused while the HOST brain's dream ran", res,
                               p.stderr[-800:])
-    assert h.result.get("status") == "ok", (h.result, h.err[-600:])
+    assert h.result.get("status") in ("ok", "degraded"), (h.result, h.err[-600:])
 
 
 def test_two_brains_whose_configs_name_a_legacy_lock_never_block_each_other_and_say_so(two):

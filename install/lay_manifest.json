@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 524,
+    "core": 525,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 479,
+    "all": 480,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 257,
     "home": 2,
-    "null": 265,
+    "null": 266,
     "skills": 18
    }
   },
-  "derived_at_head": "1008c72",
+  "derived_at_head": "7dd4082",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 542,
+  "entries": 543,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 254,
+     "count": 255,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 265
+   "total": 266
   },
   "platforms": [
    "all",
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "bb9390ed85d2c063b3ec929a31382574a4593f893623cfb61492fc2e20e608d1",
+   "sha256": "ec122568a459cda073408faa98d8d225350e56f6ae1f3aa57f734eece583d323",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1737,13 +1737,13 @@
    "src": "organs/dream_ledger.py"
   },
   {
-   "bytes": 132613,
+   "bytes": 133361,
    "component": "core",
    "dst": "organs/dream_pipeline.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f609975c5fd48a6510c3f9fcf05728d79349843eec9942d7da01b5613d54cbdb",
+   "sha256": "0b9460904f317236ba2193f6763bf2d78e9edf0b1f649012d691454667a96a3f",
    "src": "organs/dream_pipeline.py"
   },
   {
@@ -3327,13 +3327,13 @@
    "src": "voidloom/tests/test_brain_file_mode.py"
   },
   {
-   "bytes": 22536,
+   "bytes": 22851,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "9e0a08835c195e68129fc85b8a489a1fd0dd1df03ababb119b01525a499f395c",
+   "sha256": "a9cbe8d647f1094ea1cc26322f60deaaeb4b1aca8ca8c6e9af60ae661549b7df",
    "src": "voidloom/tests/test_brain_keyed_locks_r3g3.py"
   },
   {
@@ -3645,6 +3645,16 @@
    "root": null,
    "sha256": "7440124ff17966eaaedebb11095abfdb23581d175f67f18a4cbbf8fe5d289df7",
    "src": "voidloom/tests/test_dream_llm_failure_visible.py"
+  },
+  {
+   "bytes": 4635,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "2cb86bc5d89a620bb190826396c5203abd41c5e856685682599b47870599de73",
+   "src": "voidloom/tests/test_dream_night_names_a_failed_phase.py"
   },
   {
    "bytes": 4705,
