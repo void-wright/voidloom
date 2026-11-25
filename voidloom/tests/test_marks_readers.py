@@ -226,7 +226,8 @@ class Readers(Case):
 
     def test_the_quarantine_report(self):
         import belief_engine
-        for n, pair in enumerate(((self.mine, self.web),)):
+        later = self.b.add("OWNWORDS later", summary="OWNWORDS later s")
+        for n, pair in enumerate(((self.mine, self.web), (self.web, later))):       # it stands on either side of a pair
             self.b.c.execute("INSERT INTO belief_quarantine (object_kind, object_id, source_id, target_id, family, reason, prior_state, applied_state, quarantined_at) "
                              "VALUES ('edge', ?, ?, ?, 'f', 'r', '{}', '{}', datetime('now'))", (n + 1, *pair))
         self.b.c.commit()
