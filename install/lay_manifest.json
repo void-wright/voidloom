@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "bf3c554",
+  "derived_at_head": "c6086ce",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 573,
   "not_laid": {
@@ -1617,13 +1617,13 @@
    "src": "organs/approvals_policy.py"
   },
   {
-   "bytes": 72626,
+   "bytes": 72936,
    "component": "core",
    "dst": "organs/arcane_manifest.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7b69d787e963a63e866ef7d619d980ebfe2ea8c3dd3199690a202eb08dcc7262",
+   "sha256": "7a5fc6358531a81d37ab61c057d96c958e05bb4a56661df6f607a777b82f7cfe",
    "src": "organs/arcane_manifest.py"
   },
   {
@@ -1757,13 +1757,13 @@
    "src": "organs/dream_ledger.py"
   },
   {
-   "bytes": 130335,
+   "bytes": 130811,
    "component": "core",
    "dst": "organs/dream_pipeline.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "d483e186486494bcd32abbc8f3f9dff0049979ca47325663a353d3fde0e5a32e",
+   "sha256": "c8e4b24e39785dca30ad8968b4c5c8761fc2f5f3ea19e9722024608ab9a3a468",
    "src": "organs/dream_pipeline.py"
   },
   {
@@ -1917,13 +1917,13 @@
    "src": "organs/marks.py"
   },
   {
-   "bytes": 107828,
+   "bytes": 108035,
    "component": "core",
    "dst": "organs/memory_dreaming.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "309a69567ffc7c63f099d7b97c29d4c2ce8f895e79f97f1215f5ddf2fc0d5ed7",
+   "sha256": "a2ccf48282b5b93b71a298b59a06e2cf8b1863ed31a9c665abb4648111daa5e6",
    "src": "organs/memory_dreaming.py"
   },
   {

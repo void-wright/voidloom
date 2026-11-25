@@ -862,7 +862,13 @@ def _store_manifest_as_memory(conn: sqlite3.Connection, row: sqlite3.Row) -> Opt
         conn.commit()
         return memory_id
     except Exception as e:
-        logger.error("Failed to store manifest as memory: %s", e)
+        if not (isinstance(e, sqlite3.Error) or isinstance(getattr(e, "code", None), str)):
+            raise                       # the database refused, or a typed refusal: not stored, and said so
+        try:
+            conn.rollback()
+        except sqlite3.Error:
+            pass
+        logger.error("Failed to store manifest as memory: %s: %s", type(e).__name__, e)
         return None
 
 

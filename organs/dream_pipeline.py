@@ -2107,7 +2107,9 @@ def _store_synthesis_node(conn, cfg, label, text, members) -> Optional[int]:
     except marks.MarksError:
         raise                           # a brain with nowhere to put the marks: said, not swallowed
     except Exception as e:
-        logger.debug("store synthesis node failed: %s", e)
+        if not (isinstance(e, sqlite3.Error) or isinstance(getattr(e, "code", None), str)):
+            raise                       # the database refused (a full disk, a lock), or a typed refusal: said; else raised
+        logger.error("store synthesis node failed: %s: %s", type(e).__name__, e)
         return None
 
 
@@ -2250,7 +2252,9 @@ def _emit_playbook(conn, cfg, label, occ, evidence, note: Optional[Dict[str, Any
     except marks.MarksError:
         raise                           # a brain with nowhere to put the marks: said, not swallowed
     except Exception as e:
-        logger.debug("emit playbook failed: %s", e)
+        if not (isinstance(e, sqlite3.Error) or isinstance(getattr(e, "code", None), str)):
+            raise                       # the database refused (a full disk, a lock), or a typed refusal: said; else raised
+        logger.error("emit playbook failed: %s: %s", type(e).__name__, e)
         return None
 
 

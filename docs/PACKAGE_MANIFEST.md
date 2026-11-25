@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-25T23:07:57Z from the working tree whose HEAD was `bf3c554`
+> Generated 2026-11-25T23:21:29Z from the working tree whose HEAD was `c6086ce`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,12 +14,12 @@
 |---|---|
 | files tracked | 573 |
 | files hashed | 573 |
-| total bytes | 12190589 |
+| total bytes | 12191582 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  83 files, 4988181 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  83 files, 4989174 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -29,7 +29,7 @@
 | `organs/affect_probe_scan.py` | 34389 | `445156d34066b10c` |
 | `organs/anti_recency.py` | 53126 | `f9dd51d2f2abf479` |
 | `organs/approvals_policy.py` | 19760 | `24c40935d5ad4a73` |
-| `organs/arcane_manifest.py` | 72626 | `7b69d787e963a63e` |
+| `organs/arcane_manifest.py` | 72936 | `7a5fc6358531a81d` |
 | `organs/assayer.py` | 34460 | `5be30586333f215e` |
 | `organs/belief_cli.py` | 19439 | `b9cd462cb7127977` |
 | `organs/belief_engine.py` | 74746 | `184081621bdb0191` |
@@ -43,7 +43,7 @@
 | `organs/counterfactual_memory.py` | 74517 | `71424a5ec722e1d5` |
 | `organs/decision_units.py` | 121199 | `c133b3d99fc4de0f` |
 | `organs/dream_ledger.py` | 64023 | `79a2c6c60585f1b7` |
-| `organs/dream_pipeline.py` | 130335 | `d483e186486494bc` |
+| `organs/dream_pipeline.py` | 130811 | `c8e4b24e39785dca` |
 | `organs/dry_plan.py` | 1995 | `d6e1274adcc77603` |
 | `organs/embed_backfill.py` | 20330 | `7f83d78d92914736` |
 | `organs/embed_resolver.py` | 10765 | `41961c7562f8cee4` |
@@ -59,7 +59,7 @@
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
 | `organs/mark_admin.py` | 21668 | `e19dee0327ab9345` |
 | `organs/marks.py` | 43957 | `a5e70e7c01e4eff0` |
-| `organs/memory_dreaming.py` | 107828 | `309a69567ffc7c63` |
+| `organs/memory_dreaming.py` | 108035 | `a2ccf48282b5b93b` |
 | `organs/memory_write.py` | 145716 | `8c392f962d1aea22` |
 | `organs/model_fetch.py` | 8995 | `faf76bcf1a2b2418` |
 | `organs/model_garden.py` | 42154 | `a1278c6297f38640` |
@@ -467,7 +467,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 157142 | `cc220c80d27731f5` |
+| `install/lay_manifest.json` | 157142 | `77b4f4c748b5173a` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
