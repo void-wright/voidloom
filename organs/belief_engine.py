@@ -60,6 +60,14 @@ import struct
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from pathlib import Path
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 # The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
 try:
     import brain_clock
@@ -1699,6 +1707,7 @@ def quarantine_report(conn: sqlite3.Connection, *, limit: int = 20) -> Dict[str,
         "counts": counts,
         "pairs": [{"memory_ids": [a, b], "family": fam,
                    "quarantine_ids": [int(x) for x in ids.split(",")],
-                   "summaries": [sa, sb]} for a, b, fam, ids, sa, sb in open_pairs],
+                   "summaries": [marks.shown(conn, a, summary=sa)["summary"],
+                                 marks.shown(conn, b, summary=sb)["summary"]]} for a, b, fam, ids, sa, sb in open_pairs],
         "release_with": "belief_cli.py quarantine --release-pair A B | --release-family F | --release-ids ...",
     }

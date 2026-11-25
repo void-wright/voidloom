@@ -78,6 +78,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -425,6 +431,12 @@ def revisit_counterfactual(
     }
 
 
+def _present(conn: sqlite3.Connection, rows: List[dict]) -> None:
+    """Make the decision memory's text ready to be shown. A row whose memory is gone carries none."""
+    marks.present_rows(conn, [r for r in rows if r.get("memory_summary") or r.get("memory_content")],
+                       fields=("memory_content", "memory_summary"), id_key="decision_memory_id")
+
+
 def get_pending_revisits(
     conn: sqlite3.Connection,
     as_of: Optional[str] = None,
@@ -480,6 +492,7 @@ def get_pending_revisits(
             except json.JSONDecodeError:
                 pass
         pending.append(d)
+    _present(conn, pending)
 
     return {
         "status": "ok",
@@ -615,6 +628,7 @@ def get_counterfactual_history(
                 except json.JSONDecodeError:
                     pass
         results.append(d)
+    _present(conn, results)
 
     return {
         "status": "ok",
@@ -655,6 +669,7 @@ def get_counterfactual(
                 d[json_field] = json.loads(d[json_field])
             except json.JSONDecodeError:
                 pass
+    _present(conn, [d])
 
     return {
         "status": "ok",

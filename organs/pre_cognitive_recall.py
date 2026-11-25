@@ -69,6 +69,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 # --- TO-02 repair: resolve the embedding tier instead of hardcoding it -------
 # The write path moved to memory_embeddings_v2 on 2026-05-28; this reader was not
 # moved with it. embed_resolver REFUSES rather than defaulting to the dormant
@@ -331,7 +337,9 @@ def collect_signals(project_root: Optional[str] = None) -> Dict[str, Any]:
     signals["temporal_hint"] = _temporal_hint(now)
 
     # 5. Automation hint (most recent automation-tagged memory)
-    signals["automation_hint"] = _recent_automation_hint()
+    hint = _recent_automation_hint()
+    signals["automation_hint"] = hint["summary"] if hint else None
+    signals["automation_hint_framed"] = bool(hint and hint.get("provenance_framed"))
 
     # 6. Project slug
     signals["project_slug"] = _derive_project_slug(root)
@@ -424,6 +432,7 @@ def _recent_memory_stores(limit: int = MAX_RECENT_STORES) -> List[Dict[str, Any]
                 "created_at": row[3],
                 "tags": tags,
             })
+        marks.present_rows(conn, results)
         conn.close()
         return results
     except (sqlite3.Error, OSError) as exc:
@@ -468,8 +477,8 @@ def _temporal_hint(now: datetime, defaults: Optional[Dict[str, Any]] = None) -> 
     return f"{day_hint} {time_hint}".strip()
 
 
-def _recent_automation_hint() -> Optional[str]:
-    """Find the most recent automation-completion memory summary."""
+def _recent_automation_hint() -> Optional[Dict[str, Any]]:
+    """The most recent automation-completion memory, its summary ready to be shown."""
     # The pre-centralisation path holds a 4,096-byte SQLite file with ZERO
     # tables. It EXISTS, so the `if not db_path.exists()` guard below never
     # fires — this reader has been querying an empty husk and returning
@@ -482,7 +491,7 @@ def _recent_automation_hint() -> Optional[str]:
         conn = sqlite3.connect(str(db_path), timeout=2.0)
         conn.execute("PRAGMA journal_mode=WAL")
         row = conn.execute(
-            """SELECT m.summary
+            """SELECT m.id, m.summary
                FROM memories m
                JOIN memory_tags mt ON mt.memory_id = m.id
                WHERE mt.tag IN ('automation-complete', 'session-closure')
@@ -490,8 +499,9 @@ def _recent_automation_hint() -> Optional[str]:
                ORDER BY m.created_at DESC
                LIMIT 1""",
         ).fetchone()
+        hint = marks.shown(conn, row[0], summary=row[1]) if row and row[1] else None
         conn.close()
-        return row[0] if row else None
+        return hint
     except (sqlite3.Error, OSError):
         return None
 
@@ -537,12 +547,20 @@ def compute_focus_vector(
     Returns:
         Serialised float32 vector (bytes) suitable for sqlite-vec queries.
     """
-    narrative = _build_signal_narrative(signals)
+    narrative = _build_signal_narrative(signals, show=False)
     return encode_fn(narrative, "search_query")
 
 
-def _build_signal_narrative(signals: Dict[str, Any]) -> str:
-    """Build a natural-language narrative from collected signals.
+def _cut(text: str, framed: bool, limit: int, show: bool) -> str:
+    """At most `limit` characters of a memory's own words, and its frame in front of them when the text is to be shown.
+    Keyed on the flag the presenter set, never on how the text opens."""
+    own = text[len(marks.FRAME_PREFIX):] if framed else text
+    return marks.frame_text(own[:limit]) if framed and show else own[:limit]
+
+
+def _build_signal_narrative(signals: Dict[str, Any], show: bool = True) -> str:
+    """Build a natural-language narrative from collected signals. `show=False` is the text the focus vector is computed
+    from, which no reader sees: it leaves the frames out.
 
     This text gets embedded to produce the focus vector. The embedding
     model (Nomic v1.5) performs best on natural text, so we write a
@@ -561,7 +579,7 @@ def _build_signal_narrative(signals: Dict[str, Any]) -> str:
     # Recent stores
     stores = signals.get("recent_stores", [])
     if stores:
-        summaries = [s["summary"][:120] for s in stores if s.get("summary")]
+        summaries = [_cut(s["summary"], s.get("provenance_framed") is True, 120, show) for s in stores if s.get("summary")]
         if summaries:
             parts.append(
                 f"Recent memory activity: {'; '.join(summaries[:3])}."
@@ -589,7 +607,7 @@ def _build_signal_narrative(signals: Dict[str, Any]) -> str:
     # Automation hint
     auto = signals.get("automation_hint")
     if auto:
-        parts.append(f"Recent automation: {auto[:150]}.")
+        parts.append("Recent automation: %s." % _cut(auto, signals.get("automation_hint_framed") is True, 150, show))
 
     if not parts:
         parts.append("General wizard library session start.")

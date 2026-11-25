@@ -1554,6 +1554,10 @@ def run_dream_cycle_legacy(
 # Digest and Curation
 # ============================================================
 
+#: the rows a dream's text was written from, and the row it was stored as
+DREAM_PARENTS = ("dream_memory_id", "memory_a_id", "memory_b_id")
+
+
 def get_dream_digest(
     conn: sqlite3.Connection,
     days: int = 7,
@@ -1620,6 +1624,7 @@ def get_dream_digest(
         if not added:
             break
 
+    marks.present_copies(conn, result, fields=("dream_content",), id_keys=DREAM_PARENTS)
     return result
 
 

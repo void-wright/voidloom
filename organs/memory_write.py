@@ -73,7 +73,13 @@ from datetime import datetime, timedelta, timezone
 from fractions import Fraction
 from pathlib import Path
 
-import marks
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    import os as _marks_os
+    import sys as _marks_sys
+    _marks_sys.path.insert(0, _marks_os.path.dirname(_marks_os.path.abspath(__file__)))
+    import marks
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 logger = logging.getLogger("voidloom.memory_write")

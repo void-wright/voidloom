@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS forget_receipts (
     memory_id       INTEGER NOT NULL,
     run_id          TEXT,
     before_archived INTEGER NOT NULL,
+    after_updated_at TEXT,                       -- the row's updated_at as `forget` left it
+    superseded_at   TEXT,                        -- somebody archived or restored the row since: it is theirs now
     at              TEXT NOT NULL DEFAULT (datetime('now')),
     undone_at       TEXT
 );
@@ -92,6 +94,11 @@ CREATE TABLE IF NOT EXISTS marks_backfill_preimage (
     memory_id            INTEGER NOT NULL,
     before_outside       INTEGER NOT NULL,
     before_research_mark INTEGER NOT NULL,
+    before_run_id        TEXT,
+    before_config_id     TEXT,
+    because_outside      TEXT,                   -- JSON: the parents that were outside, and research, when it ran
+    because_research     TEXT,
+    links_added          TEXT,                   -- JSON: the run links it wrote for this row
     at                   TEXT NOT NULL DEFAULT (datetime('now')),
     undone_at            TEXT
 );
@@ -118,6 +125,17 @@ FOR EACH ROW WHEN (NEW.untrusted_source IS NOT 0 AND NEW.untrusted_source IS NOT
                OR (NEW.untrusted_source IS 0 AND OLD.untrusted_source IS NOT 0 AND OLD.untrusted_source IS NOT 1)
 BEGIN
     SELECT RAISE(ABORT, 'untrusted_source must be 0 or 1, and a value that is neither is not cleared to 0');
+END;
+
+-- INSERT OR REPLACE over a marked row would delete it and leave a clean one under its id: no update happens, so no
+-- update trigger can see it. A row stored without an id has NEW.id = -1 here, which names nothing.
+CREATE TRIGGER IF NOT EXISTS trg_marks_replace_refused
+BEFORE INSERT ON memories
+FOR EACH ROW WHEN EXISTS (SELECT 1 FROM memories m WHERE m.id = NEW.id
+                             AND ((m.untrusted_source IS NOT 0 AND NEW.untrusted_source IS 0)
+                               OR (m.research_mark = 1 AND NEW.research_mark = 0)))
+BEGIN
+    SELECT RAISE(ABORT, 'MARKED_ROW_REPLACED: a marked memory is not replaced by one without its mark');
 END;
 
 -- research: marked, named, registered, written once ----------------------------------------------------------------
@@ -364,6 +382,53 @@ BEGIN
      WHERE r.memory_id = NEW.parent_id AND EXISTS (SELECT 1 FROM memories c WHERE c.id = NEW.child_id);
 END;
 
+-- an edge that is changed is a new edge; what the old one said stays said
+CREATE TRIGGER IF NOT EXISTS trg_marks_edge_consolidation_update
+AFTER UPDATE OF consolidated_memory_id, source_memory_id ON consolidation_sources
+FOR EACH ROW
+BEGIN
+    UPDATE memories SET untrusted_source = 1
+     WHERE id = NEW.consolidated_memory_id AND untrusted_source IS NOT 1
+       AND COALESCE((SELECT p.untrusted_source IS NOT 0 FROM memories p WHERE p.id = NEW.source_memory_id), 1);
+    UPDATE memories SET research_mark = 1
+     WHERE id = NEW.consolidated_memory_id AND research_mark = 0
+       AND EXISTS (SELECT 1 FROM memories p WHERE p.id = NEW.source_memory_id AND p.research_mark = 1);
+    INSERT OR IGNORE INTO memory_research_runs (memory_id, run_id, config_id, inherited)
+    SELECT NEW.consolidated_memory_id, r.run_id, r.config_id, 1 FROM memory_research_runs r
+     WHERE r.memory_id = NEW.source_memory_id AND EXISTS (SELECT 1 FROM memories c WHERE c.id = NEW.consolidated_memory_id);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_marks_edge_provenance_update
+AFTER UPDATE OF derived_memory_id, source_memory_id, transformation_type ON memory_provenance
+FOR EACH ROW
+WHEN NEW.transformation_type IN ('consolidation', 'reflection', 'distillation', 'dream_synthesis', 'council_deliberation', 'manual_derivation')
+BEGIN
+    UPDATE memories SET untrusted_source = 1
+     WHERE id = NEW.derived_memory_id AND untrusted_source IS NOT 1
+       AND COALESCE((SELECT p.untrusted_source IS NOT 0 FROM memories p WHERE p.id = NEW.source_memory_id), 1);
+    UPDATE memories SET research_mark = 1
+     WHERE id = NEW.derived_memory_id AND research_mark = 0
+       AND EXISTS (SELECT 1 FROM memories p WHERE p.id = NEW.source_memory_id AND p.research_mark = 1);
+    INSERT OR IGNORE INTO memory_research_runs (memory_id, run_id, config_id, inherited)
+    SELECT NEW.derived_memory_id, r.run_id, r.config_id, 1 FROM memory_research_runs r
+     WHERE r.memory_id = NEW.source_memory_id AND EXISTS (SELECT 1 FROM memories c WHERE c.id = NEW.derived_memory_id);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_marks_edge_parent_update
+AFTER UPDATE OF child_id, parent_id ON memory_parents
+FOR EACH ROW
+BEGIN
+    UPDATE memories SET untrusted_source = 1
+     WHERE id = NEW.child_id AND untrusted_source IS NOT 1
+       AND COALESCE((SELECT p.untrusted_source IS NOT 0 FROM memories p WHERE p.id = NEW.parent_id), 1);
+    UPDATE memories SET research_mark = 1
+     WHERE id = NEW.child_id AND research_mark = 0
+       AND EXISTS (SELECT 1 FROM memories p WHERE p.id = NEW.parent_id AND p.research_mark = 1);
+    INSERT OR IGNORE INTO memory_research_runs (memory_id, run_id, config_id, inherited)
+    SELECT NEW.child_id, r.run_id, r.config_id, 1 FROM memory_research_runs r
+     WHERE r.memory_id = NEW.parent_id AND EXISTS (SELECT 1 FROM memories c WHERE c.id = NEW.child_id);
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_marks_raptor_insert
 AFTER INSERT ON raptor_clusters
 FOR EACH ROW WHEN NEW.synthesis_memory_id IS NOT NULL AND json_valid(NEW.member_ids_json)
@@ -411,4 +476,14 @@ BEFORE UPDATE OF status, approval_hash ON gap_research_log
 FOR EACH ROW WHEN NEW.status = 'running' AND OLD.status IS NOT 'running' AND NEW.approval_hash IS NULL
 BEGIN
     SELECT RAISE(ABORT, 'RESEARCH_DISPATCH_CLOSED');
+END;
+
+-- archiving or restoring a row after `forget` archived it is a later decision: `unarchive` leaves it alone -----------
+CREATE TRIGGER IF NOT EXISTS trg_marks_forget_superseded
+AFTER UPDATE OF is_archived ON memories
+FOR EACH ROW WHEN EXISTS (SELECT 1 FROM forget_receipts f WHERE f.memory_id = NEW.id AND f.undone_at IS NULL
+                             AND f.superseded_at IS NULL)
+BEGIN
+    UPDATE forget_receipts SET superseded_at = datetime('now')
+     WHERE memory_id = NEW.id AND undone_at IS NULL AND superseded_at IS NULL;
 END;

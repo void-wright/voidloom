@@ -1155,13 +1155,16 @@ def verb_capabilities(args) -> Dict[str, Any]:
     manifest_path = _manifest_path(getattr(args, "db", None))
     all_tiers = not bool(getattr(args, "available_only", False))
     projection = sa.render_full_projection(manifest_path, all_tiers=all_tiers)
+    # The features are the package's, whatever organs this host describes, so a client can ask for them on any install.
     if projection is None:
-        return error("no_organs",
-                     "no L5 organ registry found in the manifest "
-                     f"({manifest_path}); nothing to describe.",
-                     data={"manifest": manifest_path, "features": _agent_context.FEATURES}, verb="capabilities")
-    projection["features"] = _agent_context.FEATURES        # the package's, whatever organs this host runs
-    return ok("capabilities", projection, verb="capabilities")
+        env = ok("no_organs", {"manifest": manifest_path, "organs": [], "features": _agent_context.FEATURES,
+                               "message": f"no L5 organ registry found in the manifest ({manifest_path}): no organ to "
+                                          "describe. The package's features are listed."}, verb="capabilities")
+    else:
+        projection["features"] = _agent_context.FEATURES
+        env = ok("capabilities", projection, verb="capabilities")
+    env["features"] = _agent_context.FEATURES
+    return env
 
 
 def _no_rerank_this_process(args) -> None:
@@ -1511,8 +1514,8 @@ def verb_research_register(args) -> Dict[str, Any]:
     try:
         with open(args.config, encoding="utf-8") as fh:
             spec = json.load(fh)
-    except (OSError, ValueError) as e:
-        return error("CONFIG_INVALID", f"could not read a JSON object from {args.config!r}: {e}", verb=verb)
+    except (OSError, ValueError, RecursionError) as e:
+        return error("CONFIG_INVALID", f"could not read a JSON object from {ascii(args.config)}: {type(e).__name__}: {e}", verb=verb)
     from . import _facade
     return _marks_result(_facade.research_register(spec, args.run, db_path=db), verb, "research_registered")
 
@@ -1520,7 +1523,7 @@ def verb_research_register(args) -> Dict[str, Any]:
 def verb_forget(args) -> Dict[str, Any]:
     """Archive one memory or one research run, reversibly, with a receipt."""
     db = getattr(args, "db", None)
-    refusal = _guard.require_write(db)
+    refusal = _guard.require_local(db) if args.dry_run else _guard.require_write(db)
     if refusal is not None:
         return refused(refusal["code"], refusal["message"], data=refusal, verb="forget")
     from . import _facade
@@ -1542,7 +1545,7 @@ def verb_unarchive(args) -> Dict[str, Any]:
 def verb_marks(args) -> Dict[str, Any]:
     """`marks backfill`: mark what was already written from marked memories before the database did it by itself."""
     db = getattr(args, "db", None)
-    refusal = _guard.require_write(db)
+    refusal = _guard.require_local(db) if args.dry_run and not args.undo else _guard.require_write(db)
     if refusal is not None:
         return refused(refusal["code"], refusal["message"], data=refusal, verb="marks")
     from . import _facade
@@ -1738,7 +1741,7 @@ def verb_batch_store(args) -> Dict[str, Any]:
 
     from . import _batch
     results = _batch.store_batch(items, db_path=db, valid_categories=categories,
-                                 defaults={k: v for k, v in _mark_args(args).items() if k != "source_ids"})
+                                 defaults=_mark_args(args))
     summary = _batch.summarize(results)
     # C5: the verdict is taken from the SAME count this envelope prints.
     _env = (incomplete if summary.get("failed") else ok)
@@ -2125,8 +2128,15 @@ def _doctor_marks(db: Optional[str]) -> Dict[str, Any]:
         return {"verdict": "UNMEASURED", "error": f"{type(e).__name__}: {e}"}
     if out["verdict"] == "MARK_TRIGGERS_MISSING":
         out["fault"] = (f"MARK_TRIGGERS_MISSING: {len(out['missing_triggers'])} trigger(s) that carry marks are gone "
-                        f"({', '.join(out['missing_triggers'][:3])}); the next store or recall puts them back. Then run: "
+                        f"({', '.join(out['missing_triggers'][:3])}); the next store puts them back. Then run: "
                         "voidloom marks backfill --dry-run")
+    elif out["verdict"] == "MARK_TRIGGERS_ALTERED":
+        out["fault"] = (f"MARK_TRIGGERS_ALTERED: {len(out['altered_triggers'])} trigger(s) that carry marks no longer say "
+                        f"what was shipped ({', '.join(out['altered_triggers'][:3])}); the next store puts them back. Then "
+                        "run: voidloom marks backfill --dry-run")
+    elif out["verdict"] == "UNMEASURED":
+        out["warning"] = ("marks: the migrations this package ships could not be read, so the triggers that carry marks were "
+                          "not compared. Re-run the installer.")
     elif out["verdict"] == "BRAIN_NEEDS_MIGRATION":
         out["warning"] = ("marks: this brain predates migration_046: a store marked outside or research refuses, and derived "
                           "writes refuse. Re-run the installer.")
@@ -3374,7 +3384,12 @@ def _add_global_flags(sp: argparse.ArgumentParser) -> None:
 CLI_SURFACE_SCHEMA = "cli-surface/1"
 
 
-def _add_mark_flags(sp: argparse.ArgumentParser, sources: bool = True) -> None:
+def _keep_short(sp: argparse.ArgumentParser, dest: str, *names: str) -> None:
+    """Shortened flags that named one option before another came to share their first letters: they still name it."""
+    sp.add_argument(*names, dest=dest, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+
+
+def _add_mark_flags(sp: argparse.ArgumentParser) -> None:
     """Where the text came from. Nothing here is ever inferred from the text itself."""
     sp.add_argument("--outside", action="store_true", default=False,
                     help="the text is not the owner's own (a page, another program): stored marked, shown framed")
@@ -3383,9 +3398,8 @@ def _add_mark_flags(sp: argparse.ArgumentParser, sources: bool = True) -> None:
     sp.add_argument("--author", default=None, metavar="WHO", help="who wrote it: user, model or tool")
     sp.add_argument("--session", default=None, metavar="ID", help="the session it was written in (recorded only)")
     sp.add_argument("--parent", default=None, metavar="REF", help="the message or item it answers (recorded only)")
-    if sources:
-        sp.add_argument("--source-ids", dest="source_ids", default=None, metavar="1,2,3",
-                        help="the memories it was written from: it takes their marks")
+    sp.add_argument("--source-ids", dest="source_ids", default=None, metavar="1,2,3",
+                    help="the memories it was written from: it takes their marks")
 
 
 def cli_surface_version(parser: Optional[argparse.ArgumentParser] = None) -> str:
@@ -3621,6 +3635,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="importance 0.0-1.0 (default 0.5)")
     sp.add_argument("--answers", default=None,
                     help="comma-separated dream id(s) this recorded memory settles (evidence: +0.10 each, cap 0.65)")
+    _keep_short(sp, "answers", "--a")
     _add_mark_flags(sp)
     sp.add_argument("--json", action="store_true", help="structured envelope")
     _add_global_flags(sp)
@@ -3654,6 +3669,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-rerank", dest="no_rerank", action="store_true", default=False,
                     help="skip the reranker for this run (vector + keyword + RRF). It can only turn the reranker "
                          "OFF: it never runs on CPU-only machines or below 15.0 GiB RAM anyway")
+    sp.add_argument("--n", "--no", "--no-", dest="no_rerank", action="store_true", default=argparse.SUPPRESS,
+                    help=argparse.SUPPRESS)                 # what they named before --no-log shared their letters
     sp.add_argument("--no-log", dest="no_log", action="store_true", default=False,
                     help="leave no trace: no access row, no access count (no recall ever stores the words asked)")
     sp.add_argument("--json", action="store_true", help="structured envelope")
@@ -3671,7 +3688,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "or - (stdin). Each element needs content+category; "
                          "tags/kind/importance/summary/project/context/"
                          "source_user/auto_edges are optional.")
-    _add_mark_flags(sp, sources=False)
+    _add_mark_flags(sp)
     sp.add_argument("--json", action="store_true", help="structured envelope")
     _add_global_flags(sp)
     sp.set_defaults(_fn=verb_batch_store)

@@ -245,7 +245,7 @@ def get_digest_history(
         (limit,),
     ).fetchall()
 
-    return [
+    digests = [
         {
             'id': r[0],
             'digest_memory_id': r[1],
@@ -258,6 +258,8 @@ def get_digest_history(
         }
         for r in rows
     ]
+    marks.present_rows(conn, [d for d in digests if d['content'] or d['summary']], id_key='digest_memory_id')
+    return digests
 
 
 def _group_observations_by_type(

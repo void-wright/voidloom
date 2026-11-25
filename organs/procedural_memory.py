@@ -46,6 +46,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 # The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
 try:
     import brain_clock
@@ -254,7 +260,7 @@ def compute_promotion_score(
     if usage_count == 0:
         return {
             "memory_id": memory_id,
-            "summary": summary,
+            **marks.shown(conn, memory_id, summary=summary),
             "importance": importance,
             "score": 0.0,
             "usage_count": 0,
@@ -341,7 +347,7 @@ def compute_promotion_score(
 
     return {
         "memory_id": memory_id,
-        "summary": summary,
+        **marks.shown(conn, memory_id, summary=summary),
         "importance": importance,
         "score": score,
         "usage_count": usage_count,
@@ -433,7 +439,7 @@ def get_review_candidates(
 
         candidates.append({
             "memory_id": mem_id,
-            "summary": summary,
+            **marks.shown(conn, mem_id, summary=summary),
             "importance": importance,
             "score": 0.0,
             "usage_count": 0,
@@ -496,7 +502,7 @@ def get_usage_stats(
 
         return {
             "memory_id": memory_id,
-            "summary": mem[0] if mem else None,
+            **marks.shown(conn, memory_id, summary=mem[0] if mem else None),
             "kind": mem[1] if mem else None,
             "importance": mem[2] if mem else None,
             "total_events": len(history),

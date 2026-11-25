@@ -429,7 +429,7 @@ licences are listed in [`NOTICE`](./NOTICE).
 | Embedding and reranking models | install (downloaded once, at the pinned revisions), `voidloom tier set`, or `re-embed` | Hugging Face Hub |
 | A model vendor's installer | only if you say yes when the thinker's program is missing | that vendor's official install script, shown to you first |
 | Proving the thinker credential | install, or `voidloom thinker set` / `login` | your chosen model's service |
-| Gap research | only once armed, and only for an exact topic you wrote in `approved_research_topics.json`; otherwise it refuses and sends nothing | your chosen model's service |
+| Gap research | only a gap you name (`--gap-ids`) whose exact topic you wrote in `approved_research_topics.json`; the scheduled job sends nothing in this release | your chosen model's service |
 | Scheduled jobs that think | only once armed, and only with a thinker chosen | your chosen model's service (nothing, for **e** or a model on your own machine) |
 
 Storing, recalling, the CLI and the session hook make no network calls of

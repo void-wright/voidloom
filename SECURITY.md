@@ -41,8 +41,13 @@ Only the latest release on `main` receives security fixes.
   behind a warning, and so is anything the database can see was written from it. A model that reads it and then stores
   its own restatement as a plain memory is not seen, and a 1.1.3 program on the same brain cannot mark what it stores.
   Do not treat an unframed memory as proof that no outside text reached it.
-- **Nothing researches by itself.** Gap research sends a topic to a model only when the exact topic is written in
-  `approved_research_topics.json` beside the brain. There is no environment switch.
+- **Nothing researches by itself.** Gap research sends a topic to a model only when you name the gap (`--gap-ids`) and the
+  exact topic is written in `approved_research_topics.json` in the folder that really holds the brain. One fixed sentence
+  and that topic are what is sent. There is no environment switch, and no setting adds to the sentence.
+- **An enacted proposal is a model's words.** When you approve a self-evaluation proposal, the memory that records it was
+  written by a model. It says `author: model` and carries no mark: nothing records what the proposal was written from.
+- **Text an earlier release copied out of memories** (gap topics, community summaries, council and manifest records) carries
+  no mark. Gap topics and manifests are shown framed; council and counterfactual records are shown as they were written.
 - **Recall keeps no query text.** Earlier releases stored it in the access log; those rows are yours and are left alone.
 - **No token ships with the package.** Jobs that call a model read a token you put
   in `~/.voidloom/wizard-library-env` (mode `0600`).

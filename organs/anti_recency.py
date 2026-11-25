@@ -66,6 +66,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 logger = logging.getLogger(__name__)
 
 # L5-L "The Quickening": per-tag access cadence powers the predictive (about-to-
@@ -520,7 +526,9 @@ def find_resurfacing_candidates(
     # foundation/importance -- but the reactive floor above guarantees reactive
     # memories are present even when predictive fills the pool.
     blended.sort(key=lambda c: (0 if c.get("predicted_lapse") else 1, *_ordkey(c)))
-    return blended[:limit]
+    blended = blended[:limit]
+    marks.present_rows(conn, blended)
+    return blended
 
 
 def log_resurfacing(
@@ -607,6 +615,7 @@ def get_forgotten_foundations(
             "source_project": row[11],
         })
 
+    marks.present_rows(conn, results, id_key="memory_id")
     return results
 
 
@@ -752,6 +761,7 @@ def get_foundation_stats(conn: sqlite3.Connection) -> Dict[str, Any]:
              "summary": r[4][:100] if r[4] else None}
             for r in top_rows
         ]
+        marks.present_rows(conn, stats["top_10"])
 
     # Resurfacing stats.
     try:
@@ -816,6 +826,7 @@ def run_weekly_resurfacing(
             {
                 "id": c["id"],
                 "summary": c["summary"],
+                "outside": c["outside"],
                 "foundation_score": c["foundation_score"],
                 "days_since_access": c["days_since_access"],
                 "kind": c["kind"],
@@ -1258,7 +1269,7 @@ def main():
                 "candidates_found": len(candidates),
                 "candidates_logged": logged,
                 "digest": [
-                    {"id": c["id"], "summary": c["summary"],
+                    {"id": c["id"], "summary": c["summary"], "outside": c["outside"],
                      "foundation_score": c["foundation_score"],
                      "days_since_access": c["days_since_access"]}
                     for c in candidates

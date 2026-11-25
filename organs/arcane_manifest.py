@@ -357,6 +357,7 @@ def gather_quarter_data(
             }
             for r in top_memories
         ]
+        marks.present_rows(conn, data["top_memories"])
 
         kinds = conn.execute(
             """SELECT kind, COUNT(*) as cnt
@@ -460,7 +461,7 @@ def _gather_dream_data(conn: sqlite3.Connection, data: dict, start: str, end: st
         }
 
         interesting_dreams = conn.execute(
-            """SELECT id, dream_type, dream_content
+            """SELECT id, dream_type, dream_content, dream_memory_id, memory_a_id, memory_b_id
                FROM dream_log
                WHERE created_at >= ? AND created_at < ?
                AND (is_meaningful = 1 OR drew_flagged_interesting = 1)
@@ -472,9 +473,12 @@ def _gather_dream_data(conn: sqlite3.Connection, data: dict, start: str, end: st
                 "id": d["id"],
                 "type": d["dream_type"],
                 "content": (d["dream_content"] or "")[:500],
+                "dream_memory_id": d["dream_memory_id"], "memory_a_id": d["memory_a_id"], "memory_b_id": d["memory_b_id"],
             }
             for d in interesting_dreams
         ]
+        marks.present_copies(conn, data["dreaming"]["notable_dreams"], fields=("content",),
+                             id_keys=("dream_memory_id", "memory_a_id", "memory_b_id"))
     except sqlite3.OperationalError:
         data["dreaming"] = {"total_dreams": 0, "note": "table not found"}
 
@@ -884,7 +888,7 @@ def get_manifest(db_path: str, manifest_id: int) -> dict:
         return {
             "status": "ok",
             "action": "get_manifest",
-            "manifest": _row_to_dict(row),
+            "manifest": _present_manifest(_row_to_dict(row)),
         }
     finally:
         conn.close()
@@ -959,7 +963,7 @@ def get_manifest_for_quarter(db_path: str, quarter: str) -> dict:
         return {
             "status": "ok",
             "action": "get_manifest_for_quarter",
-            "manifest": _row_to_dict(row),
+            "manifest": _present_manifest(_row_to_dict(row)),
         }
     finally:
         conn.close()
@@ -1250,6 +1254,27 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
                 d[json_field] = json.loads(d[json_field])
             except json.JSONDecodeError:
                 pass
+    return d
+
+
+def _present_manifest(d: dict) -> dict:
+    """A manifest ready to be shown. Its prose restates a quarter's memories and names none of them, so nothing says it
+    is clean: it is framed here as the memory it is stored as is framed. So are the lines of a snapshot taken before
+    snapshots were framed as they were taken."""
+    d["provenance_framed"], d["outside"] = True, True
+    d["manifest_content"] = marks.frame_text(d.get("manifest_content"))
+    sections = d.get("sections")
+    for part in sections if isinstance(sections, list) else []:
+        if isinstance(part, dict):
+            part["section_content"] = marks.frame_text(part.get("section_content"))
+    snapshot = d.get("data_snapshot")
+    if isinstance(snapshot, dict):
+        dreaming = snapshot.get("dreaming")
+        for rows, field in ((snapshot.get("top_memories"), "summary"),
+                            (dreaming.get("notable_dreams") if isinstance(dreaming, dict) else None, "content")):
+            for row in rows if isinstance(rows, list) else []:
+                if isinstance(row, dict) and "outside" not in row:
+                    row[field] = marks.frame_text(row.get(field))
     return d
 
 

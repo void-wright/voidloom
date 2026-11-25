@@ -386,7 +386,10 @@ def detect_thin_entities(
         "SELECT id, summary, content, updated_at FROM memories WHERE is_archived = 0"
     ).fetchall()
 
+    clean = _marks.clean_ids(conn, [r[0] for r in rows])
     for mem_id, summary, content, updated_at in rows:
+        if mem_id not in clean:                 # a topic is stored and shown apart from the row it came from
+            continue
         text = f"{summary or ''} {content or ''}"
         for ent in extract_entities(text, min_length):
             entity_counter[ent] += 1
@@ -467,6 +470,8 @@ def detect_unresolved_contradictions(
     """, (min_confidence,)).fetchall()
 
     gaps = []
+    clean = _marks.clean_ids(conn, {i for r in rows for i in r[:2]})
+    rows = [r for r in rows if r[0] in clean and r[1] in clean]
     for src_id, tgt_id, conf, src_sum, tgt_sum, created_at, src_proj, tgt_proj in rows:
         entity_label = contradiction_gap_label(src_id, tgt_id, src_sum, tgt_sum)
 
@@ -614,6 +619,8 @@ def detect_stale_entities(
 
     # Group by entities extracted from summaries
     entity_staleness: Dict[str, Dict] = {}
+    clean = _marks.clean_ids(conn, [r[0] for r in rows])
+    rows = [r for r in rows if r[0] in clean]
     for mem_id, summary, project, updated_at, last_accessed, access_count in rows:
         entities = extract_entities(summary or '', min_length=3)
         if not entities:
@@ -720,6 +727,28 @@ def _extract_project_from_entity(entity: str, gap: Dict) -> str:
 # Inventory orchestrator
 # ============================================================
 
+#: in a batch's config_snapshot: every topic of the batch came from rows read as clean. A batch without it was taken by a
+#: version that did not look, so its topics are framed wherever they are shown.
+CLEAN_ONLY = "outside_rows_skipped"
+
+
+def _present_topics(conn: sqlite3.Connection, gaps: List[Dict[str, Any]]) -> None:
+    """Frame every topic whose batch does not say it was taken from clean rows. In place."""
+    batches: Dict[Any, bool] = {}
+    for gap in gaps:
+        batch = gap.get("batch_id")
+        if batch not in batches:
+            try:
+                row = conn.execute("SELECT config_snapshot FROM gap_inventory_batches WHERE id = ?", (batch,)).fetchone()
+                batches[batch] = json.loads(row[0]).get(CLEAN_ONLY) is True if row else False
+            except (sqlite3.Error, ValueError, TypeError, AttributeError):
+                batches[batch] = False
+        gap["outside"] = not batches[batch]
+        if gap["outside"]:
+            gap["provenance_framed"], gap["provenance_frame_reason"] = True, ["mark_unreadable"]
+            gap["entity"] = _marks.frame_text(gap["entity"])
+
+
 def run_gap_inventory(
     db_path: str,
     config: Optional[Dict] = None,
@@ -747,7 +776,7 @@ def run_gap_inventory(
     # Start batch
     conn.execute(
         "INSERT INTO gap_inventory_batches (started_at, config_snapshot) VALUES (datetime('now'), ?)",
-        (json.dumps(cfg),)
+        (json.dumps({**cfg, CLEAN_ONLY: True}),)
     )
     batch_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.commit()
@@ -1164,10 +1193,12 @@ def get_gap_report(
             'research_memory_id': row[8],
             'acknowledged': bool(row[9]),
             'acknowledged_reason': row[10],
+            'batch_id': actual_batch_id,
         }
         gaps.append(gap)
         type_counts[gap['gap_type']] = type_counts.get(gap['gap_type'], 0) + 1
 
+    _present_topics(conn, gaps)
     conn.close()
 
     return {
@@ -1203,7 +1234,7 @@ def acknowledge_gap(
         conn.close()
         return {"status": "error", "message": "gap_inventory table not found."}
 
-    row = conn.execute("SELECT id, entity, gap_type FROM gap_inventory WHERE id = ?", (gap_id,)).fetchone()
+    row = conn.execute("SELECT id, entity, gap_type, batch_id FROM gap_inventory WHERE id = ?", (gap_id,)).fetchone()
     if not row:
         conn.close()
         return {"status": "error", "message": f"Gap #{gap_id} not found."}
@@ -1214,12 +1245,15 @@ def acknowledge_gap(
         WHERE id = ?
     """, (reason, gap_id))
     conn.commit()
+    topic = {"entity": row[1], "batch_id": row[3]}
+    _present_topics(conn, [topic])
     conn.close()
 
     return {
         "status": "ok",
         "gap_id": gap_id,
-        "entity": row[1],
+        "entity": topic["entity"],
+        "outside": topic["outside"],
         "gap_type": row[2],
         "acknowledged_reason": reason,
     }
@@ -1229,32 +1263,13 @@ def acknowledge_gap(
 # Auto-Research Dispatch
 # ============================================================
 
-DEFAULT_RESEARCH_FOCUS = "Focus on what someone working with this topic would need to know."
-
-
-def _research_focus(cfg: Optional[Dict[str, Any]] = None) -> str:
-    """The one sentence that points gap research at the owner's field. An owner sets it as
-    WIZARD_GAP_RESEARCH_FOCUS (the env file every scheduled job reads) or as 'research_focus' in a --config file;
-    the config wins, then the environment, then the generic default."""
-    v = ((cfg or {}).get("research_focus") or os.environ.get("WIZARD_GAP_RESEARCH_FOCUS") or "").strip()
-    return v or DEFAULT_RESEARCH_FOCUS
-
-
-def _build_research_prompt(entity: str, gap_type: str, focus: Optional[str] = None) -> str:
-    """Build a concise research prompt for a gap topic."""
-    type_context = {
-        'thin_entity': "This entity appears rarely in my knowledge base.",
-        'weak_recall': "My recall queries about this topic returned poor results.",
-        'unresolved_contradiction': "I have contradictory information about this topic.",
-        'sparse_domain': "This domain has very few entries in my knowledge base.",
-        'stale_entity': "My knowledge about this entity may be outdated.",
-    }
-    context = type_context.get(gap_type, "I have a knowledge gap about this topic.")
-
+def _build_research_prompt(entity: str, gap_type: Optional[str] = None) -> str:
+    """The whole text a dispatch sends: this sentence and the topic the owner approved, and nothing else. No setting, file,
+    argument or memory adds a word to it; `gap_type` is accepted and not sent."""
     return (
-        f"Research: {entity}. {context} "
+        f"Research: {entity}. I have a knowledge gap about this topic. "
         f"Provide key facts, recent developments (2025-2026), and actionable insights. "
-        f"{(focus or DEFAULT_RESEARCH_FOCUS).rstrip()} "
+        f"Focus on what someone working with this topic would need to know. "
         f"Be concise (500 words max). Cite sources where possible. "
         f"If you cannot identify this entity, or find nothing verifiable about it, reply with one line "
         f"that starts with {NO_ANSWER_SENTINEL} followed by the reason, and nothing else."
@@ -1352,7 +1367,7 @@ def sweep_stored_non_answers(db_path: str, apply: bool = False) -> Dict[str, Any
             v = classify_research_output(body)
             if not v["answer"]:
                 found.append({"memory_id": mid, "rule": v["rule"], "reason": v["reason"],
-                              "head": content.split("\n", 1)[0][:120]})
+                              **_marks.shown(conn, mid, head=content.split("\n", 1)[0][:120])})
         by_rule: Dict[str, int] = {}
         for f in found:
             by_rule[f["rule"]] = by_rule.get(f["rule"], 0) + 1
@@ -1438,13 +1453,31 @@ APPROVED_TOPICS_FILE = "approved_research_topics.json"
 DISPATCH_CLOSED = "RESEARCH_DISPATCH_CLOSED"
 
 
+def _opened_file(conn: sqlite3.Connection) -> Optional[str]:
+    """The file this connection has open."""
+    for _seq, name, path in conn.execute("PRAGMA database_list").fetchall():
+        if name == "main":
+            return path or None
+    return None
+
+
 def approved_topics(db_path: str) -> Tuple[Optional[FrozenSet[str]], str]:
     """(the exact topics the owner approved, "") or (None, why the file grants nothing).
 
     The file is a JSON list of strings, or an object whose only key is "topics". Any other shape grants nothing: a key
     this version does not know may be a limit it would not be keeping. Strings are compared whole, with no trimming and
-    no case folding. No environment variable and no argument takes the file's place."""
-    path = Path(os.path.abspath(db_path)).parent / APPROVED_TOPICS_FILE
+    no case folding. No environment variable and no argument takes the file's place.
+
+    The folder is the one that really holds the brain, whatever path named it. A brain reached through a link to another
+    folder, and an approval file that is one, grant nothing: either would let whoever writes the link choose the file."""
+    given = os.path.abspath(db_path)
+    real = os.path.realpath(given)
+    folder = os.path.dirname(real)
+    if os.path.islink(given) and os.path.realpath(os.path.dirname(given)) != folder:
+        return None, "brain-path-is-a-link"
+    path = Path(folder) / APPROVED_TOPICS_FILE
+    if os.path.dirname(os.path.realpath(path)) != folder:
+        return None, "approval-file-is-a-link"
 
     def pairs(items: List[Tuple[str, Any]]) -> Dict[str, Any]:
         if len(items) != len({k for k, _v in items}):
@@ -1454,7 +1487,7 @@ def approved_topics(db_path: str) -> Tuple[Optional[FrozenSet[str]], str]:
         doc = json.loads(path.read_bytes().decode("utf-8"), object_pairs_hook=pairs)
     except FileNotFoundError:
         return None, "no-approval-file"
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError, MemoryError):
         return None, "approval-file-unreadable"
     topics = doc.get("topics") if isinstance(doc, dict) and set(doc) == {"topics"} else doc
     if not isinstance(topics, list) or not all(isinstance(t, str) and t for t in topics):
@@ -1479,6 +1512,21 @@ def _dispatch_refused(reason: str, n: int, selection_policy: Any) -> Dict[str, A
                         f"{APPROVED_TOPICS_FILE} beside the brain ({reason}). Nothing was sent and no prompt was built.")}
 
 
+def parse_gap_ids(text: Optional[str]) -> Optional[List[int]]:
+    """`--gap-ids 1,2`. What is not a whole number stays what it is, and the dispatcher refuses it by name."""
+    if not text:
+        return None
+    return [int(t) if t.isascii() and t.isdigit() and len(t) < 19 else t for t in (p.strip() for p in text.split(","))]
+
+
+def refused_exit(result: Dict[str, Any], gap_ids: Optional[List[int]]) -> int:
+    """The exit code: 1 when a gap asked for by id was not sent because it is not approved (or the ids are not ids). A
+    scheduled run that finds nothing approved is not a failure: it says so and exits 0."""
+    if result.get("status") == "error" and result.get("code") == "GAP_IDS_INVALID":
+        return 1
+    return 1 if gap_ids and (result.get("status") == "refused" or result.get("refused")) else 0
+
+
 def dispatch_auto_research(
     db_path: str,
     gap_ids: Optional[List[int]] = None,
@@ -1498,6 +1546,7 @@ def dispatch_auto_research(
     Results are stored as NEW memories (kind='semantic', tagged 'gap-research'), marked outside in their INSERT.
     """
     t0 = time.time()
+    max_gaps = max_gaps if type(max_gaps) is int else 5
     # M12: the retired switch is refused before anything is opened; `claude_cli` is the unit's alias
     if method in RETIRED_METHODS:
         return {"status": "error", "message": "--method %s is retired: the owner's recorded overnight thinker "
@@ -1514,6 +1563,8 @@ def dispatch_auto_research(
                 "selection_policy": fair_select_policy()}
 
     approved, closed_reason = approved_topics(db_path)
+    if approved is not None and os.path.realpath(_opened_file(conn) or "") != os.path.realpath(db_path):
+        approved, closed_reason = None, "brain-path-changed"
     if approved is not None and not approved:
         approved, closed_reason = None, "no-topic-approved"
     if approved is not None:
@@ -1530,6 +1581,11 @@ def dispatch_auto_research(
     # forever.  Measured consequence: researched=1 held for exactly the ids {1..66}
     # -- a contiguous prefix, no exception -- across 94 days and 60 successes.  The
     # filter was never the problem; the ORDER BY was.  See select_gaps_fair().
+    if gap_ids and not all(type(i) is int and abs(i) < 2 ** 63 for i in gap_ids):
+        conn.close()
+        return {"status": "error", "code": "GAP_IDS_INVALID", "error": "GAP_IDS_INVALID", "dispatched": 0,
+                "message": "gap ids are whole numbers, as the gap report prints them. Nothing was sent.",
+                "selection_policy": fair_select_policy()}
     if gap_ids:
         rows = conn.execute(
             f"SELECT id, entity, gap_type, score FROM gap_inventory WHERE id IN ({','.join('?' * len(gap_ids))}) AND researched = 0",
@@ -1547,7 +1603,7 @@ def dispatch_auto_research(
             limit=max_gaps,
         )
 
-    rows = rows[:max_gaps]
+    rows = rows[:max(0, max_gaps)]
     if approved is None:
         for _id, _entity, gap_type, _score in rows:
             _record_refusal(conn, gap_type, closed_reason)
@@ -1558,8 +1614,10 @@ def dispatch_auto_research(
 
     if not rows:
         conn.close()
-        return {"status": "ok", "message": "No eligible gaps for research.", "dispatched": 0,
-                "selection_policy": selection_policy}
+        return {"status": "ok", "dispatched": 0, "selection_policy": selection_policy,
+                "message": ("No eligible gaps for research." if gap_ids else
+                            "No eligible gaps for research: in this release no gap is taken by itself. Name the gaps "
+                            "whose topics you approved: --gap-ids 1,2 (the ids are in the gap report).")}
 
     unapproved = [r for r in rows if r[1] not in approved]
     for _id, _entity, gap_type, _score in unapproved:
@@ -1602,7 +1660,7 @@ def dispatch_auto_research(
     results = []
 
     for gap_id, entity, gap_type, score in rows:
-        prompt = _build_research_prompt(entity, gap_type, _research_focus(cfg))
+        prompt = _build_research_prompt(entity)
 
         # Log dispatch start (the column says 'thinker'; the command names the backend that was asked)
         # -- never the topic: the gap row holds it, and the approval names it by hash.
@@ -1804,6 +1862,7 @@ def dispatch_auto_research(
         "status": "ok",
         "dispatched": len(results),
         "refused": len(unapproved),
+        **({"code": DISPATCH_CLOSED, "reason": "topic-not-approved"} if unapproved else {}),
         "method": method,
         "selection_policy": selection_policy,
         "results": results,
@@ -1913,6 +1972,7 @@ def unit_tests():
         );
         INSERT INTO metadata (key, value) VALUES ('schema_version', '3.8-test');
     """)
+    _marks.fixture_schema(conn)
 
     now = datetime.utcnow()
     old = (now - timedelta(days=90)).isoformat()
@@ -2156,21 +2216,16 @@ def unit_tests():
     # ---- Test 20: Research prompt generation ----
     prompt = _build_research_prompt("Faraday Grid competitive landscape", "weak_recall")
     assert_true("T20: prompt contains entity", "Faraday Grid" in prompt)
-    assert_true("T20b: the generic focus by default", DEFAULT_RESEARCH_FOCUS in prompt)
     _prev = os.environ.get("WIZARD_GAP_RESEARCH_FOCUS")
     os.environ["WIZARD_GAP_RESEARCH_FOCUS"] = "Focus on what a gardener would need to know."
     try:
-        assert_true("T20c: the owner's focus from the environment",
-                    "a gardener" in _build_research_prompt("x", "weak_recall", _research_focus({})))
-        assert_true("T20d: a config value wins over the environment",
-                    "a sailor" in _build_research_prompt("x", "weak_recall",
-                                                         _research_focus({"research_focus": "Focus on a sailor."})))
+        assert_eq("T20b: no setting adds a word to what is sent",
+                  _build_research_prompt("Faraday Grid competitive landscape", "thin_entity"), prompt)
     finally:
         if _prev is None:
             os.environ.pop("WIZARD_GAP_RESEARCH_FOCUS", None)
         else:
             os.environ["WIZARD_GAP_RESEARCH_FOCUS"] = _prev
-    assert_true("T20: prompt contains context", "poor results" in prompt)
     assert_true("T20: prompt requests concise output", "500 words" in prompt)
 
     # ---- Test 21: Config merge ----
@@ -2223,7 +2278,8 @@ def main():
     parser.add_argument('--max-gaps', type=int, default=5,
                         help="Max gaps to research per run")
     parser.add_argument('--gap-ids', type=str, default=None,
-                        help="Comma-separated gap IDs to research")
+                        help="Comma-separated gap IDs to research: in this release a gap is sent only when it is named "
+                             "here and its exact topic is in approved_research_topics.json beside the brain")
     parser.add_argument('--config', default=None,
                         help="Path to JSON config file")
     parser.add_argument('--limit', type=int, default=25,
@@ -2266,9 +2322,7 @@ def main():
         result = get_gap_report(args.db_path, batch_id=args.batch_id, limit=args.limit)
         print(json.dumps(result, indent=2))
     elif args.research:
-        gap_ids = None
-        if args.gap_ids:
-            gap_ids = [int(x.strip()) for x in args.gap_ids.split(',')]
+        gap_ids = parse_gap_ids(args.gap_ids)
         result = dispatch_auto_research(
             args.db_path,
             gap_ids=gap_ids,
@@ -2277,6 +2331,7 @@ def main():
             config=config,
         )
         print(json.dumps(result, indent=2))
+        sys.exit(refused_exit(result, gap_ids))
     elif args.ack is not None:
         result = acknowledge_gap(args.db_path, args.ack, reason=args.ack_reason)
         print(json.dumps(result, indent=2))

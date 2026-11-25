@@ -86,6 +86,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 logger = logging.getLogger(__name__)
 
 # ============================================================
@@ -658,7 +664,10 @@ def member_edge_hash(conn: sqlite3.Connection, member_ids: Sequence[int], cfg: D
     internal.sort()
     # Include the member-id set itself: if a member leaves/joins (even with no
     # edge change among the rest) the community's identity changed.
-    payload = json.dumps({"members": ids, "edges": internal}, separators=(",", ":"))
+    # And which members are outside: a summary written before one was marked holds its words without the frame.
+    outside = sorted(set(ids) - marks.clean_ids(conn, ids))
+    payload = json.dumps({"members": ids, "edges": internal, **({"outside": outside} if outside else {})},
+                         separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -908,10 +917,11 @@ def _extractive_summary(conn: sqlite3.Connection, members: Sequence[int], cfg: D
         ids + [cap],
     ).fetchall()
     lines = []
-    for r in rows:
-        s = (r[1] or "").replace("\n", " ").strip()
-        if s:
-            lines.append(f"  - #{r[0]}: {s[:160]}")
+    # This text is stored in another table, where no mark follows it: an outside member's line carries the frame itself.
+    for row in [{"id": r[0], "summary": (r[1] or "").replace("\n", " ").strip()[:160]} for r in rows]:
+        if row["summary"]:
+            marks.present_rows(conn, [row])
+            lines.append("  - #%s: %s" % (row["id"], row["summary"].replace("\n", " ")))
     head = f"Theme '{label}' ({len(ids)} memories):"
     return head + "\n" + "\n".join(lines) if lines else head
 

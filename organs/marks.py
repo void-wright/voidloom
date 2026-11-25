@@ -52,6 +52,8 @@ NEW_TABLES = ("research_configs", "research_runs", "memory_research_runs", "memo
 DERIVATION_TYPES = ("consolidation", "reflection", "distillation", "dream_synthesis", "council_deliberation",
                     "manual_derivation")
 
+#: the largest id SQLite can hold
+MAX_ID = 2 ** 63 - 1
 CLEAN, MARKED, UNREADABLE = "clean", "marked", "unreadable"
 _CHUNK = 400
 
@@ -108,32 +110,41 @@ def require_ready(conn: sqlite3.Connection, what: str) -> None:
         raise needs_migration(what)
 
 
-def _migration_statements() -> Iterable[Tuple[List[str], str]]:
-    """(its words, the statement) for each statement of migration_046: one copy of the schema, the migration's."""
+def _migration_statements(name: str = "migration_046_marks.sql") -> Iterable[Tuple[List[str], str]]:
+    """(its words, the statement) for each statement of a migration: one copy of the schema, the migration's."""
     import schema_migrator
-    path = Path(__file__).resolve().parent.parent / "migrations" / "migration_046_marks.sql"
+    path = Path(__file__).resolve().parent.parent / "migrations" / name
     for stmt in schema_migrator.iter_statements(path.read_text(encoding="utf-8")):
         yield [w for line in stmt.splitlines() if not line.strip().startswith("--") for w in line.split()], stmt
 
 
 _TRIGGERS: Optional[Dict[str, str]] = None
+#: the full-text trigger this package narrowed, and the table it needs
+FTS_TRIGGER, FTS_TABLE = "memories_fts_after_update", "memories_fts"
 
 
 def shipped_triggers() -> Dict[str, str]:
-    """name -> CREATE TRIGGER for every trigger migration_046 makes."""
+    """name -> CREATE TRIGGER for every trigger the marks rest on: migration_046's, and the older one that keeps an
+    outside mark from being cleared."""
     global _TRIGGERS
     if _TRIGGERS is None:
         out: Dict[str, str] = {}
         try:
-            for words, stmt in _migration_statements():
-                if words[:2] == ["CREATE", "TRIGGER"]:
-                    name = words[5] if words[2] == "IF" else words[2]
-                    if name.startswith("trg_marks_"):
+            for source in ("migration_029_warden_untrusted_source.sql", "migration_046_marks.sql"):
+                for words, stmt in _migration_statements(source):
+                    if words[:2] == ["CREATE", "TRIGGER"]:
+                        name = words[5] if words[2] == "IF" else words[2]
                         out[name] = stmt
         except (ImportError, OSError, IndexError):
             return {}                       # a partial lay: nothing to re-assert from, and doctor says so
         _TRIGGERS = out
     return _TRIGGERS
+
+
+def _as_stored(sql: Optional[str]) -> str:
+    """A trigger's SQL as two copies of it compare: comments before it and IF NOT EXISTS gone, whitespace collapsed."""
+    text = "\n".join(line for line in (sql or "").splitlines() if not line.strip().startswith("--"))
+    return " ".join(text.replace("IF NOT EXISTS ", "", 1).split()).rstrip(";").rstrip()
 
 
 def fixture_schema(conn: sqlite3.Connection) -> None:
@@ -150,23 +161,73 @@ def fixture_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+_SHIPPED_AS_STORED: Dict[str, str] = {}
+
+
+def wrong_triggers(conn: sqlite3.Connection) -> Dict[str, str]:
+    """name -> 'missing' or 'altered', for each trigger this brain should hold and does not hold as it was shipped. A
+    trigger that kept its name and lost its body is as gone as one that was dropped."""
+    have = {n: q for n, q in conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'").fetchall()}
+    out: Dict[str, str] = {}
+    if not _SHIPPED_AS_STORED:
+        _SHIPPED_AS_STORED.update({n: _as_stored(q) for n, q in shipped_triggers().items()})
+    for name, sql in _SHIPPED_AS_STORED.items():
+        if name not in have:
+            if name != FTS_TRIGGER:         # the full-text index's own migration makes it; see ensure_triggers
+                out[name] = "missing"
+        elif have[name] != sql and _as_stored(have[name]) != sql:
+            out[name] = "altered"
+    return out
+
+
 def missing_triggers(conn: sqlite3.Connection) -> List[str]:
-    have = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'").fetchall()}
-    return sorted(set(shipped_triggers()) - have)
+    return sorted(n for n, how in wrong_triggers(conn).items() if how == "missing")
+
+
+def _newer_brain(conn: sqlite3.Connection) -> bool:
+    """Has a release newer than this package written this brain's schema? Then a trigger whose text is not ours may be
+    theirs."""
+    import schema_migrator
+    here = Path(__file__).resolve().parent.parent / "migrations"
+    known = {p.name for p in here.glob("migration_*.sql")}
+    newest = max(known, default="")
+    try:
+        ran = {r[0] for r in conn.execute("SELECT name FROM schema_migrations").fetchall()}
+    except sqlite3.Error:
+        return False
+    return any(n not in known and n > newest for n in ran if isinstance(n, str) and n.startswith("migration_"))
 
 
 def ensure_triggers(conn: sqlite3.Connection) -> List[str]:
-    """Put back any trigger this brain lost. Only on a migrated brain, only what is missing, and never raises: a
-    read-only brain keeps whatever it has. Returns the names put back."""
+    """Put back any trigger this brain lost or that no longer says what was shipped. Only on a migrated brain, only what
+    is wrong, all of them or none, and never raises: a read-only brain keeps whatever it has. A trigger that differs is
+    left alone on a brain a newer release has migrated. Returns the names put back."""
     try:
         if schema_state(conn) != "ready":
             return []
-        lost = missing_triggers(conn)
-        for name in lost:
-            conn.execute(shipped_triggers()[name])
-        if lost:
+        wrong = wrong_triggers(conn)
+        if not wrong:
+            return []
+        newer = _newer_brain(conn)
+        todo = [n for n, how in wrong.items() if how == "missing" or not newer]
+        if FTS_TRIGGER in todo and conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (FTS_TABLE,)).fetchone() is None:
+            todo.remove(FTS_TRIGGER)        # a trigger on a missing index would fail every later change of a memory
+        if not todo:
+            return []
+        own = not conn.in_transaction
+        if own:
+            conn.execute("BEGIN IMMEDIATE")
+        try:
+            for name in todo:
+                conn.execute(f"DROP TRIGGER IF EXISTS {name}")
+                conn.execute(shipped_triggers()[name])
+        except BaseException:
+            if own:
+                conn.rollback()
+            raise
+        if own:
             conn.commit()
-        return lost
+        return sorted(todo)
     except Exception:  # noqa: BLE001 -- this runs on every open; an open never fails over it
         return []
 
@@ -358,6 +419,47 @@ def present_rows(conn: sqlite3.Connection, rows: Sequence[Any], *, fields: Seque
     return report
 
 
+def present_copies(conn: sqlite3.Connection, rows: Sequence[Any], *, fields: Sequence[str],
+                   id_keys: Sequence[str]) -> Dict[str, Any]:
+    """The presenter for text held outside `memories` (a digest line, a log row, a node of a map) that was taken from the
+    rows `id_keys` name. One that is not read clean frames it, and so does a copy that names none. In place."""
+    todo = [r for r in rows if isinstance(r, dict) and r.get("provenance_framed") is not True]
+    ids = {i for r in todo for i in (r.get(k) for k in id_keys) if i is not None}
+    marks = read_marks(conn, ids)
+    report: Dict[str, Any] = {"framed": 0, "degraded_reason": marks.error if todo else None}
+    for row in todo:
+        mine = [marks[i] for i in (row.get(k) for k in id_keys) if i is not None]
+        row["outside"] = not mine or any(m.outside for m in mine)
+        row["research"] = any(m.research for m in mine)
+        if marks.error:
+            row["degraded_reason"] = marks.error
+        if not row["outside"]:
+            continue
+        report["framed"] += 1
+        row["provenance_framed"] = True
+        row["provenance_frame_reason"] = ["untrusted_source" if mine and all(m.state != UNREADABLE for m in mine)
+                                          else "mark_unreadable"]
+        for field in fields:
+            if field in row:
+                row[field] = frame_text(row[field])
+    return report
+
+
+def shown(conn: sqlite3.Connection, memory_id: Any, **text: Any) -> Dict[str, Any]:
+    """One row's text, ready to be shown: the fields given, and what `present_rows` adds to a row."""
+    row = {"id": memory_id, **text}
+    present_rows(conn, [row], fields=tuple(text))
+    row.pop("id")
+    return row
+
+
+def clean_ids(conn: sqlite3.Connection, ids: Iterable[Any]) -> set:
+    """Which of these rows were read, and read as clean."""
+    wanted = [i for i in ids]
+    marks = read_marks(conn, wanted)
+    return {i for i in wanted if not marks[i].outside}
+
+
 # --------------------------------------------------------------------------------------------------------------------
 # WRITE
 # --------------------------------------------------------------------------------------------------------------------
@@ -380,14 +482,23 @@ def parse_source_ids(value: Any) -> List[int]:
         if text.startswith("["):
             try:
                 items = json.loads(text)
-            except ValueError:
+            except (ValueError, RecursionError):
                 items = None
         else:
             items = [t.strip().lstrip("#") for t in text.split(",") if t.strip()]
-            items = [int(t) if t.isdigit() else None for t in items]
-    if not isinstance(items, (list, tuple)) or not all(type(i) is int and i > 0 for i in items):
-        raise MarksError("SOURCE_IDS_INVALID", f"source ids must be memory ids (a list, or 1,2,3); got {value!r}")
+            items = [int(t) if t.isascii() and t.isdigit() and len(t) <= 19 else None for t in items]
+    if not isinstance(items, (list, tuple)) or not all(type(i) is int and 0 < i <= MAX_ID for i in items):
+        raise MarksError("SOURCE_IDS_INVALID", "source ids must be memory ids (a list, or 1,2,3); got "
+                         f"{ascii(value)[:120]}")
     return list(dict.fromkeys(items))
+
+
+def storable(text: Any) -> bool:
+    """Text SQLite can hold: no lone surrogate."""
+    try:
+        return isinstance(text, str) and bool(text.encode("utf-8") or True)
+    except UnicodeEncodeError:
+        return False
 
 
 def asked(outside: Any = False, research: Any = None, author: Any = None, session_id: Any = None,
@@ -407,6 +518,9 @@ def store_marks(conn: sqlite3.Connection, *, outside: Any = False, research: Any
         return StoreMarks({}, [], False, schema_state(conn) != "ready")
     if author is not None and author not in AUTHORS:
         raise MarksError("AUTHOR_UNKNOWN", f"author must be one of {', '.join(AUTHORS)}; got {author!r}")
+    for name, text in (("session_id", session_id), ("parent_ref", parent_ref)):
+        if text is not None and not storable(text):
+            raise MarksError("MARK_INVALID", f"{name} must be text that can be stored; got {ascii(text)[:120]}")
     parents = parse_source_ids(source_ids)
     require_ready(conn, "a store that carries a mark or a source")
     cols: Dict[str, Any] = {"author": author, "session_id": session_id, "parent_ref": parent_ref}
@@ -434,11 +548,11 @@ def capped_confidence(value: Any) -> float:
 
 def _config_of(conn: sqlite3.Connection, run_id: Any) -> str:
     row = None
-    if isinstance(run_id, str) and run_id:
+    if run_id and storable(run_id):
         row = conn.execute("SELECT config_id FROM research_runs WHERE run_id = ?", (run_id,)).fetchone()
     if row is None:
         raise MarksError("RESEARCH_NEEDS_RUN",
-                         f"a research memory names a registered run; {run_id!r} is not one. Register it first: "
+                         f"a research memory names a registered run; {ascii(run_id)[:120]} is not one. Register it first: "
                          "voidloom research-register --config FILE --run RUN_ID. Nothing was written.")
     return row[0]
 
@@ -481,9 +595,11 @@ def read_back(db: Union[str, Path], memory_id: Any, *, content: str, outside: bo
                                                   or got.get("research_mark") != 1):
                 why = "the row does not name its research run"
             else:
+                # A brain that cannot hold every mark says nothing about this row's: null, never a clean false.
+                ready = set(NEW_COLUMNS) <= cols and "untrusted_source" in cols
                 return {"stored_sha256": sha,
-                        "marks": {"outside": state_of(got.get("untrusted_source", 0)) != CLEAN,
-                                  "research": got.get("research_mark", 0) != 0,
+                        "marks": {"outside": state_of(got["untrusted_source"]) != CLEAN if ready else None,
+                                  "research": got["research_mark"] != 0 if ready else None,
                                   "research_run_id": got.get("research_run_id"),
                                   "research_config_id": got.get("research_config_id")}}
     except (sqlite3.Error, OSError, ValueError) as e:
@@ -630,12 +746,12 @@ def _scalar(conn: sqlite3.Connection, column: str, memory_id: int) -> Any:
     return row[0] if row else None
 
 
-def ceiling(conn: sqlite3.Connection, memory_id: int, importance: Any, *, always: bool = False) -> Any:
+def ceiling(conn: sqlite3.Connection, memory_id: int, importance: Any) -> Any:
     """`importance` as this row may hold it: an outside row with recorded parents never holds more than they cap it at.
-    `always` applies the cap to any derived row (its text is being rewritten). A brain with no parents to read answers
-    the value unchanged."""
+    Any other row holds what it is given, derived or not: its owner's value is not this function's to lower. A brain with
+    no parents to read answers the value unchanged."""
     try:
-        if schema_state(conn) != "ready" or not (always or read_marks(conn, [memory_id])[memory_id].outside):
+        if schema_state(conn) != "ready" or not read_marks(conn, [memory_id])[memory_id].outside:
             return importance
         parents = parents_of(conn, memory_id)
         return _importance(importance, inherit(conn, parents).cap) if parents else importance
@@ -666,8 +782,10 @@ def canonical_config(spec: Any) -> Tuple[str, str]:
         raise MarksError("CONFIG_INVALID", "a research configuration is a non-empty JSON object")
     try:
         text = json.dumps(spec, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-    except (TypeError, ValueError) as e:
-        raise MarksError("CONFIG_INVALID", f"the configuration is not plain JSON: {e}")
+    except (TypeError, ValueError, RecursionError) as e:
+        raise MarksError("CONFIG_INVALID", f"the configuration is not plain JSON: {type(e).__name__}")
+    if not storable(text):
+        raise MarksError("CONFIG_INVALID", "the configuration holds a character that cannot be stored (a lone surrogate)")
     return sha256_text(text), text
 
 
@@ -709,13 +827,15 @@ def register(db: Union[str, Path], spec: Any, run_id: Optional[str] = None) -> D
 
 def health(db: Union[str, Path]) -> Dict[str, Any]:
     """Read-only: is this brain able to hold marks, and are the triggers that carry them all there?"""
-    out: Dict[str, Any] = {"state": UNREADABLE, "missing_triggers": [], "odd_marks": None, "outside": None, "research": None}
+    out: Dict[str, Any] = {"state": UNREADABLE, "missing_triggers": [], "altered_triggers": [], "odd_marks": None, "outside": None, "research": None}
     try:
         conn = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
         try:
             out["state"] = schema_state(conn)
             if out["state"] == "ready":
-                out["missing_triggers"] = missing_triggers(conn)
+                wrong = wrong_triggers(conn)
+                out["missing_triggers"] = sorted(n for n, how in wrong.items() if how == "missing")
+                out["altered_triggers"] = sorted(n for n, how in wrong.items() if how == "altered")
                 out["research"] = conn.execute("SELECT COUNT(*) FROM memories WHERE research_mark = 1").fetchone()[0]
             if out["state"] in ("ready", "premark"):
                 out["outside"] = conn.execute("SELECT COUNT(*) FROM memories WHERE untrusted_source IS 1").fetchone()[0]
@@ -727,8 +847,10 @@ def health(db: Union[str, Path]) -> Dict[str, Any]:
         out["error"] = f"{type(e).__name__}: {e}"
     if out["state"] == "ready" and out["missing_triggers"]:
         out["verdict"] = "MARK_TRIGGERS_MISSING"
+    elif out["state"] == "ready" and out["altered_triggers"]:
+        out["verdict"] = "MARK_TRIGGERS_ALTERED"
     elif out["state"] == "ready":
-        out["verdict"] = "ok"
+        out["verdict"] = "ok" if shipped_triggers() else "UNMEASURED"
     elif out["state"] == UNREADABLE:
         out["verdict"] = "BRAIN_UNREADABLE"
     else:

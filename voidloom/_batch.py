@@ -276,6 +276,8 @@ def store_batch(items: Sequence[StoreItem], *,
             for key in ("research", "author", "session_id", "parent_ref"):
                 if kw[key] is None:
                     kw[key] = defaults.get(key)
+            if "source_ids" not in item:            # an item that says [] says it has none
+                kw["source_ids"] = defaults.get("source_ids")
             if cats is not None and kw["category"] not in cats:
                 results.append({
                     "index": i, "status": "error",

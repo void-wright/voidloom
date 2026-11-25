@@ -68,6 +68,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 logger = logging.getLogger(__name__)
 
 VALID_TRANSFORMATION_TYPES = (
@@ -249,6 +255,7 @@ def get_derived_from(
             "source_category": r[10],
         }
         results.append(entry)
+    marks.present_rows(conn, results, fields=("source_summary",), id_key="source_memory_id")
     return results
 
 
@@ -287,6 +294,7 @@ def get_derivatives_of(
             "derived_category": r[10],
         }
         results.append(entry)
+    marks.present_rows(conn, results, fields=("derived_summary",), id_key="derived_memory_id")
     return results
 
 
@@ -336,6 +344,7 @@ def get_provenance_chain(
         "confidence": None,
         "provenance_edges": [],
     })
+    marks.present_rows(conn, chain, id_key="memory_id")
     visited.add(memory_id)
 
     # BFS traversal upward through provenance edges.
@@ -357,7 +366,8 @@ def get_provenance_chain(
             chain.append({
                 "level": current_level,
                 "memory_id": source_id,
-                "summary": parent.get("source_summary"),
+                "summary": parent.get("source_summary"),          # already framed
+                "outside": parent["outside"],
                 "kind": parent.get("source_kind"),
                 "category": parent.get("source_category"),
                 "transformation_type": parent["transformation_type"],
@@ -405,7 +415,8 @@ def trace_full_lineage(
             descendants.append({
                 "level": current_level,
                 "memory_id": derived_id,
-                "summary": child.get("derived_summary"),
+                "summary": child.get("derived_summary"),          # already framed
+                "outside": child["outside"],
                 "kind": child.get("derived_kind"),
                 "category": child.get("derived_category"),
                 "transformation_type": child["transformation_type"],

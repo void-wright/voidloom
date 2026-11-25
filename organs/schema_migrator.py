@@ -389,8 +389,8 @@ def audit(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
     ref, unmeasurable, files_with_errors = build_reference(mdir, keep=kept)
     # A table is not the whole of what a migration makes. A trigger that is gone leaves every table in place and the rule
     # it held unenforced, and a column that is gone leaves its table. Compared by name against the same reference; a
-    # trigger is also compared by its text. Only the FULL-TEXT triggers are exempt from the text comparison: an older
-    # release re-creates them in its own words.
+    # trigger is also compared by its text. Two of the FULL-TEXT triggers are exempt from the text comparison: an older
+    # release re-creates them in its own words, which mean the same. The third was narrowed, and is compared.
     _probe = connect(db)
     try:
         vec = has_vec0(_probe)
@@ -405,7 +405,8 @@ def audit(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
     missing = sorted(ref - have)
     missing_triggers = sorted(set(want_trg) - set(have_trg))
     altered_triggers = sorted(n for n, q in want_trg.items()
-                              if n in have_trg and have_trg[n] != q and not n.startswith("memories_fts_"))
+                              if n in have_trg and have_trg[n] != q
+                              and (n == "memories_fts_after_update" or not n.startswith("memories_fts_")))
     return {
         "database": db,
         "migrations_dir": str(mdir),
@@ -516,6 +517,15 @@ def apply(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
                 break                      # no progress; retrying cannot help
             pending = failed_now
         files = [results[f.name] for f in _migration_files(mdir)]
+        # A file that runs again because ONE of its objects was lost re-creates the others in its own words, and a later
+        # file that had changed one of them is not run again for it. The triggers the marks rest on are put back last.
+        restored: List[str] = []
+        if pathlib.Path(mdir).resolve() == migrations_dir().resolve():
+            try:
+                import marks
+                restored = marks.ensure_triggers(conn)
+            except ImportError:                     # a partial lay: audit below says what is missing
+                pass
     finally:
         conn.close()
     errs = [(r["file"], r["errors"]) for r in files if r["errors"]]
@@ -528,6 +538,7 @@ def apply(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
         "passes": passes,
         "bootstrapped_base_schema": bootstrapped,
         "skipped_already_applied": skipped,
+        "triggers_restored": restored,
         # These count STATEMENTS EXECUTED, not objects created: `CREATE TABLE
         # IF NOT EXISTS` executes as a silent no-op, so a clean re-run still
         # reports a large `statements_executed`.  Naming it "applied" made a

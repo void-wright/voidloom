@@ -2701,11 +2701,12 @@ def cmd_update(args):
     held = marks.read_marks(conn, [args.id])
     outside = held.error != "PREMARK" and held[args.id].outside
     importance = args.importance
+    lowered = {}                # what a mark kept below what was asked for or stored, named in the answer
     if args.content:
         updates.append("content = ?")
         params.append(args.content)
         updates.append("version = version + 1")
-        if importance is None:
+        if importance is None and outside:
             importance = conn.execute("SELECT importance FROM memories WHERE id = ?", (args.id,)).fetchone()[0]
 
     if args.summary:
@@ -2713,8 +2714,10 @@ def cmd_update(args):
         params.append(args.summary)
 
     if importance is not None:
-        # a derived row whose text is rewritten, or one that is outside, is worth no more than what it was made from
-        capped = marks.ceiling(conn, args.id, importance, always=bool(args.content))
+        # an outside row is worth no more than what it was made from; any other row holds what its owner says
+        capped = marks.ceiling(conn, args.id, importance) if outside else importance
+        if capped != importance:
+            lowered["importance_capped"] = {"asked": importance, "stored": capped}
         if args.importance is not None or capped != importance:
             updates.append("importance = ?")
             params.append(capped)
@@ -2739,6 +2742,8 @@ def cmd_update(args):
             updates.append("confidence = ?")
             # human-set override = full confidence, except that naming a kind does not make outside text trusted
             params.append(marks.capped_confidence(1.0) if outside else 1.0)
+            if outside:
+                lowered["confidence_capped"] = {"asked": 1.0, "stored": marks.capped_confidence(1.0)}
 
     if not updates:
         conn.close()
@@ -2784,6 +2789,7 @@ def cmd_update(args):
         "action": "update",
         "memory_id": args.id,
         "re_embedded": re_embedded,
+        **lowered,
         "time_ms": int((time.time() - t0) * 1000),
     })
 
@@ -3831,9 +3837,7 @@ def cmd_gap_research(args):
             reason=getattr(args, 'ack_reason', 'seen'),
         )
     else:
-        gap_ids = None
-        if getattr(args, 'gap_ids', None):
-            gap_ids = [int(x.strip()) for x in args.gap_ids.split(',')]
+        gap_ids = gap_mapping.parse_gap_ids(getattr(args, 'gap_ids', None))
         config = None
         if getattr(args, 'config', None):
             config = json.loads(Path(args.config).read_text())
@@ -3847,6 +3851,8 @@ def cmd_gap_research(args):
 
     result["time_ms"] = int((time.time() - t0) * 1000)
     _output(result)
+    if getattr(args, 'ack', None) is None and gap_mapping.refused_exit(result, gap_ids):
+        sys.exit(1)
 
 
 def cmd_anticipate(args):
@@ -3972,6 +3978,7 @@ def cmd_anticipate(args):
                     "id": m["id"],
                     "tier": m.get("tier", 3),
                     "summary": (m.get("summary") or "")[:200],
+                    "outside": m.get("outside"),
                     "category": m.get("category", ""),
                     "tags": m.get("tags", [])[:5],
                 }
@@ -4509,6 +4516,12 @@ def main():
     p_store.add_argument("--parent", dest="parent_ref", default=None, help="The message or item it answers (recorded only).")
     p_store.add_argument("--source-ids", dest="source_ids", default=None, metavar="1,2,3",
                          help="The memories it was written from: it takes their marks.")
+    # Shortened flags that named one option before another came to share their first letters: they still name it.
+    p_store.add_argument("--so", "--sou", "--sour", "--sourc", "--source", "--source-", dest="source_user",
+                         default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_store.add_argument("--p", dest="project", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    p_store.add_argument("--au", "--aut", dest="auto_edges", action="store_true", default=argparse.SUPPRESS,
+                         help=argparse.SUPPRESS)
     p_store.add_argument("--allow-secret", dest="allow_secret", action="store_true",
                          help="Voidloom #176 A1: override the pre-store secret-"
                               "detector. Instead of refusing, REDACT any matched "
@@ -4548,6 +4561,8 @@ def main():
     # VOIDLOOM_NO_LOG_USAGE) disables it per-call.
     p_recall.add_argument("--no-log", dest="no_log", action="store_true", default=False,
                           help="Leave no trace of this recall: no access row, no access count, no usage or met row.")
+    p_recall.add_argument("--no-lo", dest="no_log_usage", action="store_true", default=argparse.SUPPRESS,
+                          help=argparse.SUPPRESS)
     p_recall.add_argument("--no-log-usage", dest="no_log_usage", action="store_true", default=False,
                           help="Disable procedural usage-logging (default-on; env VOIDLOOM_NO_LOG_USAGE).")
     # Loop A re-rank kill-switches. All three organs are DEFAULT-ON; these
@@ -4694,7 +4709,9 @@ def main():
     p_gap_research = subparsers.add_parser("gap-research",
                                             help="Dispatch auto-research for knowledge gaps (L4 Piece 6)")
     p_gap_research.add_argument("--gap-ids", dest="gap_ids", default=None,
-                                help="Comma-separated gap IDs to research")
+                                help="Comma-separated gap IDs to research: in this release a gap is sent only when it "
+                                     "is named here and its exact topic is in approved_research_topics.json beside "
+                                     "the brain")
     p_gap_research.add_argument("--method", default="thinker",
                                 choices=["thinker", "claude_cli", "agy"],
                                 help="RETIRED switch kept as an alias: the recorded overnight thinker "

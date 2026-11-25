@@ -40,6 +40,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -327,7 +334,9 @@ def stilled_context_memories(db_path: str, session_id: int,
                     "SELECT id, summary FROM memories ORDER BY id DESC LIMIT ?",
                     (int(limit),),
                 ).fetchall()
-        return [{"id": r["id"], "summary": r["summary"]} for r in rows]
+        shown = [{"id": r["id"], "summary": r["summary"]} for r in rows]
+        marks.present_rows(conn, shown)
+        return shown
     except sqlite3.Error:
         return []
     finally:

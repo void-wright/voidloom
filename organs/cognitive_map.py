@@ -31,6 +31,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 # The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
 try:
     import brain_clock
@@ -118,6 +124,7 @@ def get_edge_graph(conn: sqlite3.Connection, limit: int = 100) -> Dict[str, Any]
             "kind": row["kind"] or "episodic",
             "degree": row["degree"],
         })
+    marks.present_rows(conn, nodes)
 
     # Get edges between these top nodes only
     if not node_ids:

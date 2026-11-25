@@ -142,7 +142,6 @@ HANDLE_DEFAULT_ALLOW = {
     # -- product nouns, documented in CLAUDE.md, not the identity of a private
     # individual.  A DECISION, recorded here rather than assumed.
     "milamber", "eddie", "orin", "vael", "dessa",
-    "owner",            # this product's word for the person a brain belongs to, as leak_gate's placeholders list it
 }
 HANDLE_ALLOW = {
     "root", "nobody", "postgres", "runner", "default", "system", "service",

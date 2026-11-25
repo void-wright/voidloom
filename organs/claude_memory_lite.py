@@ -1270,6 +1270,9 @@ def main() -> int:
     s.add_argument("--session", dest="session_id", default=None, help="the session it was written in")
     s.add_argument("--parent", dest="parent_ref", default=None, help="the message or item it answers")
     s.add_argument("--source-ids", dest="source_ids", default=None, help="1,2,3: it takes their marks")
+    # shortened flags that named one option before another came to share their first letters: they still name it
+    s.add_argument("--p", dest="project", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    s.add_argument("--s", dest="summary", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     s.set_defaults(func=cmd_store)
 
     ls = sub.add_parser("load-seed", help="Load an agnostic seed pack JSON: a per-memory anchor delta "

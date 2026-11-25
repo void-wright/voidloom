@@ -3442,11 +3442,13 @@ def enact_approved(db_path: str, report_id: int,
                 )
                 summary = f"Self-eval approved: {title}"
 
+                # The owner approved the proposal; a model wrote its words, and the row says so where the brain can hold it.
+                _authored = any(r[1] == "author" for r in conn.execute("PRAGMA table_info(memories)").fetchall())
                 cur2 = conn.execute(
                     "INSERT INTO memories (content, summary, category, importance, "
-                    "source_project, kind) VALUES (?, ?, 'workflow_pattern', 0.8, "
-                    "'wizard-library', 'procedural')",
-                    (content, summary)
+                    f"source_project, kind{', author' if _authored else ''}) VALUES (?, ?, 'workflow_pattern', 0.8, "
+                    f"'wizard-library', 'procedural'{', ?' if _authored else ''})",
+                    (content, summary, *(("model",) if _authored else ()))
                 )
                 memory_id = cur2.lastrowid
                 # TO-03: this memory must be findable.

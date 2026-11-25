@@ -61,6 +61,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 # The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
 try:
     import brain_clock
@@ -352,7 +358,7 @@ def evaluate_memory(
     if is_archived:
         return {
             "memory_id": memory_id,
-            "summary": summary,
+            **marks.shown(conn, memory_id, summary=summary),
             "current_tier": current_tier,
             "recommended_tier": "archived",
             "reason": "memory is already archived",
@@ -512,7 +518,7 @@ def evaluate_memory(
 
     return {
         "memory_id": memory_id,
-        "summary": summary,
+        **marks.shown(conn, memory_id, summary=summary),
         "importance": importance,
         "current_tier": current_tier,
         "recommended_tier": recommended_tier,
@@ -719,7 +725,7 @@ def get_graduation_history(
             "score": r[5],
             "graduated_at": r[6],
             "graduated_by": r[7],
-            "summary": r[8],
+            **marks.shown(conn, r[1], summary=r[8]),
         }
         for r in rows
     ]
@@ -767,7 +773,7 @@ def backfill_tiers(
             updated += 1
         transitions.append({
             "memory_id": memory_id,
-            "summary": summary[:80] if summary else None,
+            **marks.shown(conn, memory_id, summary=summary[:80] if summary else None),
             "old_tier": None,
             "new_tier": "active",
             "dry_run": dry_run,

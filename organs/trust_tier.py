@@ -60,7 +60,13 @@ import re
 import sqlite3
 from typing import Any, Dict, Optional, Union
 
-import marks
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    import os as _marks_os
+    import sys as _marks_sys
+    _marks_sys.path.insert(0, _marks_os.path.dirname(_marks_os.path.abspath(__file__)))
+    import marks
 
 __all__ = [
     "TRUST_WEIGHTS",

@@ -69,6 +69,14 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from pathlib import Path
+try:
+    import marks
+except ImportError:                     # loaded by file path, not from the organs directory
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 # The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
 try:
     import brain_clock
@@ -567,6 +575,8 @@ def _augment_with_wild_pool(
             "created_at": r[8],
         }
         if _digest_key(entry) not in have_keys:
+            marks.present_copies(conn, [entry], fields=("dream_content",),
+                                 id_keys=("dream_memory_id", "memory_a_id", "memory_b_id"))
             out.append(entry)
             have_keys.add(_digest_key(entry))
     return out

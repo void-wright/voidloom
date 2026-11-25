@@ -30,9 +30,9 @@ FEATURES: Dict[str, str] = {
     "recall.frame_unless_clean": "a row is shown plain only after its mark was read and was clean; content and summary together",
     "recall.no_query_text": "no recall stores the words that were asked",
     "recall.no_log": "recall / batch-recall --no-log, facade no_log=True: no trace of the recall at all",
-    "derive.inherit": "a row written from marked rows is marked and is worth no more than they are, whoever writes it",
+    "derive.inherit": "a row written from marked rows is marked, whoever writes it; the package's derived writers also cap its worth",
     "research.register": "research-register --config FILE [--run RUN_ID], facade research_register: insert-only",
-    "research.dispatch_closed": "gap research refuses RESEARCH_DISPATCH_CLOSED without an exactly approved topic",
+    "research.dispatch_closed": "gap research refuses RESEARCH_DISPATCH_CLOSED without an exactly approved topic, named by --gap-ids",
     "forget": "forget / unarchive --id N | --run RUN_ID: a reversible archive with a receipt",
     "marks.backfill": "marks backfill [--dry-run] [--yes-many] [--undo]",
     "engine.pinned": "engine calls are pinned to their database and run one at a time per process",
@@ -385,7 +385,7 @@ TOOLKIT: Dict[str, Any] = {
                             "required; tags/kind/importance/summary/project/"
                             "context/source_user/auto_edges and outside/research/"
                             "author/session/parent/source_ids optional"),
-                "--outside": "flag; every item is outside (also --research, --author, --session, --parent)",
+                "--outside": "flag; every item is outside (also --research, --author, --session, --parent, --source-ids: the default of items that do not say)",
                 "--json": "flag; structured envelope {count,succeeded,failed,results}",
             },
             "when": "Many memories at once; avoid N model reloads.",

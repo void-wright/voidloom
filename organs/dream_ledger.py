@@ -767,6 +767,10 @@ def apply(conn: sqlite3.Connection, the_plan: Dict[str, Any], parts: Sequence[st
         pre["restamp"] = [{k: it[k] for k in ("id", "derived_from", "confidence", "summary", "has_vector",
                                               "has_provenance")}
                           for it in the_plan["restamp"]["items"] if it.get("needs_restamp", True)]
+        # the summaries are kept as they are, because a rollback writes them back; the mark goes beside each
+        _clean = marks.clean_ids(conn, [it["id"] for it in pre["restamp"]])
+        for it in pre["restamp"]:
+            it["outside"] = it["id"] not in _clean
         pre["active_table"] = the_plan.get("active_table")
         stamp_ids = list(the_plan["restamp"].get("playbook_stamp_ids") or [])
         pre["playbook_stamped"] = []
@@ -981,6 +985,16 @@ def _env(status: str, data: Dict[str, Any], message: str = "", code: str = "") -
     return e
 
 
+def _present_plan(conn: sqlite3.Connection, p: Dict[str, Any]) -> None:
+    """A plan that is about to be shown: the summaries in it are a dream's, and its new one quotes both endpoints."""
+    items = p["restamp"]["items"]
+    for it in items:
+        it["_a"], it["_b"] = it["pair"] or (None, None)
+    marks.present_copies(conn, items, fields=("summary", "new_summary"), id_keys=("id", "_a", "_b"))
+    for it in items:
+        del it["_a"], it["_b"]
+
+
 def _summarise_plan(p: Dict[str, Any]) -> Dict[str, Any]:
     s = json.loads(json.dumps(p, default=str))
     s["restamp"].pop("items", None)
@@ -1072,6 +1086,7 @@ def run(argv: Optional[Sequence[str]] = None) -> Dict[str, Any]:
             conn = _connect(db, ro=True)
             try:
                 p = plan(conn, days=a.days)
+                _present_plan(conn, p)
             except Exception as e:
                 if not getattr(e, "code", None):
                     raise
