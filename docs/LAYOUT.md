@@ -32,7 +32,7 @@ Everything else is in a directory named for what it does.
 > **Does the module import its siblings, or is it imported by them?**
 > Yes → `organs/`. No → the directory named for its job.
 
-`organs/` is a single flat namespace **on purpose**. The 77 tracked modules there
+`organs/` is a single flat namespace **on purpose**. The 81 tracked modules there
 import each other by bare name (`import hybrid_retrieval`), and ~25 of them
 self-heal that with `sys.path.insert(0, Path(__file__).parent)`. Splitting them
 into `core/` + `organs/` would break every cross-directory import — and the
@@ -49,7 +49,7 @@ the directory around it is the tidying.**
 ├── install.sh             ← the installer (POSIX). Windows: install/install.ps1
 ├── voidloom_manifest.json ← per-machine hardware/model manifest (installer-written)
 │
-├── organs/                ← ★ THE ORGANISM — 77 modules, one flat namespace
+├── organs/                ← ★ THE ORGANISM — 81 modules, one flat namespace
 │   ├── claude_memory.py        ★ THE ENGINE. store / recall / stats / init
 │   ├── claude_memory_lite.py   ★ Tier-0 engine: keyword-only, stdlib, no model
 │   ├── wizard_paths.py         ★ the tree-root vs module-dir resolver
@@ -60,7 +60,7 @@ the directory around it is the tidying.**
 │   ├── cli.py  _facade.py  _guard.py  _bootstrap.py
 │   └── voidloom                the shell shim symlinked onto PATH
 │
-├── migrations/            ← schema.sql + 31 additive migrations
+├── migrations/            ← schema.sql + 39 additive migrations
 ├── install/               ← install.ps1, cron/council/persona wiring, self_check,
 │   │                        requirements (pinned + hash-pinned), CLAUDE.md.template
 │   ├── lay_manifest.json       ★ WHERE EVERY TRACKED FILE LANDS — derived from

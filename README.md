@@ -279,6 +279,15 @@ voidloom recall --query "time zone rules for billing" --top-k 5
 voidloom batch-recall --items '["billing time zones", "release checklist"]' --top-k 5
 voidloom batch-store --items '[{"content": "Staging is rebuilt every Sunday night.", "category": "project_knowledge"}]'
 
+# Text that is not yours (a page, another program's output): say so. It is stored marked and shown behind a warning,
+# and so is whatever is written from it later. Nothing is inferred from the text.
+voidloom store --content "The vendor page says the API allows 600 requests a minute." \
+  --category domain_knowledge --outside
+
+# Take a memory out of recall, and back. Nothing is deleted.
+voidloom forget --id 41
+voidloom unarchive --id 41
+
 # The context a session starts with, scoped to a project.
 voidloom context --project "billing-service" --limit 15
 
@@ -420,6 +429,7 @@ licences are listed in [`NOTICE`](./NOTICE).
 | Embedding and reranking models | install (downloaded once, at the pinned revisions), `voidloom tier set`, or `re-embed` | Hugging Face Hub |
 | A model vendor's installer | only if you say yes when the thinker's program is missing | that vendor's official install script, shown to you first |
 | Proving the thinker credential | install, or `voidloom thinker set` / `login` | your chosen model's service |
+| Gap research | only once armed, and only for an exact topic you wrote in `approved_research_topics.json`; otherwise it refuses and sends nothing | your chosen model's service |
 | Scheduled jobs that think | only once armed, and only with a thinker chosen | your chosen model's service (nothing, for **e** or a model on your own machine) |
 
 Storing, recalling, the CLI and the session hook make no network calls of

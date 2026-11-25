@@ -1159,7 +1159,8 @@ def verb_capabilities(args) -> Dict[str, Any]:
         return error("no_organs",
                      "no L5 organ registry found in the manifest "
                      f"({manifest_path}); nothing to describe.",
-                     data={"manifest": manifest_path}, verb="capabilities")
+                     data={"manifest": manifest_path, "features": _agent_context.FEATURES}, verb="capabilities")
+    projection["features"] = _agent_context.FEATURES        # the package's, whatever organs this host runs
     return ok("capabilities", projection, verb="capabilities")
 
 
@@ -3740,7 +3741,8 @@ def dispatch(argv: Optional[Sequence[str]] = None) -> int:
     _av = list(sys.argv[1:] if argv is None else argv)
     if "--version" in _av and "--json" in _av and set(_av) <= {"--version", "--json", "--quiet"}:
         print(json.dumps({"status": "ok", "action": "version", "version": __version__,
-                          "cli_surface_version": cli_surface_version(parser)}))
+                          "cli_surface_version": cli_surface_version(parser),
+                          "features": sorted(_agent_context.FEATURES)}))
         return 0
     # The organ verbs own their grammar (`voidloom hooks --status --json`), so
     # unknown options must reach them in order rather than exit 2 here.  For

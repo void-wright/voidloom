@@ -21,6 +21,23 @@ from typing import Any, Dict, List
 # The single source of truth for the toolkit's shape. cli.py builds its argparse
 # from intent that MUST stay consistent with this manifest (a test asserts every
 # verb here is dispatchable, and vice-versa).
+#: What a client that pins releases may ask for before it relies on it. A name here is never renamed or reused.
+FEATURES: Dict[str, str] = {
+    "store.outside": "store / batch-store --outside (item key `outside`): marked in the INSERT, shown framed",
+    "store.research": "store / batch-store --research RUN_ID (item key `research`): names a registered run, implies outside",
+    "store.provenance": "--author user|model|tool, --session, --parent, --source-ids (item keys author, session, parent, source_ids)",
+    "store.readback": "a store's success carries memory_id, stored_sha256 and marks, read back after its commit",
+    "recall.frame_unless_clean": "a row is shown plain only after its mark was read and was clean; content and summary together",
+    "recall.no_query_text": "no recall stores the words that were asked",
+    "recall.no_log": "recall / batch-recall --no-log, facade no_log=True: no trace of the recall at all",
+    "derive.inherit": "a row written from marked rows is marked and is worth no more than they are, whoever writes it",
+    "research.register": "research-register --config FILE [--run RUN_ID], facade research_register: insert-only",
+    "research.dispatch_closed": "gap research refuses RESEARCH_DISPATCH_CLOSED without an exactly approved topic",
+    "forget": "forget / unarchive --id N | --run RUN_ID: a reversible archive with a receipt",
+    "marks.backfill": "marks backfill [--dry-run] [--yes-many] [--undo]",
+    "engine.pinned": "engine calls are pinned to their database and run one at a time per process",
+}
+
 TOOLKIT: Dict[str, Any] = {
     "toolkit": "voidloom",
     "version": "1.1.3",
@@ -35,6 +52,7 @@ TOOLKIT: Dict[str, Any] = {
         "data": "the verb payload (or refusal/error detail)",
         "note": "Assert on status + code, never substring error text.",
     },
+    "features": FEATURES,
     "verbs": [
         {
             "name": "bootstrap",
@@ -254,6 +272,7 @@ TOOLKIT: Dict[str, Any] = {
                 "--explore": "flag; widen the side channels",
                 "--no-rerank": ("flag; skip the reranker this run (it never runs on CPU-only machines or below "
                                 "15.0 GiB RAM anyway -- the reranker gate)"),
+                "--no-log": "flag; leave no trace of this recall (no recall stores the words asked)",
                 "--json": "flag; structured envelope",
             },
             "when": "Before deciding/answering; pull relevant memories.",
@@ -271,9 +290,61 @@ TOOLKIT: Dict[str, Any] = {
                                "insight"),
                 "--tags": "str (optional); comma-separated",
                 "--importance": "float 0.0-1.0 (default 0.5)",
-                "--json": "flag; structured envelope",
+                "--outside": "flag; the text is not the owner's own (a page, another program): marked, shown framed",
+                "--research": "RUN_ID; the registered research run that produced it (implies --outside)",
+                "--author": "user | model | tool; who wrote it",
+                "--session": "str; the session it was written in",
+                "--parent": "str; the message or item it answers",
+                "--source-ids": "1,2,3; the memories it was written from: it takes their marks",
+                "--json": "flag; structured envelope {memory_id, stored_sha256, marks}",
             },
             "when": "A durable fact/decision/lesson worth keeping appears.",
+        },
+        {
+            "name": "research-register",
+            "purpose": "Register a research configuration (a JSON file) and a run of it. Insert-only; starts nothing.",
+            "args": {
+                "--config": "str (required); path to a JSON object",
+                "--run": "str (optional); the run id to register under it",
+                "--json": "flag; structured envelope {config_id, run_id}",
+            },
+            "when": "Before the first store --research of a run.",
+        },
+        {
+            "name": "forget",
+            "purpose": ("Archive one memory, or everything one research run wrote, with a receipt. Nothing is deleted; "
+                        "unarchive restores exactly what it archived."),
+            "args": {
+                "--id": "int; one memory",
+                "--run": "str; one research run",
+                "--dry-run": "flag; change nothing",
+                "--include-mixed": "flag; also rows written from the run AND from something else",
+                "--json": "flag; structured envelope {receipt}",
+            },
+            "when": "A memory or a whole run should stop surfacing.",
+        },
+        {
+            "name": "unarchive",
+            "purpose": "Undo forget for one memory or one run, from its receipt, and nothing else.",
+            "args": {
+                "--id": "int; one memory",
+                "--run": "str; one research run",
+                "--json": "flag; structured envelope {receipt}",
+            },
+            "when": "A forget was wrong.",
+        },
+        {
+            "name": "marks",
+            "purpose": ("marks backfill: mark what was already written from marked memories before the database carried "
+                        "marks by itself. Halts over 200 rows; reversible."),
+            "args": {
+                "backfill": "the action",
+                "--dry-run": "flag; change nothing",
+                "--yes-many": "flag; go on past the 200-row halt",
+                "--undo": "flag; restore the last backfill",
+                "--json": "flag; structured envelope",
+            },
+            "when": "Once, after upgrading a brain that holds marked memories.",
         },
         {
             "name": "context",
@@ -312,7 +383,9 @@ TOOLKIT: Dict[str, Any] = {
                 "--items": ("JSON array; an inline string, @file, or - (stdin). "
                             "Each element is a memory dict: content+category "
                             "required; tags/kind/importance/summary/project/"
-                            "context/source_user/auto_edges optional"),
+                            "context/source_user/auto_edges and outside/research/"
+                            "author/session/parent/source_ids optional"),
+                "--outside": "flag; every item is outside (also --research, --author, --session, --parent)",
                 "--json": "flag; structured envelope {count,succeeded,failed,results}",
             },
             "when": "Many memories at once; avoid N model reloads.",

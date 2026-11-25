@@ -37,5 +37,12 @@ Only the latest release on `main` receives security fixes.
 - **Scheduled jobs are off by default.** Nothing runs on a timer unless you install
   with `--with-crons`. [`docs/FIRST_NIGHT.md`](docs/FIRST_NIGHT.md) lists every job
   and exactly what each one sends to a model.
+- **Outside text is marked and framed; relay is not prevented.** Text stored with `--outside` or `--research` is shown
+  behind a warning, and so is anything the database can see was written from it. A model that reads it and then stores
+  its own restatement as a plain memory is not seen, and a 1.1.3 program on the same brain cannot mark what it stores.
+  Do not treat an unframed memory as proof that no outside text reached it.
+- **Nothing researches by itself.** Gap research sends a topic to a model only when the exact topic is written in
+  `approved_research_topics.json` beside the brain. There is no environment switch.
+- **Recall keeps no query text.** Earlier releases stored it in the access log; those rows are yours and are left alone.
 - **No token ships with the package.** Jobs that call a model read a token you put
   in `~/.voidloom/wizard-library-env` (mode `0600`).

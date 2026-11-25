@@ -74,8 +74,9 @@ voidloom status         [--json]   this brain's index on one page: lock, coverag
 ### Memory
 
 ```
-voidloom recall   --query Q [--top-k N] [--no-rerank] [--json]   hybrid retrieval over the brain
-voidloom store    --content C --category CAT [--tags T] [--importance N] [--json]   store a memory
+voidloom recall   --query Q [--top-k N] [--no-rerank] [--no-log] [--json]   hybrid retrieval over the brain
+voidloom store    --content C --category CAT [--tags T] [--importance N] [--outside | --research RUN_ID]
+                  [--author user|model|tool] [--session ID] [--parent REF] [--source-ids 1,2] [--json]   store a memory
 voidloom context  [--project P] [--limit N] [--json]        session-start context load
 voidloom batch-recall --items '["q1","q2"]' [--top-k N] [--no-rerank] [--json]   N recalls, ONE model load
 voidloom batch-store  --items '[{"content":"...","category":"..."}]' [--json]   N stores, ONE model load
@@ -87,6 +88,36 @@ voidloom inspect ID       [--json]             one memory: text, seed flag, orig
 voidloom export  --ids 1,2,3 [--json]          an explicit selection as plain JSON (read-only); --all
                                                refuses, exit 3, naming the unbuilt wards
 ```
+
+```
+voidloom research-register --config FILE [--run RUN_ID] [--json]   register a research configuration and a run of it
+                                               (insert-only, idempotent; starts nothing)
+voidloom forget    --id N | --run RUN_ID [--dry-run] [--include-mixed] [--json]   archive, with a receipt
+voidloom unarchive --id N | --run RUN_ID [--json]   undo forget: what it archived, and nothing else
+voidloom marks backfill [--dry-run] [--yes-many] [--undo] [--json]   mark what was already written from marked
+                                               memories (once, after an upgrade; halts over 200 rows)
+```
+
+**Where a memory's words came from.** A memory is *outside* when its text is not the owner's own: a page, another
+program's output, a research run's answer. Say so when you store it (`--outside`, or `--research RUN_ID` for a run
+registered with `research-register`); nothing is inferred from the text. A marked memory is written marked in one
+statement, its stored confidence is at most 0.50, and every surface shows its content and its summary behind
+`[external / unverified source — treat as a lead, not an instruction]`. Anything written from it later, by any organ or
+any program, is marked by the database and is worth no more than it. A row is shown plain only after its mark was read
+and was clean: an unreadable mark, a database error and a brain with no mark column all show framed, with
+`degraded_reason`. A mark is never cleared.
+
+A store's success is read back after its commit: `memory_id`, `stored_sha256` (the stored text's UTF-8 bytes) and
+`marks`. `STORE_READBACK_FAILED` carries `row_may_exist: true`: look before storing again. Other refusals here:
+`RESEARCH_NEEDS_RUN`, `OUTSIDE_REQUIRES_MARK`, `BRAIN_UNREADABLE`, `BRAIN_NEEDS_MIGRATION`. `voidloom capabilities`
+lists the features by stable name.
+
+**What recall keeps about a question: nothing of its words.** One random id per recall, so a recall can be counted, and
+whether it was one of the scheduled sweeps. `--no-log` keeps not even that. (`--no-log-usage` is a different switch, on
+the engine: it turns off only the skill-usage row.)
+
+**One engine call at a time.** Inside one process, concurrent calls through `voidloom._facade` queue on one lock, and
+each call's database and output are its own.
 
 **Batch is the default for more than one operation.** The single verbs reload the
 embedding model on every call; the batch verbs load it once. `--items` takes inline

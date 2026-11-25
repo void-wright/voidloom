@@ -744,12 +744,9 @@ except (ImportError, ValueError):
     except ImportError:
         _governance = None  # graceful: governance gate + surface fold degrade off
 
-# L5-M5 The Warden. iter-2 (Kell: hot-path self-heal). Imported so _get_conn can
-# re-assert the untrusted_source immutability trigger on EVERY connection — not
-# just the gap-research write path. ensure_warden_migration is itself idempotent
-# and NEVER raises (catches sqlite3.Error → reported dict), but we still guard the
-# call so a missing/older warden module degrades to no self-heal. Same dual-path
-# graceful-degrade convention as the sibling organs. PURELY ADDITIVE.
+# L5-M5 The Warden. Imported so _get_conn can put the mark's immutability trigger back
+# on EVERY connection, not just the gap-research write path. Same dual-path
+# graceful-degrade convention as the sibling organs.
 try:
     from . import warden as _warden  # type: ignore
 except (ImportError, ValueError):

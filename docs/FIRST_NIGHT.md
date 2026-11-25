@@ -48,7 +48,7 @@ eight the roster marks `armed-by-default`.
 | `sleep-loop` | daily 22:30 | summarises and links | **yes** |
 | `anti-recency` | Wed 08:00 | rebalances against recency bias | no |
 | `gap-mapping` | Mon 08:00 | finds knowledge gaps | no |
-| `gap-research` | Mon 08:30 | researches those gaps | **yes** |
+| `gap-research` | Mon 08:30 | researches those gaps, only for topics you approved (below); otherwise it refuses and sends nothing | **yes** |
 | `whisper-digest` | Fri 08:00 | weekly subjective digest | **yes** |
 | `skill-graduation` | Fri 08:30 | promotes provisional skills | no |
 | `cognitive-map` | Sun 18:00 | rebuilds the concept map | no |
@@ -127,6 +127,17 @@ the embedding model every thirty minutes — and you arm one deliberately:
 ```bash
 WIZARD_CRON_ONLY=gap-research bash ~/.claude/memory/install/install_crons.sh
 ```
+
+Arming it is not enough to send anything. Gap research is **closed** until you write, beside the brain, a file
+`approved_research_topics.json` holding the exact topics that may leave this machine:
+
+```json
+{"topics": ["an exact gap topic, byte for byte"]}
+```
+
+A bare JSON list of strings does as well; any other key or shape grants nothing. Every other topic is refused
+(`RESEARCH_DISPATCH_CLOSED`), no prompt is built, and the refusal is logged without the topic's words. No environment
+variable opens it. Topics in the gap inventory are words from your own memories, which is why none is sent by default.
 
 Gap research asks the thinker to focus on "what someone working with this topic would need
 to know". To point it at your own field, add one line to `~/.voidloom/wizard-library-env`,

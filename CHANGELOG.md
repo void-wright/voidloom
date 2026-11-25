@@ -6,6 +6,65 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+**What this does not do.** A program that reads an outside memory, restates it in its own words and stores the
+restatement as a plain store writes an owner's row: nothing here sees the words pass through it. That relay is open. A
+1.1.3 program on a migrated brain cannot express *outside*; its plain store is an owner write. 1.2.0 is the first
+release that can say where a memory's words came from.
+
+### Added
+
+- **A memory says where its words came from.** `store` and `batch-store` (both engines) take `--outside`, and
+  `--research RUN_ID` for a run registered with `research-register`; batch items take `outside` and `research`. The mark
+  is in the INSERT. Also recorded: `--author` (user, model or tool), `--session`, `--parent` and `--source-ids`; a
+  memory stored from marked sources is marked.
+- **What is written from a marked memory is marked**, by triggers in the database (`migration_046`), whichever program
+  writes it, to any depth, and also when the parent is marked later. An inferred edge (`edge_inference`) is a comparison
+  and carries nothing. A derived row takes every mark of its parents and is worth no more than their mean, or the marked
+  ones' mean if that is lower.
+- **Every store is read back** after its commit: `memory_id`, `stored_sha256`, `marks`. A row that is not there, or holds
+  other text, answers `STORE_READBACK_FAILED` (with `row_may_exist`) and a non-zero exit, in both engines.
+- `research-register`: research configurations and runs, insert-only. `forget` / `unarchive`: a reversible archive by
+  memory or by run, with a receipt. `marks backfill`: marks what was already written from marked memories; it halts over
+  200 rows and can be undone. Run `voidloom marks backfill --dry-run` once after upgrading.
+- `recall` and `batch-recall` take `--no-log`: no trace of the recall.
+- `inspect` and `export` label a row's `marks`; `doctor` checks the mark columns and triggers; `schema_migrator.py audit`
+  reports missing and altered triggers and missing columns as well as tables; `capabilities`, `agent-context` and
+  `--version --json` list `features` by stable name.
+
+### Changed
+
+- **A row is shown plain only after its mark was read and was clean.** Content and summary are framed together, on every
+  surface (recall in every mode, batch, context, list, stats, edges, promotions, anticipation, the dream channel, the
+  session hook, Tier 0). A database error, a value that is neither 0 nor 1 and a brain with no mark column all show
+  framed, with `degraded_reason`. Text that begins with the frame's own words is framed like any other.
+- **Recall stores no query text**, in the access log, the lexical-miss log, the met ledger, the skill-usage log or
+  `website_memory`, and no setting turns it back on. Text stored by earlier releases is left as it is. The spike detector
+  and the dream report count a random event id instead; the same question asked twice in a minute is now two events.
+- **Weak-recall detection is retired** and returns nothing. No gap is eligible for research by itself: every inventory
+  topic is words from the owner's memories.
+- **Research dispatch is closed.** `dispatch_auto_research` refuses `RESEARCH_DISPATCH_CLOSED` for every gap type and
+  launcher unless the exact topic is in `approved_research_topics.json` beside the brain (a JSON list of strings, or an
+  object whose only key is `topics`). The refusal builds no prompt and stores no topic. The database also refuses a 1.1.3
+  program's dispatch row before it sends. Web text is written only after the screen judged it: the `VOIDLOOM_NO_WARDEN`
+  switch is gone and `VOIDLOOM_NO_GOVERNANCE` no longer opens this path. The log says `sent_no_answer` or `not_sent`.
+- **`maintain` no longer archives a row for being alike unless it is recorded as the machine's** (author model or tool, a
+  derivation, a reflection), never across marks, and never on the word of a row it archived in the same pass. Rows from
+  before this release carry no author, so fewer of them are archived; `dedup_protected` counts the pairs left.
+- Consolidation no longer adds 0.05 to its members' mean importance; reflections, dreams, cluster summaries and playbooks
+  are capped the same way. A whisper digest and a quarterly manifest, which name no parents, are stored at confidence 0.50.
+- Trust: an unreadable mark keeps the outside ceiling, and an outside memory is not corroborated by what was written from it.
+- A brain before `migration_046`: plain stores work and say `premark: true`; marked and derived writes refuse
+  `BRAIN_NEEDS_MIGRATION`. A read no longer adds the mark column to a brain that has none.
+- `memories_fts_after_update` fires on a change of the indexed text only.
+
+### Fixed
+
+- **Concurrent facade calls over two databases in one process no longer answer from each other.** The database and the
+  captured output are pinned per call and calls queue on one lock; the engine's tier caches are keyed by database.
+  `--no-temporal-rerank` no longer binds every later recall of the process.
+- `memory_write` dropped a column the schema lacks with a warning; for a mark it now refuses.
+- A store whose row a trigger discarded reported another row's id as its own.
+
 ## [1.1.3] — 2026-11-15
 
 ### Changed

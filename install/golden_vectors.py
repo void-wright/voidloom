@@ -96,7 +96,7 @@ def encode_all(organs, tier):
             import embedding_upgrade as eu
             m = eu._qwen_model_cache.get("model")
         else:
-            m = cm._model_cache.get("model")
+            m = next(iter(cm._model_cache.values()), None)      # keyed by the brain it was loaded for
         device = str(getattr(m, "device", None)) if m is not None else None
     except Exception:  # noqa: BLE001 - the device is a fact to report, never a reason to fail
         device = None
