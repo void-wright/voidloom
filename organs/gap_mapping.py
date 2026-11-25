@@ -40,6 +40,7 @@ Phase 0 design: memories #3914, #3816, #3820.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -48,6 +49,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import uuid
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -59,13 +61,13 @@ from pathlib import Path
 # A per-module inline fallback would recreate the 13-way divergence this
 # module exists to end.
 import voidloom_env
-from typing import Any, Dict, List, Optional, Set, Tuple
+import marks as _marks
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
 # L5-M5 "The Warden": gate web-sourced (untrusted external) writes through the
 # landed L5-I-β governance_gate + stamp the immutable untrusted_source birth-mark.
 # Fail-graceful sibling import (the gap-research systemd unit's WorkingDirectory is
-# the brain directory, so a bare import resolves; absence degrades to the prior
-# un-gated, un-stamped behavior — never crashes the harvest).
+# the brain directory, so a bare import resolves). Without it the dispatch refuses.
 try:
     import warden as _warden  # type: ignore
 except Exception:  # pragma: no cover - degrade: no gate, no birth-mark
@@ -419,60 +421,13 @@ def detect_weak_recalls(
     min_query_count: int = 2,
     max_results: int = 50,
 ) -> List[Dict[str, Any]]:
-    """Find queries where recall performed poorly.
+    """RETIRED: returns nothing.
 
-    access_log stores relevance_score where more negative = better match.
-    Queries where the BEST (most negative) score is above the threshold
-    indicate the brain couldn't answer well.
-
-    Filters out operational queries (e.g. "memory id 123", "id:456")
-    that are ID lookups, not genuine semantic knowledge gaps.
-    """
-    cutoff = (datetime.utcnow() - timedelta(days=lookback_days)).isoformat()
-
-    rows = conn.execute("""
-        SELECT query_text,
-               MIN(relevance_score) AS best_score,
-               COUNT(*) AS result_count,
-               MAX(accessed_at) AS last_queried
-        FROM access_log
-        WHERE query_text IS NOT NULL
-          AND relevance_score IS NOT NULL
-          AND access_type NOT LIKE 'recall:%-lead'
-          AND accessed_at >= ?
-          AND length(query_text) >= 10
-        GROUP BY query_text
-        HAVING MIN(relevance_score) > ?
-           AND COUNT(*) >= ?
-        ORDER BY MIN(relevance_score) DESC
-    """, (cutoff, score_threshold, min_query_count)).fetchall()
-
-    # Regex to detect operational ID-lookup queries that are not genuine knowledge gaps.
-    # Examples: "memory id 1389", "memory 2137", "id:1448", "#3812"
-    _operational_query_re = re.compile(
-        r'^(?:memory\s+(?:id\s+)?\d+|id:\d+|#\d+|recall\s+memory\s+\d+)$',
-        re.IGNORECASE,
-    )
-
-    gaps = []
-    for query_text, best_score, result_count, last_queried in rows:
-        # Skip operational ID-lookup queries
-        if _operational_query_re.match(query_text.strip()):
-            continue
-
-        # The "entity" for weak recalls is the query topic itself
-        gaps.append({
-            'entity': query_text[:200],  # cap length
-            'gap_type': 'weak_recall',
-            'memory_count': 0,  # by definition, recall was poor
-            'last_mentioned': last_queried,
-            'raw_importance': max(0.0, min(1.0, 1.0 - best_score)),  # (1 - similarity): lower similarity = higher importance
-            'best_score': best_score,
-            'query_count': result_count,
-        })
-
-    gaps.sort(key=lambda g: -g['raw_importance'])
-    return gaps[:max_results]
+    This read the text of past questions out of the access log and turned a question that found little into a research
+    topic. A question is the owner's private text; nothing reads it any more, and recall no longer stores it
+    (``access_event``). The stage, its settings and the 'weak_recall' rows an inventory already holds keep their names,
+    so an existing inventory reads as it did. No arguments change the answer."""
+    return []
 
 
 # ============================================================
@@ -961,7 +916,7 @@ def run_gap_inventory(
                 gap['score'],
                 gap.get('memory_count', 0),
                 gap.get('last_mentioned'),
-                1 if gap['score'] >= 0.5 else 0,  # auto-eligible if score >= 0.5
+                0,      # every topic here is words from the owner's memories: none is dispatchable by itself
                 batch_id,
             ))
             stored_count += 1
@@ -1322,6 +1277,7 @@ def _build_research_prompt(entity: str, gap_type: str, focus: Optional[str] = No
 # The thresholds were set on the 270 stored replies; that is the evidence they rest on, and its bound.
 # ------------------------------------------------------------------
 NO_ANSWER_SENTINEL = "NO_ANSWER:"
+_NO_ANSWER_RE = re.compile(r"no[_\-\s]answer\b", re.I)       # the sentinel as asked for, and as thinkers spell it
 NON_ANSWER_MAX_CHARS = 3500
 _APOS = r"[\u2019']"
 _NOT_FOUND_RE = re.compile("|".join([
@@ -1357,7 +1313,7 @@ def classify_research_output(text: Optional[str]) -> Dict[str, Any]:
     t = (text or "").strip()
     if not t:
         return {"answer": False, "reason": "empty reply", "rule": "empty"}
-    if t.upper().startswith(NO_ANSWER_SENTINEL[:-1]):
+    if _NO_ANSWER_RE.match(t):
         return {"answer": False, "reason": t.split("\n", 1)[0][:300], "rule": "protocol"}
     m = _NOT_FOUND_RE.search(t[:600])
     if not m:
@@ -1477,6 +1433,52 @@ def _dispatch_research(prompt: str, timeout_seconds: int = 300) -> Dict[str, Any
             "backend": res.backend_id}
 
 
+#: What may be sent, and nothing else: exact topic strings the owner wrote in this file beside the brain.
+APPROVED_TOPICS_FILE = "approved_research_topics.json"
+DISPATCH_CLOSED = "RESEARCH_DISPATCH_CLOSED"
+
+
+def approved_topics(db_path: str) -> Tuple[Optional[FrozenSet[str]], str]:
+    """(the exact topics the owner approved, "") or (None, why the file grants nothing).
+
+    The file is a JSON list of strings, or an object whose only key is "topics". Any other shape grants nothing: a key
+    this version does not know may be a limit it would not be keeping. Strings are compared whole, with no trimming and
+    no case folding. No environment variable and no argument takes the file's place."""
+    path = Path(os.path.abspath(db_path)).parent / APPROVED_TOPICS_FILE
+
+    def pairs(items: List[Tuple[str, Any]]) -> Dict[str, Any]:
+        if len(items) != len({k for k, _v in items}):
+            raise ValueError("a key appears twice")
+        return dict(items)
+    try:
+        doc = json.loads(path.read_bytes().decode("utf-8"), object_pairs_hook=pairs)
+    except FileNotFoundError:
+        return None, "no-approval-file"
+    except (OSError, ValueError):
+        return None, "approval-file-unreadable"
+    topics = doc.get("topics") if isinstance(doc, dict) and set(doc) == {"topics"} else doc
+    if not isinstance(topics, list) or not all(isinstance(t, str) and t for t in topics):
+        return None, "approval-file-malformed"
+    return frozenset(topics), ""
+
+
+def _record_refusal(conn: sqlite3.Connection, gap_type: Optional[str], reason: str) -> None:
+    """One row per refused dispatch: a random id, the gap's type and the reason. Never the topic."""
+    try:
+        conn.execute("INSERT INTO research_dispatch_refusals (event_id, gap_type, reason) VALUES (?, ?, ?)",
+                     (uuid.uuid4().hex, gap_type, reason))
+        conn.commit()
+    except sqlite3.Error:
+        pass                                    # a brain without the table still refuses
+
+
+def _dispatch_refused(reason: str, n: int, selection_policy: Any) -> Dict[str, Any]:
+    return {"status": "refused", "error": DISPATCH_CLOSED, "code": DISPATCH_CLOSED, "dispatched": 0, "refused": n,
+            "outcome": "not_sent", "reason": reason, "selection_policy": selection_policy,
+            "message": (f"{DISPATCH_CLOSED}: research leaves this machine only for a topic written, exactly, in "
+                        f"{APPROVED_TOPICS_FILE} beside the brain ({reason}). Nothing was sent and no prompt was built.")}
+
+
 def dispatch_auto_research(
     db_path: str,
     gap_ids: Optional[List[int]] = None,
@@ -1490,7 +1492,10 @@ def dispatch_auto_research(
     If gap_ids is None, picks top N auto-research-eligible, un-researched gaps
     from the latest batch.
 
-    Results are stored as NEW memories (kind='semantic', tagged 'gap-research').
+    CLOSED unless the owner approved the exact topic (`approved_topics`): for every gap type, every caller and every
+    launcher. A refusal builds no prompt and stores no topic text.
+
+    Results are stored as NEW memories (kind='semantic', tagged 'gap-research'), marked outside in their INSERT.
     """
     t0 = time.time()
     # M12: the retired switch is refused before anything is opened; `claude_cli` is the unit's alias
@@ -1508,14 +1513,14 @@ def dispatch_auto_research(
         return {"status": "error", "message": "gap_inventory table not found.",
                 "selection_policy": fair_select_policy()}
 
-    # L5-M5 Warden: ensure the untrusted_source birth-mark column + immutability
-    # trigger exist before we write any web-sourced row (idempotent; fail-soft —
-    # a migration hiccup must not crash the harvest, the stamp call degrades).
-    if _warden is not None:
-        try:
-            _warden.ensure_warden_migration(conn)
-        except Exception:  # pragma: no cover - belt+braces; ensure_* is itself fail-soft
-            pass
+    approved, closed_reason = approved_topics(db_path)
+    if approved is not None and not approved:
+        approved, closed_reason = None, "no-topic-approved"
+    if approved is not None:
+        if _marks.schema_state(conn) != "ready":
+            approved, closed_reason = None, "BRAIN_NEEDS_MIGRATION"
+        elif _warden is None:
+            approved, closed_reason = None, "no-screen"         # nothing here writes web text unscreened
 
     # Select gaps to research.
     #
@@ -1542,13 +1547,27 @@ def dispatch_auto_research(
             limit=max_gaps,
         )
 
+    rows = rows[:max_gaps]
+    if approved is None:
+        for _id, _entity, gap_type, _score in rows:
+            _record_refusal(conn, gap_type, closed_reason)
+        if not rows:
+            _record_refusal(conn, None, closed_reason)
+        conn.close()
+        return _dispatch_refused(closed_reason, len(rows), selection_policy)
+
     if not rows:
         conn.close()
         return {"status": "ok", "message": "No eligible gaps for research.", "dispatched": 0,
                 "selection_policy": selection_policy}
 
-    # Cap at max_gaps
-    rows = rows[:max_gaps]
+    unapproved = [r for r in rows if r[1] not in approved]
+    for _id, _entity, gap_type, _score in unapproved:
+        _record_refusal(conn, gap_type, "topic-not-approved")
+    rows = [r for r in rows if r[1] in approved]
+    if not rows:
+        conn.close()
+        return _dispatch_refused("topic-not-approved", len(unapproved), selection_policy)
 
     try:
         _rec = _thinker.read_record() or {}
@@ -1562,7 +1581,7 @@ def dispatch_auto_research(
         if backend in _cat["backends"] and not _cat["backends"][backend].get("web"):
             conn.close()
             _thinker._log(purpose="gap_research", backend=backend, outcome="skipped", reason="no-web")
-            return {"status": "skipped", "dispatched": 0, "method": method,
+            return {"status": "skipped", "dispatched": 0, "method": method, "outcome": "not_sent",
                     "message": "%s has no web: gap research is a logged skip, never invented research" % backend,
                     "selection_policy": selection_policy}
     except _thinker.CatalogError:
@@ -1578,6 +1597,7 @@ def dispatch_auto_research(
                "migration_039_gap_research_log_thinker.sql behind a pre-image. No gap was touched." % ", ".join(_schema.get("missing") or ["the table"]))
         print(msg, file=sys.stderr)
         return {"status": "skipped", "dispatched": 0, "method": method, "reason": "schema-not-widened",
+                "outcome": "not_sent",
                 "message": msg, "selection_policy": selection_policy}
     results = []
 
@@ -1585,11 +1605,11 @@ def dispatch_auto_research(
         prompt = _build_research_prompt(entity, gap_type, _research_focus(cfg))
 
         # Log dispatch start (the column says 'thinker'; the command names the backend that was asked)
-        conn.execute("""
-            INSERT INTO gap_research_log (gap_id, dispatch_method, dispatch_command, started_at, status)
-            VALUES (?, ?, ?, datetime('now'), 'running')
-        """, (gap_id, "thinker", ("%s | %s" % (method, prompt))[:500]))
-        log_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # -- never the topic: the gap row holds it, and the approval names it by hash.
+        log_id = conn.execute("""
+            INSERT INTO gap_research_log (gap_id, dispatch_method, dispatch_command, started_at, status, approval_hash)
+            VALUES (?, ?, ?, datetime('now'), 'running', ?)
+        """, (gap_id, "thinker", method[:500], hashlib.sha256(entity.encode("utf-8")).hexdigest())).lastrowid
         conn.commit()
 
         # Dispatch through the thinker seam (the research posture, or a logged skip)
@@ -1599,6 +1619,7 @@ def dispatch_auto_research(
         research_memory_id = None
         warden_verdict = None
         warden_held = False
+        warden_refused = False
         no_answer = None
         if dispatch_result['status'] == 'success':
             verdict_na = classify_research_output(dispatch_result.get('output'))
@@ -1628,47 +1649,40 @@ def dispatch_auto_research(
             #            (which also activates the I-α trust-floor so it ranks LOW).
             #   HOLD  -> do NOT write; the gate already enqueued ONE batched proposal
             #            onto the approvals surface (+1 not +N) for Drew's eyes.
-            # Fail-soft: if the gate/Warden is absent or errors, we still write +
-            # stamp (the cheapest defense — the trust-floor — must always ship), so
-            # disabling the escalation never re-opens the laundering hole.
-            verdict = "ALLOW"
-            if _warden is not None:
-                gate_out = _warden.screen_web_write(
-                    conn,
-                    _warden.build_web_write_intent(
-                        content=output,            # the UNTRUSTED bytes the screen reads
-                        summary=summary,
-                        entity=entity,
-                        gap_type=gap_type,
-                        gap_id=gap_id,
-                        method=method,
-                    ),
-                    route_holds=True,
-                )
-                warden_verdict = gate_out
-                verdict = gate_out.get("verdict", "ALLOW")
+            # A screen that could not run answers REJECT and nothing is written. Only
+            # an ALLOW writes.
+            warden_verdict = _warden.screen_web_write(
+                conn,
+                _warden.build_web_write_intent(
+                    content=output,            # the UNTRUSTED bytes the screen reads
+                    summary=summary,
+                    entity=entity,
+                    gap_type=gap_type,
+                    gap_id=gap_id,
+                    method=method,
+                ),
+                route_holds=True,
+            )
+            verdict = warden_verdict.get("verdict")
 
             if verdict == "HOLD":
-                # Held for Drew — content preserved in governance_proposals.intent_json.
+                # Held for the owner — content preserved in governance_proposals.intent_json.
                 # Do not write the memory; the gap stays auditable via the held batch.
                 warden_held = True
+            elif verdict != "ALLOW":
+                warden_refused = True
             else:
-                # ALLOW (or REJECT of an empty intent, which cannot happen here since
-                # output is non-empty) -> commit + stamp the birth-mark.
-                conn.execute("""
+                # The marks are in the statement that makes the row: there is no moment at which it is unmarked.
+                research_memory_id = conn.execute("""
                     INSERT INTO memories (content, summary, category, importance, source_project,
-                                         source_context, kind, created_at, updated_at, last_accessed)
-                    VALUES (?, ?, 'domain_knowledge', 0.5, 'gap-research', ?, 'semantic',
+                                         source_context, kind, untrusted_source, derived_from, confidence, author,
+                                         created_at, updated_at, last_accessed)
+                    VALUES (?, ?, 'domain_knowledge', 0.5, 'gap-research', ?, 'semantic', 1, ?, ?, 'model',
                             datetime('now'), datetime('now'), datetime('now'))
-                """, (content[:10000], summary[:500], f"gap_id={gap_id},method={method}"))
-                research_memory_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+                """, (content[:10000], summary[:500], f"gap_id={gap_id},method={method}", _marks.SENTINEL,
+                      _marks.OUTSIDE_CONFIDENCE)).lastrowid
                 # TO-03: this memory must be findable.
                 _vl_attach(conn, research_memory_id, content[:10000], "gap_mapping.dispatch_auto_research")
-
-                # L5-M5: stamp the IMMUTABLE untrusted_source birth-mark + activate the
-                # I-α trust-floor (derived_from sentinel + confidence 0.5). Fail-soft.
-                if _warden is not None:
-                    _warden.stamp_untrusted_source(conn, research_memory_id)
 
                 # Tag the memory
                 conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, 'gap-research')", (research_memory_id,))
@@ -1704,7 +1718,7 @@ def dispatch_auto_research(
         # Update research log. A Warden HOLD is recorded as status 'held' with the
         # held reason in error_message (auditable) so the journal shows the gate
         # caught it — distinct from a dispatch failure.
-        log_status = 'held' if warden_held else ('skipped' if no_answer is not None else dispatch_result['status'])
+        log_status = 'held' if warden_held else 'error' if warden_refused else ('skipped' if no_answer is not None else dispatch_result['status'])
         log_message = dispatch_result.get('message')
         if no_answer is not None:
             log_message = ("NO ANSWER [%s] %s | %s" % (no_answer["rule"], no_answer["reason"],
@@ -1713,9 +1727,18 @@ def dispatch_auto_research(
             _rc = warden_verdict.get('reason_code', 'held')
             _rb = (warden_verdict.get('routing') or {}).get('report_batch', '?')
             log_message = f"WARDEN HOLD [{_rc}] -> approvals batch {_rb}: {warden_verdict.get('reason', '')}"[:500]
+        # What became of it, in words a CHECK list from an older schema cannot hold: 'skipped' says neither whether the
+        # topic left the machine nor whether an answer came back.
+        outcome = ("held" if warden_held else "refused" if warden_refused else "sent_no_answer" if no_answer is not None else
+                   "answered" if research_memory_id is not None else
+                   {"skipped": "not_sent", "success": "sent_no_answer"}.get(dispatch_result["status"],
+                                                                           dispatch_result["status"]))
+        if warden_refused:
+            log_message = ("not written [%s]: %s" % (warden_verdict.get("reason_code"), warden_verdict.get("reason")))[:500]
         conn.execute("""
             UPDATE gap_research_log
             SET completed_at = datetime('now'),
+                outcome = ?,
                 status = ?,
                 result_memory_id = ?,
                 wall_clock_seconds = ?,
@@ -1723,6 +1746,7 @@ def dispatch_auto_research(
                 raw_output_length = ?
             WHERE id = ?
         """, (
+            outcome,
             log_status,
             research_memory_id,
             dispatch_result.get('wall_clock_seconds'),
@@ -1735,7 +1759,8 @@ def dispatch_auto_research(
         _result_row = {
             'gap_id': gap_id,
             'entity': entity[:100],
-            'status': 'held' if warden_held else ('no_answer' if no_answer is not None else dispatch_result['status']),
+            'status': 'held' if warden_held else 'refused' if warden_refused else ('no_answer' if no_answer is not None else dispatch_result['status']),
+            'outcome': outcome,
             'memory_id': research_memory_id,
             'wall_clock_seconds': dispatch_result.get('wall_clock_seconds', 0),
         }
@@ -1778,6 +1803,7 @@ def dispatch_auto_research(
     return {
         "status": "ok",
         "dispatched": len(results),
+        "refused": len(unapproved),
         "method": method,
         "selection_policy": selection_policy,
         "results": results,

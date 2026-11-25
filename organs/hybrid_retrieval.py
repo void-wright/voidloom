@@ -75,6 +75,7 @@ Phase 0 design memories: #3911 (canonical), #3812 (pattern), #3925
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
 import platform
@@ -783,11 +784,16 @@ def _qwen_rerank(
 
 
 # L5-C2 temporal-aware reranking: down-rank trustworthy-superseded content.
-# Default-ON; disable per-process with VOIDLOOM_NO_TEMPORAL_RERANK (or the
-# --no-temporal-rerank CLI flag, which sets that env). Kill-switch read at CALL
-# TIME (mirrors the PPR/diversity env checks), so the flag works regardless of
-# import order. When off/absent/failed, reranker_score is byte-identical to C1.
+# Default-ON; disable per-process with VOIDLOOM_NO_TEMPORAL_RERANK, or for one
+# recall with the --no-temporal-rerank flag, which sets NO_TEMPORAL_RERANK for the
+# length of that call. Both are read at CALL TIME (mirrors the PPR/diversity env
+# checks). When off/absent/failed, reranker_score is byte-identical to C1.
+NO_TEMPORAL_RERANK: "contextvars.ContextVar[bool]" = contextvars.ContextVar("voidloom_no_temporal_rerank", default=False)
+
+
 def _temporal_rerank_disabled() -> bool:
+    if NO_TEMPORAL_RERANK.get():
+        return True
     val = (os.environ.get("VOIDLOOM_NO_TEMPORAL_RERANK") or "").strip().lower()
     return val in ("1", "true", "yes", "on")
 

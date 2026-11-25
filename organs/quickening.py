@@ -28,14 +28,16 @@ NON-NEGOTIABLE DISCIPLINE (council)
       1. ``access_type``   -- reuse dream_pipeline's real-session convention
                               (exclude cron/sleep/dream/probe/maintenance/machine
                               markers; forward-compatible with future tags).
-      2. ``query_text``    -- the empirically-observed machine patterns on THIS
-                              corpus (systematic 'memory id NNNN' sweeps,
-                              digest/maintenance sentinels). access_type alone is
+      2. the machine flag  -- worked out from the question when the recall ran
+                              (``access_event``), by the observed machine patterns
+                              (systematic 'memory id NNNN' sweeps, digest/maintenance
+                              sentinels). Rows from before the flag carry the
+                              question's text, and the same patterns are read from it. access_type alone is
                               NOT enough: today's live storms wear a 'recall'/
                               'recall:hybrid' label, indistinguishable by type.
       3. sub-minute clustering -- a batch recall logs one top-k read per memory at
                               an IDENTICAL second; collapse a burst sharing
-                              (query_text, minute) to ONE logical event so a
+                              (event, minute) to ONE logical event so a
                               single human recall is not counted top_k times.
   * Detection vs forecasting geometry: spike DETECTION needs only a baseline ->
     works per-memory AND per-tag. Cadence/predictive needs history -> operates
@@ -225,9 +227,9 @@ def _is_real_session_access_type(access_type: Optional[str]) -> bool:
     return not any(suffix.startswith(m) for m in _MACHINE_RECALL_MARKERS)
 
 
-def _is_machine_query_text(query_text: Optional[str]) -> bool:
+def is_machine_query(query_text: Optional[str]) -> bool:
     """True iff query_text matches a known machine map-building / maintenance
-    pattern. On THIS corpus these wear a 'recall' access_type, so access_type
+    pattern. Asked when a recall runs, while the question is still in hand. On THIS corpus these wear a 'recall' access_type, so access_type
     alone cannot catch them -- this is the second filter axis."""
     if query_text is None:
         return False  # a null query is not, by itself, machine; clustering handles bursts
@@ -241,6 +243,16 @@ def _is_machine_query_text(query_text: Optional[str]) -> bool:
     return False
 
 
+_is_machine_query_text = is_machine_query
+
+
+def _event_columns(conn: sqlite3.Connection) -> str:
+    """The access-log columns the filter reads, on this brain: a log from before the event columns answers NULL for them."""
+    have = {r[1] for r in conn.execute("PRAGMA table_info(access_log)").fetchall()}
+    return ("memory_id, access_type, query_text, accessed_at, "
+            + ", ".join(c if c in have else f"NULL AS {c}" for c in ("event_id", "machine")))
+
+
 def _minute_bucket(accessed_at: str) -> str:
     """Truncate an 'YYYY-MM-DD HH:MM:SS' timestamp to the minute for clustering."""
     # 16 chars == 'YYYY-MM-DD HH:MM'. Robust to a trailing '.ffffff' or 'T'.
@@ -251,17 +263,20 @@ def _minute_bucket(accessed_at: str) -> str:
 def _filter_machine_traffic(rows: List[Tuple[Any, ...]]) -> List[Dict[str, Any]]:
     """Filter machine traffic from raw access_log rows BEFORE any mu/sigma math.
 
-    Each input row is ``(memory_id, access_type, query_text, accessed_at)``.
+    Each input row is ``(memory_id, access_type, query_text, accessed_at[, event_id, machine])``.
 
     Three axes, applied in order:
       1. drop rows whose access_type is a machine recall marker;
-      2. drop rows whose query_text is a known machine map-building pattern;
+      2. drop rows flagged machine, and rows from before the flag whose query_text is a
+         known machine map-building pattern;
       3. sub-minute time-clustering: collapse a burst of reads sharing the same
-         (query_text, minute) -- a batch recall logs one top-k read per memory at
+         (event or, before event ids, query_text, minute) -- a batch recall logs one top-k read per memory at
          an identical second -- to ONE logical event. We keep ONE representative
-         row per (memory_id, query_text, minute) so a single human recall that
+         row per (memory_id, event, minute) so a single human recall that
          touched a memory is counted once, not top_k times, while distinct
-         memories in the same human recall are each still counted once.
+         memories in the same human recall are each still counted once. The same
+         question asked twice in one minute is two events: nothing stored says it was
+         the same question.
 
     Returns a list of surviving event dicts:
       ``{memory_id, access_type, query_text, accessed_at, day}``
@@ -269,18 +284,19 @@ def _filter_machine_traffic(rows: List[Tuple[Any, ...]]) -> List[Dict[str, Any]]
     """
     seen_cluster: set = set()
     out: List[Dict[str, Any]] = []
-    for memory_id, access_type, query_text, accessed_at in rows:
+    for memory_id, access_type, query_text, accessed_at, *rest in rows:
+        event_id, machine = (*rest, None, None)[:2]
         if accessed_at is None:
             continue
         # Axis 1: machine access_type.
         if not _is_real_session_access_type(access_type):
             continue
         # Axis 2: machine query_text pattern.
-        if _is_machine_query_text(query_text):
+        if machine or _is_machine_query_text(query_text):
             continue
         # Axis 3: sub-minute clustering -> one event per (memory, query, minute).
         minute = _minute_bucket(str(accessed_at))
-        cluster_key = (memory_id, (query_text or ""), minute)
+        cluster_key = (memory_id, event_id or query_text or "", minute)
         if cluster_key in seen_cluster:
             continue
         seen_cluster.add(cluster_key)
@@ -324,7 +340,7 @@ def _fetch_clean_events(
     floor = (now - timedelta(days=window_days + extra_days)).strftime("%Y-%m-%d %H:%M:%S")
     ceil = now.strftime("%Y-%m-%d %H:%M:%S")
     rows = conn.execute(
-        """SELECT memory_id, access_type, query_text, accessed_at
+        f"""SELECT {_event_columns(conn)}
            FROM access_log
            WHERE accessed_at >= ? AND accessed_at <= ?""",
         (floor, ceil),
@@ -523,7 +539,7 @@ def compute_access_cadence(
     floor = (now - timedelta(days=lookback)).strftime("%Y-%m-%d %H:%M:%S")
     ceil = now.strftime("%Y-%m-%d %H:%M:%S")
     rows = conn.execute(
-        """SELECT memory_id, access_type, query_text, accessed_at
+        f"""SELECT {_event_columns(conn)}
            FROM access_log
            WHERE accessed_at >= ? AND accessed_at <= ?""",
         (floor, ceil),

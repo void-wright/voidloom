@@ -71,7 +71,9 @@ stdlib + numpy + sqlite3 only. NO new pip dependency. NO model download.
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
+import uuid
 from typing import (
     Any,
     Callable,
@@ -941,15 +943,17 @@ def gate_should_wake_lane(conn: sqlite3.Connection) -> Dict[str, Any]:
 
 def record_lexical_miss(
     conn: sqlite3.Connection,
-    query: str,
+    event_id: Optional[str] = None,
     fts_hits: int = 0,
 ) -> bool:
     """Write-path feeding the gate's miss-rate signal.
 
-    Records one row per recall whose FTS5 leg result we want to track:
-    ``(query, ts, fts_hits)``. The caller passes ``fts_hits`` = the number of
-    BM25 candidates the lexical leg returned (0 == a lexical miss). Over time the
-    ratio of zero-hit rows == the lexical-miss-rate the gate reads.
+    Records one row per recall whose FTS5 leg result we want to track. The caller passes ``fts_hits`` = the number of
+    BM25 candidates the lexical leg returned (0 == a lexical miss). Over time the ratio of zero-hit rows == the
+    lexical-miss-rate the gate reads.
+
+    The ``query`` column is NOT NULL and holds a random id, never words: the rate needs the count alone. An argument
+    that is not an id (32 hex characters) is not stored either.
 
     Fail-graceful: any error (missing table, locked DB) returns False without
     raising -- recording a miss must NEVER break a recall. Does NOT commit (the
@@ -969,7 +973,8 @@ def record_lexical_miss(
         conn.execute(
             "INSERT INTO lexical_miss_log (query, ts, fts_hits) "
             "VALUES (?, datetime('now'), ?)",
-            (query[:512] if query else "", int(fts_hits)),
+            (event_id if isinstance(event_id, str) and re.fullmatch(r"[0-9a-f]{32}", event_id) else uuid.uuid4().hex,
+             int(fts_hits)),
         )
         return True
     except Exception as e:  # noqa: BLE001

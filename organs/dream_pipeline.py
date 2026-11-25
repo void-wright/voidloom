@@ -81,6 +81,7 @@ from pathlib import Path
 # A per-module inline fallback would recreate the 13-way divergence this
 # module exists to end.
 import voidloom_env
+import marks
 import brain_clock  # the brain's one clock (UTC, its own stamp format); stdlib-only, laid beside this module
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -1666,7 +1667,7 @@ def phase_probe_qa(conn: sqlite3.Connection, cfg: Dict[str, Any],
                     _probe_gap_sql(conn),
                     (label[:500], round(1.0 - strength, 4),
                      _label_memory_count(conn, label),
-                     1 if (1.0 - strength) >= 0.5 else 0, batch_id),
+                     0, batch_id),              # a project or cluster name is the owner's words: never dispatchable by itself
                 )
                 filed += 1
             except sqlite3.Error as e:
@@ -1880,7 +1881,8 @@ def phase_gap_dispatch(conn: sqlite3.Connection, cfg: Dict[str, Any],
         res = gap_mapping.dispatch_auto_research(
             db_path=db_path, max_gaps=int(cfg["gap_max_dispatch"]),
         )
-        return _phase_result("ok", dispatch=res)
+        return _phase_result("skipped" if res.get("status") == "refused" else "ok", dispatch=res,
+                             **({"reason": res["code"]} if res.get("status") == "refused" else {}))
     except Exception as e:
         return _phase_result("error", reason=str(e))
 
@@ -1921,16 +1923,15 @@ def phase_raptor_synthesis(conn: sqlite3.Connection, cfg: Dict[str, Any],
             summary_text = _raptor_summarize(conn, cfg, label, members) if not dry else None
             syn_id = existing[2]
             if summary_text and syn_id:
-                conn.execute("UPDATE memories SET content=?, updated_at=datetime('now') WHERE id=?",
-                             (summary_text, syn_id))
+                # a rewrite is a new derivation: it takes its members' marks and is worth no more than they are
+                outside = _cluster_has_untrusted_member(conn, members)
+                marks.derived_rewrite(conn, syn_id, {
+                    "content": summary_text, **({"derived_from": "raptor_synthesis",
+                                                 "confidence": _TAINTED_SYNTHESIS_CONFIDENCE} if outside else {})}, members)
+                if outside:
+                    _tag_tainted(conn, syn_id)
                 _embed_synthesis_node(conn, cfg, syn_id, summary_text, replace=True)
-            # Anti-laundering on CHURN: a synthesis node created when the cluster
-            # was clean would otherwise be washed clean here once a freshly
-            # untrusted member joins. Re-evaluate taint every churn and inherit
-            # it onto the existing node (idempotent; set-to-1 only). This is the
-            # actual "washed clean on next churn" vector the breach exploited.
-            if syn_id and not dry and _cluster_has_untrusted_member(conn, members):
-                _stamp_synthesis_taint(conn, syn_id, "raptor_synthesis")
+            # A member that joined without a rewrite marks the node through raptor_clusters below (migration_046).
             conn.execute(
                 """UPDATE raptor_clusters SET member_count=?, member_ids_json=?,
                        cluster_label=?, last_summarized_at=datetime('now'),
@@ -2045,63 +2046,14 @@ _TAINTED_SYNTHESIS_CONFIDENCE: float = 0.40
 
 
 def _cluster_has_untrusted_member(conn, members) -> bool:
-    """True if ANY member id carries ``untrusted_source=1``. Fail-graceful: a
-    missing column / query error / empty members reads as NOT tainted (the
-    synthesis stays authored — we never spuriously taint a clean cluster)."""
+    """Does ANY member read as outside? A member that cannot be read does (marks.read_marks); no members is no."""
     ids = [int(m) for m in (members or []) if str(m).strip().lstrip("-").isdigit()]
-    if not ids:
-        return False
-    try:
-        placeholders = ",".join("?" for _ in ids)
-        row = conn.execute(
-            f"SELECT 1 FROM memories WHERE untrusted_source=1 AND id IN ({placeholders}) LIMIT 1",
-            ids,
-        ).fetchone()
-        return row is not None
-    except sqlite3.Error:
-        return False
+    return bool(ids) and marks.any_outside(conn, ids)
 
 
-def _project_has_untrusted_member(conn, project, kind=None) -> bool:
-    """True if ANY memory in ``project`` (optionally of ``kind``) is untrusted.
-    Used by the playbook path, whose members are addressed by source_project
-    rather than by an explicit id list. Fail-graceful (error/missing -> False)."""
-    if not project:
-        return False
-    try:
-        if kind:
-            row = conn.execute(
-                "SELECT 1 FROM memories WHERE untrusted_source=1 AND source_project=? "
-                "AND kind=? LIMIT 1",
-                (project, kind),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT 1 FROM memories WHERE untrusted_source=1 AND source_project=? LIMIT 1",
-                (project,),
-            ).fetchone()
-        return row is not None
-    except sqlite3.Error:
-        return False
-
-
-def _stamp_synthesis_taint(conn, mid, derived_from: str) -> None:
-    """Stamp a just-written synthesis row with the untrusted birth-mark + a
-    derived_from sentinel + a low confidence, so it inherits its cluster's taint.
-    Fail-graceful: any error leaves the row as-authored (the ceiling in
-    trust_tier still applies once the flag lands; here we best-effort all three).
-    The immutability trigger permits set-to-1 (only clearing 1->0 aborts)."""
-    try:
-        conn.execute(
-            "UPDATE memories SET untrusted_source=1, derived_from=?, confidence=? WHERE id=?",
-            (derived_from, _TAINTED_SYNTHESIS_CONFIDENCE, mid),
-        )
-        # Make the inherited taint queryable as a tag too (parallels the A-seal
-        # provenance visibility; recall framing keys on the column, not the tag).
-        conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, 'untrusted-source')",
-                     (mid,))
-    except Exception as e:
-        logger.debug("stamp synthesis taint failed for id=%s: %s", mid, e)
+def _tag_tainted(conn, mid) -> None:
+    """Make an inherited mark searchable as a tag too; the column is what decides anything."""
+    conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, 'untrusted-source')", (mid,))
 
 
 def _embed_synthesis_node(conn, cfg, mid, text, replace: bool = False) -> bool:
@@ -2137,32 +2089,23 @@ def _store_synthesis_node(conn, cfg, label, text, members) -> Optional[int]:
     try:
         summary = f"Synthesis of cluster [{str(label)[:60]}] ({len(members)} memories)"
         cols = {r[1] for r in conn.execute("PRAGMA table_info(memories)").fetchall()}
-        has_brain = "source_brain" in cols
-        if has_brain:
-            cur = conn.execute(
-                """INSERT INTO memories (content, summary, category, importance, kind,
-                       source_project, source_user, source_brain, created_at, updated_at, last_accessed)
-                   VALUES (?, ?, 'insight', 0.5, 'semantic', 'dream-pipeline', NULL, ?,
-                           datetime('now'), datetime('now'), datetime('now'))""",
-                (text, summary, _running_brain()),
-            )
-        else:
-            cur = conn.execute(
-                """INSERT INTO memories (content, summary, category, importance, kind,
-                       source_project, created_at, updated_at, last_accessed)
-                   VALUES (?, ?, 'insight', 0.5, 'semantic', 'dream-pipeline',
-                           datetime('now'), datetime('now'), datetime('now'))""",
-                (text, summary),
-            )
-        mid = cur.lastrowid
+        outside = _cluster_has_untrusted_member(conn, members)
+        row = {"content": text, "summary": summary, "category": "insight", "importance": 0.5, "kind": "semantic",
+               "source_project": "dream-pipeline"}
+        if "source_brain" in cols:
+            row["source_brain"] = _running_brain()
+        if outside:
+            row.update(derived_from="raptor_synthesis", confidence=_TAINTED_SYNTHESIS_CONFIDENCE)
+        mid = marks.derived_insert(conn, row, members)
         _embed_synthesis_node(conn, cfg, mid, text)
         for tag in ("synthesis-node", "raptor", "dream-synthesis"):
             conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
                          (mid, tag))
-        # Anti-laundering: inherit cluster taint onto the synthesis node.
-        if _cluster_has_untrusted_member(conn, members):
-            _stamp_synthesis_taint(conn, mid, "raptor_synthesis")
+        if outside:
+            _tag_tainted(conn, mid)
         return mid
+    except marks.MarksError:
+        raise                           # a brain with nowhere to put the marks: said, not swallowed
     except Exception as e:
         logger.debug("store synthesis node failed: %s", e)
         return None
@@ -2250,6 +2193,13 @@ def _detect_repeated_sequences(conn, cfg) -> List[Tuple[str, int, float]]:
     return out
 
 
+def _playbook_members(conn, project) -> List[int]:
+    """Exactly the procedural rows `_detect_repeated_sequences` counts for a project."""
+    return [r[0] for r in conn.execute(
+        "SELECT id FROM memories WHERE is_archived = 0 AND kind = 'procedural' AND source_project = ? "
+        "AND derived_from IS NULL ORDER BY id", (project,))]
+
+
 PLAYBOOK_DERIVED_FROM = "playbook_synthesis"
 PLAYBOOK_BIRTH_CONFIDENCE = 0.40
 
@@ -2283,37 +2233,22 @@ def _emit_playbook(conn, cfg, label, occ, evidence, note: Optional[Dict[str, Any
             note["duplicate_of"] = dup[0]
             return None
         summary = f"Playbook candidate [{str(label)[:60]}] ({occ}x)"
+        # Its parents are the rows it counted, by id: the project's name would name rows it never read.
+        members = _playbook_members(conn, label)
+        row = {"content": content, "summary": summary, "category": "workflow_pattern", "importance": 0.45,
+               "kind": "procedural", "source_project": "dream-pipeline", "source_context": "dream-synthesis",
+               "derived_from": PLAYBOOK_DERIVED_FROM, "confidence": PLAYBOOK_BIRTH_CONFIDENCE}
         if has_brain:
-            cur = conn.execute(
-                """INSERT INTO memories (content, summary, category, importance, kind,
-                       source_project, source_context, source_user, source_brain,
-                       derived_from, confidence, created_at, updated_at, last_accessed)
-                   VALUES (?, ?, 'workflow_pattern', 0.45, 'procedural',
-                           'dream-pipeline', 'dream-synthesis', NULL, ?, ?, ?,
-                           datetime('now'), datetime('now'), datetime('now'))""",
-                (content, summary, _running_brain(), PLAYBOOK_DERIVED_FROM, PLAYBOOK_BIRTH_CONFIDENCE),
-            )
-        else:
-            cur = conn.execute(
-                """INSERT INTO memories (content, summary, category, importance, kind,
-                       source_project, source_context, derived_from, confidence,
-                       created_at, updated_at, last_accessed)
-                   VALUES (?, ?, 'workflow_pattern', 0.45, 'procedural',
-                           'dream-pipeline', 'dream-synthesis', ?, ?,
-                           datetime('now'), datetime('now'), datetime('now'))""",
-                (content, summary, PLAYBOOK_DERIVED_FROM, PLAYBOOK_BIRTH_CONFIDENCE),
-            )
-        pid = cur.lastrowid
+            row["source_brain"] = _running_brain()
+        pid = marks.derived_insert(conn, row, members)
         for tag in ("playbook", "dream-synthesis", "unvalidated"):
             conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
                          (pid, tag))
-        # Anti-laundering: the playbook's members are the procedural memories in
-        # this source_project. If ANY is untrusted, the playbook inherits the
-        # taint (derived_from='playbook_synthesis' + low confidence + immutable
-        # flag) so it ranks below authored memory and recall frames it.
-        if _project_has_untrusted_member(conn, label, kind="procedural"):
-            _stamp_synthesis_taint(conn, pid, "playbook_synthesis")
+        if marks.any_outside(conn, [pid]):
+            _tag_tainted(conn, pid)
         return pid
+    except marks.MarksError:
+        raise                           # a brain with nowhere to put the marks: said, not swallowed
     except Exception as e:
         logger.debug("emit playbook failed: %s", e)
         return None

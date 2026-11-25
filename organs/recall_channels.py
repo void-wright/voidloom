@@ -47,6 +47,8 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
+import access_event  # noqa: E402
+import marks  # noqa: E402
 import dream_ledger as _dl  # noqa: E402  (stdlib-only sibling; the numbers that carry a dream)
 
 TOTAL_SIDE_CAP = 3
@@ -543,18 +545,28 @@ def _row(conn: sqlite3.Connection, name: str, spec: Dict[str, Any], mid: int, in
     return row
 
 
-def log_met(conn: sqlite3.Connection, channels: Dict[str, List[Dict[str, Any]]], query: str,
+def present(conn: sqlite3.Connection, rows: List[Dict[str, Any]]) -> None:
+    """The one presenter over side-channel rows. They carry their channel's frame already; an outside row gets the outside
+    frame as well, and so does the other endpoint a dream row quotes."""
+    marks.present_rows(conn, rows, own_frame=True)
+    marks.present_rows(conn, [r["other"] for r in rows if isinstance(r.get("other"), dict)], own_frame=True)
+
+
+def log_met(conn: sqlite3.Connection, channels: Dict[str, List[Dict[str, Any]]], event: Any,
             reg: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
     """THE MET LEDGER: one access_log row per SHOWN side row, access_type = the channel's (``recall:dream-lead``),
-    relevance NULL. Never an access_count / last_accessed bump. Read-only brains degrade (reported, not raised)."""
+    relevance NULL. Never an access_count / last_accessed bump. Read-only brains degrade (reported, not raised).
+    ``event`` is the recall's access event; a caller that passes its question instead gets a new event and the question
+    is not stored."""
     reg = reg if reg is not None else CHANNELS
+    event = access_event.of(event)
     n = 0
     try:
+        with_event = access_event.has_columns(conn)
         for name, rows in channels.items():
             at = (reg.get(name) or {}).get("access_type") or f"recall:{name}-lead"
             for r in rows:
-                conn.execute("INSERT INTO access_log (memory_id, access_type, query_text, relevance_score) "
-                             "VALUES (?, ?, ?, NULL)", (int(r["id"]), at, query))
+                access_event.log(conn, int(r["id"]), at, None, event, with_event)
                 n += 1
         return {"met_logged": n}
     except sqlite3.OperationalError as e:

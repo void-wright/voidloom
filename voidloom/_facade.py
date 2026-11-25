@@ -19,10 +19,10 @@ encoding-surprise, actor-stamping), the facade:
   5. Hands the engine's ``{status, action, ...}`` dict back to ``cli.py``, which
      wraps it into the Voidloom ``{status, code, data}`` envelope.
 
-The temp-DB override (for write-path tests) is done by swapping the engine's
-module-global ``DB_PATH`` for the duration of one call — ``_get_conn`` reads
-``DB_PATH`` live, so this cleanly redirects the engine at a temp copy without
-touching the live brain.
+Which database a call answers for, and where its JSON line goes, are pinned to the
+call (``organs/engine_pin.py``): nothing module-global is swapped, and one
+process-wide lock runs engine calls one at a time, so concurrent callers over two
+databases each get their own answer.
 
 Heavy imports are confined to ``_call_engine`` (and below) — importing THIS
 module is stdlib-cheap (it does not import claude_memory at module load).
@@ -30,7 +30,6 @@ module is stdlib-cheap (it does not import claude_memory at module load).
 from __future__ import annotations
 
 import argparse
-import contextlib
 import io
 import json
 import os
@@ -330,7 +329,7 @@ def _import_engine():
         #
         # The two engines are call-compatible where it matters: both expose
         # cmd_recall / cmd_store taking a Namespace and printing one JSON line,
-        # and both read a module-global DB_PATH that `_engine_db` swaps. So the
+        # and both read the pinned database (engine_pin). So the
         # degrade is a substitution, not a second code path.
         try:
             import claude_memory_lite  # type: ignore
@@ -342,23 +341,26 @@ def _import_engine():
         raise FacadeError(f"could not import claude_memory from {brain_dir!r}: {e}")
 
 
-@contextlib.contextmanager
-def _engine_db(engine, db_path: Optional[str]):
-    """Temporarily point the engine at ``db_path`` (a temp copy) for one call.
+def _engine_pin():
+    """organs/engine_pin.py: the process-wide lock around an engine call, and the per-call database and output."""
+    import sys
 
-    ``claude_memory._get_conn`` reads the module-global ``DB_PATH`` at call time,
-    so swapping it here redirects every read/write of this call. Always restored,
-    even on exception. When ``db_path`` is None the live default is used as-is.
-    """
-    if db_path is None:
-        yield
-        return
-    original = engine.DB_PATH
-    try:
-        engine.DB_PATH = Path(db_path)
-        yield
-    finally:
-        engine.DB_PATH = original
+    organs = str(_paths.organ_dir())
+    if organs not in sys.path:
+        sys.path.insert(0, organs)
+    import engine_pin  # type: ignore
+    return engine_pin
+
+
+def _asks_for_marks(ns: argparse.Namespace) -> bool:
+    return bool(getattr(ns, "outside", False)) or any(
+        getattr(ns, k, None) is not None for k in ("research", "author", "session_id", "parent_ref", "source_ids"))
+
+
+def _marks_unsupported(engine) -> Dict[str, Any]:
+    return {"status": "error", "error": "OUTSIDE_REQUIRES_MARK", "code": "OUTSIDE_REQUIRES_MARK", "action": "store",
+            "message": ("OUTSIDE_REQUIRES_MARK: this store asked for a mark and the engine that would answer "
+                        f"({getattr(engine, '__name__', 'engine')}) cannot write one. Nothing was stored.")}
 
 
 def _call_engine(cmd_name: str, ns: argparse.Namespace,
@@ -380,7 +382,16 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
     would have used on its own — a true no-op (byte-identical to passing None
     through). An explicit caller-supplied ``db_path`` (e.g. a temp-DB test copy)
     is honoured verbatim and is NOT overridden.
+
+    One call at a time in this process (``engine_pin.LOCK``): the model code under an engine is not safe to run twice at
+    once, so concurrent callers queue here. The database and the captured output are pinned to the call.
     """
+    with _engine_pin().LOCK:
+        return _call_engine_locked(cmd_name, ns, db_path)
+
+
+def _call_engine_locked(cmd_name: str, ns: argparse.Namespace, db_path: Optional[str]) -> Dict[str, Any]:
+    pinned = _engine_pin().pinned
     engine = _import_engine()
     if db_path is None:
         # Propagate voidloom's own resolution to the env-blind engine.
@@ -393,6 +404,8 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
     if cmd_fn is None:
         return {"status": "error",
                 "message": f"engine has no cmd_{cmd_name}"}
+    if cmd_name == "store" and _asks_for_marks(ns) and not getattr(engine, "SUPPORTS_MARKS", False):
+        return _marks_unsupported(engine)
 
     # H3 stdout/stderr split (deliberate, do-not-regress): we capture ONLY
     # stdout — the engine's single JSON line — into ``buf``. STDERR is left
@@ -405,125 +418,121 @@ def _call_engine(cmd_name: str, ns: argparse.Namespace,
     # keeps working because the clean JSON is the only thing on stdout.
     buf = io.StringIO()
     raised_exit = None
-    with _engine_db(engine, db_path):
+    try:
+        with pinned(db_path, buf):
+            cmd_fn(ns)
+    except SystemExit as se:
+        # _error() does sys.exit(1) AFTER printing the error JSON. A clean
+        # success path never exits. Capture the code; the printed line holds
+        # the real message.
+        raised_exit = se.code
+        # C3-b -- THE TIER-1 MODEL IS ABSENT, AND THE ENGINE SWALLOWED IT.
+        #
+        # `claude_memory._load_model` wraps its load in `except Exception ->
+        # _error(...)`, and `_error` prints an engine_error JSON and exits 1.
+        # So a missing MODEL never reaches the exception arms below: it
+        # arrives here, as a SystemExit, and the degrade never fired. That is
+        # why `--tier0-only` shipped a `recall` that exits 1 offline while
+        # `claude_memory_lite.py` sat present and unused.
+        #
+        # Read the ENGINE'S OWN VERDICT rather than guessing at exception
+        # types -- the payload is already in `buf`. Degrade only when the
+        # engine says the embedding capability failed AND the probe agrees it
+        # is genuinely absent; a brain-level engine_error still propagates.
+        if raised_exit and not getattr(engine, "_VOIDLOOM_TIER0", False):
+            _payload = buf.getvalue()
+            if _embedding_capability_error(_payload) and _tier1_unavailable(OSError(_payload)) \
+                    and _keyword_store_refused(cmd_name, db_path):
+                _said = _parse_last_json(_payload.strip())
+                buf = io.StringIO(_encoder_refusal(cmd_name, "EMBEDDER_UNAVAILABLE", str(
+                    (_said or {}).get("message") or _payload.strip()[:400])))
+            elif _embedding_capability_error(_payload) and _tier1_unavailable(OSError(_payload)):
+                lite = _import_tier0()
+                lite_fn = getattr(lite, f"cmd_{cmd_name.replace('-', '_')}", None) if lite else None
+                if lite_fn is not None:
+                    setattr(lite, "_VOIDLOOM_TIER0", True)
+                    setattr(lite, "_VOIDLOOM_TIER1_ERROR",
+                            "embedding model unavailable (engine_error at call time)")
+                    engine = lite
+                    buf = io.StringIO()
+                    raised_exit = None
+                    try:
+                        with pinned(db_path, buf):
+                            lite_fn(ns)
+                    except SystemExit as se2:
+                        raised_exit = se2.code
+    except (ImportError, OSError) as ie:
+        if not _tier1_unavailable(ie):
+            raise
+        if _keyword_store_refused(cmd_name, db_path):
+            return dict(_parse_last_json(_encoder_refusal(cmd_name, "EMBEDDER_UNAVAILABLE",
+                                                          f"{type(ie).__name__}: {ie}").strip()) or {},
+                        tier=1, engine="claude_memory")
+        # C3 -- THE TIER-1 STACK IS MISSING, AT CALL TIME.
+        #
+        # The first version of this degrade sat in `_import_engine`, which
+        # was the wrong place: `import claude_memory` SUCCEEDS on a
+        # stdlib-only interpreter. The failure is at RUNTIME --
+        # claude_memory.py:733 `import sqlite_vec` inside `_get_conn()` --
+        # so the degrade has to wrap the CALL, not the import. Traced, not
+        # assumed; the assumption cost one wrong edit.
+        #
+        # ImportError raised by a running engine command means exactly one
+        # thing: this interpreter does not carry the Tier-1 stack. Any other
+        # exception is a real failure and must NOT be masked -- a fallback
+        # that swallows errors is worse than no fallback, because it answers
+        # confidently over a broken brain.
+        lite = _import_tier0()
+        if lite is None:
+            raise
+        lite_fn = getattr(lite, f"cmd_{cmd_name.replace('-', '_')}", None)
+        if lite_fn is None:
+            raise
+        setattr(lite, "_VOIDLOOM_TIER0", True)
+        setattr(lite, "_VOIDLOOM_TIER1_ERROR", f"{type(ie).__name__}: {ie}")
+        engine = lite
+        buf = io.StringIO()
+        raised_exit = None
         try:
-            with contextlib.redirect_stdout(buf):
-                cmd_fn(ns)
+            with pinned(db_path, buf):
+                lite_fn(ns)
         except SystemExit as se:
-            # _error() does sys.exit(1) AFTER printing the error JSON. A clean
-            # success path never exits. Capture the code; the printed line holds
-            # the real message.
             raised_exit = se.code
-            # C3-b -- THE TIER-1 MODEL IS ABSENT, AND THE ENGINE SWALLOWED IT.
-            #
-            # `claude_memory._load_model` wraps its load in `except Exception ->
-            # _error(...)`, and `_error` prints an engine_error JSON and exits 1.
-            # So a missing MODEL never reaches the exception arms below: it
-            # arrives here, as a SystemExit, and the degrade never fired. That is
-            # why `--tier0-only` shipped a `recall` that exits 1 offline while
-            # `claude_memory_lite.py` sat present and unused.
-            #
-            # Read the ENGINE'S OWN VERDICT rather than guessing at exception
-            # types -- the payload is already in `buf`. Degrade only when the
-            # engine says the embedding capability failed AND the probe agrees it
-            # is genuinely absent; a brain-level engine_error still propagates.
-            if raised_exit and not getattr(engine, "_VOIDLOOM_TIER0", False):
-                _payload = buf.getvalue()
-                if _embedding_capability_error(_payload) and _tier1_unavailable(OSError(_payload)) \
-                        and _keyword_store_refused(cmd_name, db_path):
-                    _said = _parse_last_json(_payload.strip())
-                    buf = io.StringIO(_encoder_refusal(cmd_name, "EMBEDDER_UNAVAILABLE", str(
-                        (_said or {}).get("message") or _payload.strip()[:400])))
-                elif _embedding_capability_error(_payload) and _tier1_unavailable(OSError(_payload)):
-                    lite = _import_tier0()
-                    lite_fn = getattr(lite, f"cmd_{cmd_name.replace('-', '_')}", None) if lite else None
-                    if lite_fn is not None:
-                        setattr(lite, "_VOIDLOOM_TIER0", True)
-                        setattr(lite, "_VOIDLOOM_TIER1_ERROR",
-                                "embedding model unavailable (engine_error at call time)")
-                        engine = lite
-                        buf = io.StringIO()
-                        raised_exit = None
-                        with _engine_db(lite, db_path):
-                            try:
-                                with contextlib.redirect_stdout(buf):
-                                    lite_fn(ns)
-                            except SystemExit as se2:
-                                raised_exit = se2.code
-        except (ImportError, OSError) as ie:
-            if not _tier1_unavailable(ie):
-                raise
-            if _keyword_store_refused(cmd_name, db_path):
-                return dict(_parse_last_json(_encoder_refusal(cmd_name, "EMBEDDER_UNAVAILABLE",
-                                                              f"{type(ie).__name__}: {ie}").strip()) or {},
-                            tier=1, engine="claude_memory")
-            # C3 -- THE TIER-1 STACK IS MISSING, AT CALL TIME.
-            #
-            # The first version of this degrade sat in `_import_engine`, which
-            # was the wrong place: `import claude_memory` SUCCEEDS on a
-            # stdlib-only interpreter. The failure is at RUNTIME --
-            # claude_memory.py:733 `import sqlite_vec` inside `_get_conn()` --
-            # so the degrade has to wrap the CALL, not the import. Traced, not
-            # assumed; the assumption cost one wrong edit.
-            #
-            # ImportError raised by a running engine command means exactly one
-            # thing: this interpreter does not carry the Tier-1 stack. Any other
-            # exception is a real failure and must NOT be masked -- a fallback
-            # that swallows errors is worse than no fallback, because it answers
-            # confidently over a broken brain.
+    except Exception as te:
+        # The engine's TYPED refusals (`.code`) reach this in-process call as exceptions, never as the SystemExit
+        # `main()` makes of them. SNAPSHOT_ABSENT means the capability is absent, so the front door degrades exactly
+        # as it does for an ImportError, stamped. Every other typed code is an integrity refusal: returned as the
+        # engine's own envelope, never masked by a keyword answer, and never `unhandled`.
+        _code = getattr(te, "code", None)
+        if not _code:
+            raise                                       # not ours to rephrase
+        if _code not in _ENCODER_ABSENT or _keyword_store_refused(cmd_name, db_path):
+            payload = {"status": "error", "error": _code, "action": cmd_name, "message": str(te)}
+            cov = getattr(te, "coverage", None)
+            if cov is not None and hasattr(cov, "as_dict"):
+                payload["coverage"] = cov.as_dict()
+            for k, v in (getattr(te, "detail", None) or {}).items():
+                payload.setdefault(k, v)
+            if "coverage" not in payload and hasattr(engine, "_coverage_or_none"):
+                with pinned(db_path):                   # what `main()` adds on the engine's own door
+                    payload["coverage"] = engine._coverage_or_none()
+            buf = io.StringIO(json.dumps(payload) + "\n")
+            raised_exit = 1
+        else:
             lite = _import_tier0()
-            if lite is None:
-                raise
-            lite_fn = getattr(lite, f"cmd_{cmd_name.replace('-', '_')}", None)
+            lite_fn = getattr(lite, f"cmd_{cmd_name.replace('-', '_')}", None) if lite else None
             if lite_fn is None:
                 raise
             setattr(lite, "_VOIDLOOM_TIER0", True)
-            setattr(lite, "_VOIDLOOM_TIER1_ERROR", f"{type(ie).__name__}: {ie}")
+            setattr(lite, "_VOIDLOOM_TIER1_ERROR", f"{type(te).__name__}: {te}")
             engine = lite
             buf = io.StringIO()
             raised_exit = None
-            with _engine_db(lite, db_path):
-                try:
-                    with contextlib.redirect_stdout(buf):
-                        lite_fn(ns)
-                except SystemExit as se:
-                    raised_exit = se.code
-        except Exception as te:
-            # The engine's TYPED refusals (`.code`) reach this in-process call as exceptions, never as the SystemExit
-            # `main()` makes of them. SNAPSHOT_ABSENT means the capability is absent, so the front door degrades exactly
-            # as it does for an ImportError, stamped. Every other typed code is an integrity refusal: returned as the
-            # engine's own envelope, never masked by a keyword answer, and never `unhandled`.
-            _code = getattr(te, "code", None)
-            if not _code:
-                raise                                       # not ours to rephrase
-            if _code not in _ENCODER_ABSENT or _keyword_store_refused(cmd_name, db_path):
-                payload = {"status": "error", "error": _code, "action": cmd_name, "message": str(te)}
-                cov = getattr(te, "coverage", None)
-                if cov is not None and hasattr(cov, "as_dict"):
-                    payload["coverage"] = cov.as_dict()
-                for k, v in (getattr(te, "detail", None) or {}).items():
-                    payload.setdefault(k, v)
-                if "coverage" not in payload and hasattr(engine, "_coverage_or_none"):
-                    with _engine_db(engine, db_path):       # what `main()` adds on the engine's own door
-                        payload["coverage"] = engine._coverage_or_none()
-                buf = io.StringIO(json.dumps(payload) + "\n")
-                raised_exit = 1
-            else:
-                lite = _import_tier0()
-                lite_fn = getattr(lite, f"cmd_{cmd_name.replace('-', '_')}", None) if lite else None
-                if lite_fn is None:
-                    raise
-                setattr(lite, "_VOIDLOOM_TIER0", True)
-                setattr(lite, "_VOIDLOOM_TIER1_ERROR", f"{type(te).__name__}: {te}")
-                engine = lite
-                buf = io.StringIO()
-                raised_exit = None
-                with _engine_db(lite, db_path):
-                    try:
-                        with contextlib.redirect_stdout(buf):
-                            lite_fn(ns)
-                    except SystemExit as se3:
-                        raised_exit = se3.code
+            try:
+                with pinned(db_path, buf):
+                    lite_fn(ns)
+            except SystemExit as se3:
+                raised_exit = se3.code
 
     out = buf.getvalue().strip()
     parsed = _parse_last_json(out)
@@ -634,7 +643,8 @@ def _recall_namespace(query: str, top_k: int,
                       no_cross_tier: bool = False,
                       leads: Optional[int] = None,
                       explore: bool = False,
-                      no_rerank: bool = False) -> argparse.Namespace:
+                      no_rerank: bool = False,
+                      no_log: bool = False) -> argparse.Namespace:
     # cmd_recall + _resolve_recall_mode read these. We pin the default hybrid
     # pipeline and leave every ablation/kill-switch OFF (engine defaults).
     # ``explain`` mirrors the engine's own ``--explain`` (dest="explain",
@@ -661,6 +671,7 @@ def _recall_namespace(query: str, top_k: int,
         no_rerank=bool(no_rerank),
         multi_hop=0,
         no_log_usage=False,
+        no_log=bool(no_log),
         no_lens=False,
         persona=None,
         no_cross_tier=bool(no_cross_tier),
@@ -737,8 +748,12 @@ def recall(query: str, top_k: int = 5, explain: bool = False,
            db_path: Optional[str] = None,
            leads: Optional[int] = None,
            explore: bool = False,
-           no_rerank: bool = False) -> Dict[str, Any]:
+           no_rerank: bool = False,
+           no_log: bool = False) -> Dict[str, Any]:
     """Facade -> engine cmd_recall (lazy heavy import happens here).
+
+    ``no_log`` leaves no trace of this recall: no access row, no access count, no usage or met row. (No recall stores the
+    words that were asked, with or without it.)
 
     ``no_rerank`` (handoff round 1) skips the rerank stage for this recall (mode ``no-rerank``). It can only turn the
     reranker OFF: the engine's gate keeps it off on CPU-only machines and below 15.0 GiB RAM whatever this says.
@@ -767,7 +782,7 @@ def recall(query: str, top_k: int = 5, explain: bool = False,
     off, nothing is added and the dict is exactly what it was before."""
     ns = _recall_namespace(query, top_k, explain=explain,
                            no_cross_tier=no_cross_tier, leads=leads, explore=explore,
-                           no_rerank=no_rerank)
+                           no_rerank=no_rerank, no_log=no_log)
     res = _call_engine("recall", ns, db_path=db_path)
     if explain:
         _attach_structured_explain(res)
@@ -827,13 +842,27 @@ def _attach_structured_explain(res: Dict[str, Any]) -> None:
         return
 
 
+def _set_marks(ns: argparse.Namespace, outside: bool, research: Optional[str], author: Optional[str],
+               session_id: Optional[str], parent_ref: Optional[str], source_ids: Any) -> None:
+    """What the caller says about where the text came from, onto the namespace both engines read. Never inferred."""
+    ns.outside, ns.research, ns.author = outside, research, author
+    ns.session_id, ns.parent_ref, ns.source_ids = session_id, parent_ref, source_ids
+
+
 def store(content: str, category: str, tags: str = "", importance: float = 0.5,
-          db_path: Optional[str] = None, answers: Optional[str] = None) -> Dict[str, Any]:
+          db_path: Optional[str] = None, answers: Optional[str] = None, *, outside: bool = False,
+          research: Optional[str] = None, author: Optional[str] = None, session_id: Optional[str] = None,
+          parent_ref: Optional[str] = None, source_ids: Any = None) -> Dict[str, Any]:
     """Facade -> engine cmd_store. Category-enum validation is done in cli.py
     BEFORE this is called (so a bad category never loads the embedding model),
-    but the engine validates again — defence in depth."""
+    but the engine validates again — defence in depth.
+
+    ``outside`` marks text that is not the owner's own; ``research`` names the registered run that produced it (and
+    implies outside); ``author`` is user, model or tool; ``source_ids`` are the memories it was written from, and it
+    takes their marks."""
     ns = _store_namespace(content, category, tags, importance)
     ns.answers = answers            # the dream fix (R1-M6): `--answers <dream_id>` reaches the engine's settle path
+    _set_marks(ns, outside, research, author, session_id, parent_ref, source_ids)
     return _call_engine("store", ns, db_path=db_path)
 
 
@@ -842,7 +871,9 @@ def store_full(content: str, category: str, *, tags: str = "",
                project: Optional[str] = None, context: Optional[str] = None,
                summary: Optional[str] = None, source_user: Optional[str] = None,
                auto_edges: bool = False,
-               db_path: Optional[str] = None, answers: Optional[str] = None) -> Dict[str, Any]:
+               db_path: Optional[str] = None, answers: Optional[str] = None, outside: bool = False,
+               research: Optional[str] = None, author: Optional[str] = None, session_id: Optional[str] = None,
+               parent_ref: Optional[str] = None, source_ids: Any = None) -> Dict[str, Any]:
     """Facade -> engine cmd_store with the FULL field set (the batch-store path).
 
     Same engine entry point as ``store``, but exposes every memory-dict field a
@@ -857,6 +888,7 @@ def store_full(content: str, category: str, *, tags: str = "",
         project=project, context=context, summary=summary,
         source_user=source_user, auto_edges=auto_edges)
     ns.answers = answers            # R1-M6: batch-store items may settle dreams too
+    _set_marks(ns, outside, research, author, session_id, parent_ref, source_ids)
     return _call_engine("store", ns, db_path=db_path)
 
 
@@ -865,6 +897,48 @@ def context(project: Optional[str] = None, limit: int = 15,
     """Facade -> engine cmd_context (stdlib-cheap; no embedding model needed)."""
     ns = _context_namespace(project, limit)
     return _call_engine("context", ns, db_path=db_path)
+
+
+def _marks_call(module: str, fn: str, db_path: Optional[str], *args: Any, **kw: Any) -> Dict[str, Any]:
+    """Run one of the mark verbs over the resolved brain and return its result, a refusal included, as a dict."""
+    import importlib
+    with _engine_pin().LOCK:
+        mod = importlib.import_module(module)
+        db = db_path if db_path is not None else _paths.resolve_db()
+        try:
+            return getattr(mod, fn)(db, *args, **kw)
+        except Exception as e:  # noqa: BLE001 -- only a typed refusal is an answer
+            code = getattr(e, "code", None)
+            if not isinstance(code, str):
+                raise
+            return {"status": "error", "error": code, "code": code, "message": str(e), **(getattr(e, "detail", None) or {})}
+
+
+def research_register(config: Dict[str, Any], run_id: Optional[str] = None,
+                      db_path: Optional[str] = None) -> Dict[str, Any]:
+    """Register a research configuration, and a run of it. Insert-only, idempotent, starts nothing."""
+    return _marks_call("marks", "register", db_path, config, run_id)
+
+
+def forget(memory_id: Optional[int] = None, run_id: Optional[str] = None, *, dry_run: bool = False,
+           include_mixed: bool = False, db_path: Optional[str] = None) -> Dict[str, Any]:
+    """Archive one memory or one research run, with a receipt. Reversible: `unarchive`."""
+    return _marks_call("mark_admin", "forget", db_path, memory_id=memory_id, run_id=run_id, dry_run=dry_run,
+                       include_mixed=include_mixed)
+
+
+def unarchive(memory_id: Optional[int] = None, run_id: Optional[str] = None, *,
+              db_path: Optional[str] = None) -> Dict[str, Any]:
+    """Undo `forget` for one memory or one run, from its receipt."""
+    return _marks_call("mark_admin", "unarchive", db_path, memory_id=memory_id, run_id=run_id)
+
+
+def marks_backfill(*, dry_run: bool = False, yes_many: bool = False, undo: bool = False,
+                   db_path: Optional[str] = None) -> Dict[str, Any]:
+    """Mark what was already written from marked rows, or undo the last time that was done."""
+    if undo:
+        return _marks_call("mark_admin", "backfill_undo", db_path)
+    return _marks_call("mark_admin", "backfill", db_path, dry_run=dry_run, yes_many=yes_many)
 
 
 def engine_categories() -> List[str]:

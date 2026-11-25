@@ -92,6 +92,7 @@ except ImportError:  # imported from outside the organ directory
 # A per-module inline fallback would recreate the 13-way divergence this
 # module exists to end.
 import voidloom_env
+import marks
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 # L5-F (iter-2 P2): the ACT-R activation view lives in kind_taxonomy. Stage 5
@@ -847,31 +848,20 @@ def consolidate_episodics(
         cluster_embeddings = [memories[mid]['embedding'] for mid in members]
         centroid = _centroid_embedding(cluster_embeddings)
 
-        # Determine importance: average of cluster, slightly boosted.
-        avg_importance = sum(m['importance'] for m in cluster_mems) / len(cluster_mems)
-        new_importance = min(1.0, avg_importance + 0.05)
-
-        # Insert consolidated memory.
-        now_iso = _utc_stamp()
-        cursor = conn.execute(
-            """INSERT INTO memories
-               (content, summary, category, importance, source_project, source_context,
-                kind, confidence, derived_from, consolidated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                consolidated_content,
-                consolidated_summary,
-                highest_importance_mem['category'],
-                new_importance,
-                'sleep-loop-consolidation',
-                f'cluster_id={cluster_id}',
-                'semantic',
-                confidence,
-                json.dumps(members),
-                now_iso,
-            ),
-        )
-        new_id = cursor.lastrowid
+        # Worth the mean of its members and no more: a restatement adds no evidence. It carries every mark they carry.
+        new_importance = sum(m['importance'] for m in cluster_mems) / len(cluster_mems)
+        new_id = marks.derived_insert(conn, {
+            'content': consolidated_content,
+            'summary': consolidated_summary,
+            'category': highest_importance_mem['category'],
+            'importance': new_importance,
+            'source_project': 'sleep-loop-consolidation',
+            'source_context': f'cluster_id={cluster_id}',
+            'kind': 'semantic',
+            'confidence': confidence,
+            'derived_from': json.dumps(members),
+            'consolidated_at': _utc_stamp(),
+        }, members)
 
         # Insert the centroid embedding AND ITS STAMP. A refusal rolls the memory back with it, so no unstamped vector
         # and no orphan memory survive; the members stay eligible and the rest of the night goes on.
@@ -1298,23 +1288,16 @@ def generate_reflections(
         return []
 
     # Store the reflection.
-    cursor = conn.execute(
-        """INSERT INTO memories
-           (content, summary, category, importance, source_project, source_context,
-            kind, confidence)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            reflection_content,
-            reflection_summary,
-            'insight',
-            0.6,
-            'sleep-loop-reflection',
-            f'unreflected_count={unreflected_count}',
-            'reflection',
-            0.7,
-        ),
-    )
-    reflection_id = cursor.lastrowid
+    reflection_id = marks.derived_insert(conn, {
+        'content': reflection_content,
+        'summary': reflection_summary,
+        'category': 'insight',
+        'importance': 0.6,
+        'source_project': 'sleep-loop-reflection',
+        'source_context': f'unreflected_count={unreflected_count}',
+        'kind': 'reflection',
+        'confidence': 0.7,
+    }, [r[0] for r in recent_episodics])
     # TO-03: this memory must be findable.
     _vl_attach(conn, reflection_id, reflection_content, "sleep_loop.generate_reflections",
                sources=[r[0] for r in recent_episodics], transformation="reflection")
@@ -1444,6 +1427,8 @@ def rerank_importance(
     for mid, current_imp, access_count in rows:
         boost = min(boost_cap, access_count * 0.01)
         new_imp = min(1.0, current_imp + boost)
+        if new_imp > current_imp and marks.read_marks(conn, [mid])[mid].state == marks.MARKED:
+            continue                    # being recalled is no reason to value outside text more
         if abs(new_imp - current_imp) > 0.001:
             if not dry_run:
                 conn.execute(

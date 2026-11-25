@@ -31,11 +31,13 @@ from typing import Any, Dict, List, Optional
 
 # The brain's one clock (UTC, its own stamp format): a sibling organ, stdlib-only.
 try:
+    import access_event
     import brain_clock
 except ImportError:  # imported from outside the organ directory
     import sys as _bc_sys
     from pathlib import Path as _BcPath
     _bc_sys.path.insert(0, str(_BcPath(__file__).resolve().parent))
+    import access_event
     import brain_clock
 
 # rho-2: the pin is RESOLVED, never hardcoded. apply_cuda_pin() reads
@@ -282,6 +284,12 @@ def cmd_store(args):
     if not summary:
         summary = args.content[:100] + ("..." if len(args.content) > 100 else "")
 
+    if getattr(args, "outside", False) or getattr(args, "research", None) is not None:
+        _output({"status": "error", "error": "OUTSIDE_REQUIRES_MARK", "code": "OUTSIDE_REQUIRES_MARK", "action": "store",
+                 "message": "this database has no mark columns, so outside text cannot be stored in it as outside. "
+                            "Nothing was stored; use voidloom store --outside."})
+        sys.exit(1)
+
     embedding = _encode(args.content, "search_document")
 
     cursor = conn.execute(
@@ -381,15 +389,13 @@ def cmd_recall(args):
         if len(results) >= args.top_k:
             break
 
+    event = access_event.new(args.query)
     for r in results:
         conn.execute(
             "UPDATE memories SET last_accessed = datetime('now'), access_count = access_count + 1 WHERE id = ?",
             (r["id"],),
         )
-        conn.execute(
-            "INSERT INTO access_log (memory_id, access_type, query_text, relevance_score) VALUES (?, ?, ?, ?)",
-            (r["id"], "recall", args.query, r["distance"]),
-        )
+        access_event.log(conn, r["id"], "recall", r["distance"], event)
 
     conn.commit()
     conn.close()
@@ -1025,6 +1031,8 @@ def main():
     p_store.add_argument("--project", "-p", default=None, help="Source project")
     p_store.add_argument("--context", default=None, help="What triggered this memory")
     p_store.add_argument("--summary", "-s", default=None, help="One-line summary")
+    p_store.add_argument("--outside", action="store_true", help="Refused here (OUTSIDE_REQUIRES_MARK): no mark columns")
+    p_store.add_argument("--research", nargs="?", const="", default=None, help="Refused here (OUTSIDE_REQUIRES_MARK)")
 
     # recall
     p_recall = subparsers.add_parser("recall", help="Semantic search")

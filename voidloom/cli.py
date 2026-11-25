@@ -1229,7 +1229,7 @@ def verb_recall(args) -> Dict[str, Any]:
             explain=getattr(args, "explain", False),
             no_cross_tier=bool(getattr(args, "no_cross_tier", False)),
             db_path=db, leads=getattr(args, "leads", None),
-            explore=bool(getattr(args, "explore", False)))
+            explore=bool(getattr(args, "explore", False)), no_log=bool(getattr(args, "no_log", False)))
     except sqlite3.OperationalError as exc:
         ro = _readonly_refusal_from_exc(db, exc, action="recall")
         if ro is not None:
@@ -1252,7 +1252,7 @@ def verb_recall(args) -> Dict[str, Any]:
 
 def _recall_via_facade(facade, query: str, *, top_k: int, explain: bool,
                        no_cross_tier: bool, db_path, leads: Optional[int] = None,
-                       explore: bool = False):
+                       explore: bool = False, no_log: bool = False):
     """Call ``_facade.recall`` forwarding ``--no-cross-tier`` (H12).
 
     The flag threads to the engine exactly like ``top_k``/``explain`` do: the
@@ -1267,6 +1267,9 @@ def _recall_via_facade(facade, query: str, *, top_k: int, explain: bool,
         _kw["leads"] = leads
     if explore:
         _kw["explore"] = True
+    if no_log:                          # never dropped by the fallback below: a recall asked to leave no trace leaves none
+        return facade.recall(query, top_k=top_k, explain=explain, no_cross_tier=no_cross_tier, db_path=db_path,
+                             no_log=True, **_kw)
     try:
         return facade.recall(query, top_k=top_k, explain=explain,
                              no_cross_tier=no_cross_tier, db_path=db_path, **_kw)
@@ -1436,6 +1439,13 @@ def _readonly_refusal_from_exc(db: Optional[str], exc: BaseException, *,
     )
 
 
+def _mark_args(args) -> Dict[str, Any]:
+    """What `--outside`, `--research` and the rest say, for the facade."""
+    return {"outside": bool(getattr(args, "outside", False)), "research": getattr(args, "research", None),
+            "author": getattr(args, "author", None), "session_id": getattr(args, "session", None),
+            "parent_ref": getattr(args, "parent", None), "source_ids": getattr(args, "source_ids", None)}
+
+
 def verb_store(args) -> Dict[str, Any]:
     """Facade -> brain store. Validates the category enum BEFORE any heavy import,
     and gates writes through the local-FS + read-only guard."""
@@ -1473,7 +1483,7 @@ def verb_store(args) -> Dict[str, Any]:
                             tags=getattr(args, "tags", "") or "",
                             importance=(args.importance
                                         if args.importance is not None else 0.5),
-                            db_path=db, answers=getattr(args, "answers", None))
+                            db_path=db, answers=getattr(args, "answers", None), **_mark_args(args))
     except sqlite3.OperationalError as exc:
         # M6: a present-but-empty brain (no schema) raises `no such table:
         # memories` mid-store; emit the typed db_uninitialized envelope rather
@@ -1482,6 +1492,61 @@ def verb_store(args) -> Dict[str, Any]:
             return _db_uninitialized_error(db, verb="store", exc=exc)
         raise
     return _wrap_engine_result(res, verb="store", ok_code="store_ok")
+
+
+def _marks_result(res: Dict[str, Any], verb: str, ok_code: str) -> Dict[str, Any]:
+    """A mark verb's result as an envelope. The refusal codes are the interface, so they are never folded into one."""
+    if res.get("status") == "ok":
+        return ok(ok_code, res, verb=verb)
+    return error(str(res.get("code") or "engine_error"), str(res.get("message") or "refused"), data=res, verb=verb)
+
+
+def verb_research_register(args) -> Dict[str, Any]:
+    """Register a research configuration (a JSON file), and a run of it. Insert-only; starts nothing."""
+    db, verb = getattr(args, "db", None), "research-register"
+    refusal = _guard.require_write(db)
+    if refusal is not None:
+        return refused(refusal["code"], refusal["message"], data=refusal, verb=verb)
+    try:
+        with open(args.config, encoding="utf-8") as fh:
+            spec = json.load(fh)
+    except (OSError, ValueError) as e:
+        return error("CONFIG_INVALID", f"could not read a JSON object from {args.config!r}: {e}", verb=verb)
+    from . import _facade
+    return _marks_result(_facade.research_register(spec, args.run, db_path=db), verb, "research_registered")
+
+
+def verb_forget(args) -> Dict[str, Any]:
+    """Archive one memory or one research run, reversibly, with a receipt."""
+    db = getattr(args, "db", None)
+    refusal = _guard.require_write(db)
+    if refusal is not None:
+        return refused(refusal["code"], refusal["message"], data=refusal, verb="forget")
+    from . import _facade
+    return _marks_result(_facade.forget(args.id, args.run, dry_run=bool(args.dry_run),
+                                        include_mixed=bool(args.include_mixed), db_path=db),
+                         "forget", "forget_ok")
+
+
+def verb_unarchive(args) -> Dict[str, Any]:
+    """Undo `forget` for one memory or one run, from its receipt."""
+    db = getattr(args, "db", None)
+    refusal = _guard.require_write(db)
+    if refusal is not None:
+        return refused(refusal["code"], refusal["message"], data=refusal, verb="unarchive")
+    from . import _facade
+    return _marks_result(_facade.unarchive(args.id, args.run, db_path=db), "unarchive", "unarchive_ok")
+
+
+def verb_marks(args) -> Dict[str, Any]:
+    """`marks backfill`: mark what was already written from marked memories before the database did it by itself."""
+    db = getattr(args, "db", None)
+    refusal = _guard.require_write(db)
+    if refusal is not None:
+        return refused(refusal["code"], refusal["message"], data=refusal, verb="marks")
+    from . import _facade
+    return _marks_result(_facade.marks_backfill(dry_run=bool(args.dry_run), yes_many=bool(args.yes_many),
+                                                undo=bool(args.undo), db_path=db), "marks", "marks_backfill_ok")
 
 
 def verb_context(args) -> Dict[str, Any]:
@@ -1602,6 +1667,8 @@ def verb_batch_recall(args) -> Dict[str, Any]:
             _kw["leads"] = args.leads
         if getattr(args, "explore", False):
             _kw["explore"] = True
+        if getattr(args, "no_log", False):
+            _kw["no_log"] = True
         results = _batch.recall_batch(items, top_k=args.top_k, db_path=db, **_kw)
     except sqlite3.OperationalError as exc:
         ro = _readonly_refusal_from_exc(db, exc, action="batch-recall")
@@ -1669,7 +1736,8 @@ def verb_batch_store(args) -> Dict[str, Any]:
     categories = _facade.engine_categories()
 
     from . import _batch
-    results = _batch.store_batch(items, db_path=db, valid_categories=categories)
+    results = _batch.store_batch(items, db_path=db, valid_categories=categories,
+                                 defaults={k: v for k, v in _mark_args(args).items() if k != "source_ids"})
     summary = _batch.summarize(results)
     # C5: the verdict is taken from the SAME count this envelope prints.
     _env = (incomplete if summary.get("failed") else ok)
@@ -2043,6 +2111,29 @@ def _verb_tui(backend, db, face: Optional[str] = None) -> Dict[str, Any]:
     return _approvals_envelope(res.get("code", "tui_done"), res, _count_trust(db))
 
 
+def _doctor_marks(db: Optional[str]) -> Dict[str, Any]:
+    """marks.health, with the line a person reads. A lost trigger is a fault of the brain: derived rows written while it is
+    gone carry no mark. A brain before migration_046 is a warning: it works, and frames what it cannot vouch for."""
+    if not db:
+        return {"verdict": "NO_BRAIN"}
+    try:
+        _organs_importable()
+        import marks
+        out = marks.health(db)
+    except Exception as e:  # noqa: BLE001 -- doctor reports, it does not raise
+        return {"verdict": "UNMEASURED", "error": f"{type(e).__name__}: {e}"}
+    if out["verdict"] == "MARK_TRIGGERS_MISSING":
+        out["fault"] = (f"MARK_TRIGGERS_MISSING: {len(out['missing_triggers'])} trigger(s) that carry marks are gone "
+                        f"({', '.join(out['missing_triggers'][:3])}); the next store or recall puts them back. Then run: "
+                        "voidloom marks backfill --dry-run")
+    elif out["verdict"] == "BRAIN_NEEDS_MIGRATION":
+        out["warning"] = ("marks: this brain predates migration_046: a store marked outside or research refuses, and derived "
+                          "writes refuse. Re-run the installer.")
+    if out.get("odd_marks"):
+        out["warning"] = f"marks: {out['odd_marks']} memories hold a mark that is neither 0 nor 1; they read as outside"
+    return out
+
+
 def verb_doctor(args) -> Dict[str, Any]:
     """Health check: DB reachable + local-FS-guard verdict + brain importable +
     (lazy, best-effort) model availability. Fail-graceful — always returns ok
@@ -2149,6 +2240,9 @@ def verb_doctor(args) -> Dict[str, Any]:
     _runs = _doctor_organ_runs(brain.get("db_path") or db)
     if _runs.get("failed"):
         _warnings = _warnings + [_runs["line"]]
+    _marks = _doctor_marks(brain.get("db_path") if brain.get("db_present") else None)
+    if _marks.get("warning"):
+        _warnings = _warnings + [_marks["warning"]]
     _coh = _embedding_coherence(brain.get("db_path"))
     _reason: Optional[str] = None
     if not guard.ok:
@@ -2163,7 +2257,7 @@ def verb_doctor(args) -> Dict[str, Any]:
         _model, _repair = _recall_model_refusal(_db, _coh)
         _reason = (_foreign_env_dir() or _runtime_missing(models, _db, _coh) or _read_only(guard.writable)
                    or _incomplete_model(models) or _schema_gap(_db) or (_model if _repair else None)
-                   or _brain_fault(_coh) or _model or _absent_model(models, _db, _coh))
+                   or _brain_fault(_coh) or _model or _absent_model(models, _db, _coh) or _marks.get("fault"))
         if not _reason and "peft" in (models.get("missing_modules") or []):
             _organs_importable()
             import embedder_lock
@@ -2198,6 +2292,8 @@ def verb_doctor(args) -> Dict[str, Any]:
             "models_detail": models,
             # the lock and the provenance reader's coverage, from the reader itself
             "embedding_coherence": _coh,
+            # can this brain hold where a memory came from, and are the triggers that carry it all there?
+            "marks": _marks,
             "gpu_declaration": _gpu_decl,
             "gpu_pin": _pin,
             # round 2, M5: the backend, cpu_only and the proof label, beside the pin
@@ -2564,7 +2660,15 @@ def _memory_record(conn: sqlite3.Connection, memory_id: int, active_table: Optio
     tags = [r[0] for r in conn.execute("SELECT tag FROM memory_tags WHERE memory_id = ? ORDER BY tag", (memory_id,))]
     visibility, basis = _visibility(tags)
     stamp, stamps = _model_stamp(conn, memory_id, active_table)
-    return {"id": memory_id, "text": rec.get("content"), "summary": rec.get("summary"),
+    import marks
+    read = marks.read_marks(conn, [memory_id])
+    mark = read[memory_id]
+    # A label, not a frame: these two verbs show a row as it is stored (an exported text is checked against its stamp).
+    origin = {"outside": mark.outside, "research": mark.research, "state": mark.state,
+              "research_run_id": mark.run_id, "research_config_id": mark.config_id,
+              **({"degraded_reason": read.error} if read.error else {})}
+    return {"id": memory_id, "text": rec.get("content"), "summary": rec.get("summary"), "marks": origin,
+            **{k: rec.get(k) for k in ("author", "session_id", "parent_ref", "source_ids") if k in rec},
             "seed": bool(rec["seed"]) if "seed" in rec else None, "origin": rec.get("origin"),
             "visibility": visibility, "visibility_basis": basis, "category": rec.get("category"),
             "kind": rec.get("kind"), "importance": rec.get("importance"), "is_archived": rec.get("is_archived"),
@@ -3162,7 +3266,11 @@ def _wrap_engine_result(res: Dict[str, Any], *, verb: str,
     # Engine error (printed by _error / a failure path).
     msg = res.get("message") or res.get("error") or "engine reported an error"
     typed = res.get("error")                    # a typed refusal keeps its name: LOCK_MISSING, SCHEMA_DAMAGED, ...
-    return error(typed if isinstance(typed, str) and typed.isupper() else "engine_error", str(msg), data=res, verb=verb)
+    env = error(typed if isinstance(typed, str) and typed.isupper() else "engine_error", str(msg), data=res, verb=verb)
+    for key in ("memory_id", "row_may_exist"):      # a store that failed after its commit: the caller looks before it retries
+        if key in res:
+            env["data"][key] = res[key]
+    return env
 
 
 _APPROVAL_WORK_KEYS = ("enacted", "failed", "blocked", "skipped")
@@ -3263,6 +3371,20 @@ def _add_global_flags(sp: argparse.ArgumentParser) -> None:
 
 
 CLI_SURFACE_SCHEMA = "cli-surface/1"
+
+
+def _add_mark_flags(sp: argparse.ArgumentParser, sources: bool = True) -> None:
+    """Where the text came from. Nothing here is ever inferred from the text itself."""
+    sp.add_argument("--outside", action="store_true", default=False,
+                    help="the text is not the owner's own (a page, another program): stored marked, shown framed")
+    sp.add_argument("--research", nargs="?", const="", default=None, metavar="RUN_ID",
+                    help="the registered research run that produced the text (implies --outside; see research-register)")
+    sp.add_argument("--author", default=None, metavar="WHO", help="who wrote it: user, model or tool")
+    sp.add_argument("--session", default=None, metavar="ID", help="the session it was written in (recorded only)")
+    sp.add_argument("--parent", default=None, metavar="REF", help="the message or item it answers (recorded only)")
+    if sources:
+        sp.add_argument("--source-ids", dest="source_ids", default=None, metavar="1,2,3",
+                        help="the memories it was written from: it takes their marks")
 
 
 def cli_surface_version(parser: Optional[argparse.ArgumentParser] = None) -> str:
@@ -3416,6 +3538,41 @@ def build_parser() -> argparse.ArgumentParser:
     _add_global_flags(sp)
     sp.set_defaults(_fn=verb_export)
 
+    # marks: what is outside, what research wrote, and taking either back
+    sp = sub.add_parser("research-register",
+                        help="register a research configuration (JSON file) and a run of it; insert-only, starts nothing.")
+    sp.add_argument("--config", required=True, metavar="FILE", help="a JSON object: model, prompt, gate, checker versions")
+    sp.add_argument("--run", default=None, metavar="RUN_ID", help="also register this run of the configuration")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_research_register)
+
+    sp = sub.add_parser("forget", help="archive one memory, or everything one research run wrote (reversible; a receipt).")
+    sp.add_argument("--id", type=int, default=None, metavar="N", help="one memory")
+    sp.add_argument("--run", default=None, metavar="RUN_ID", help="every memory of one research run")
+    sp.add_argument("--dry-run", dest="dry_run", action="store_true", help="say what would be archived; change nothing")
+    sp.add_argument("--include-mixed", dest="include_mixed", action="store_true",
+                    help="also archive rows written from the run AND from something else (listed, otherwise left)")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_forget)
+
+    sp = sub.add_parser("unarchive", help="undo `forget`: restore what it archived, and nothing else.")
+    sp.add_argument("--id", type=int, default=None, metavar="N", help="one memory")
+    sp.add_argument("--run", default=None, metavar="RUN_ID", help="every memory `forget --run` archived")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_unarchive)
+
+    sp = sub.add_parser("marks", help="marks backfill: mark what was already written from marked memories (once, reversible).")
+    sp.add_argument("marks_action", choices=["backfill"], help="the action")
+    sp.add_argument("--dry-run", dest="dry_run", action="store_true", help="say which rows would be marked; change nothing")
+    sp.add_argument("--yes-many", dest="yes_many", action="store_true", help="go on past the 200-row halt")
+    sp.add_argument("--undo", action="store_true", help="restore the last backfill's pre-image")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_marks)
+
     # recall
     sp = sub.add_parser("recall", help="hybrid retrieval over the brain.")
     sp.add_argument("--query", "-q", required=True, help="search query")
@@ -3447,6 +3604,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-rerank", dest="no_rerank", action="store_true", default=False,
                     help="skip the reranker for this run (vector + keyword + RRF). It can only turn the reranker "
                          "OFF: it never runs on CPU-only machines or below 15.0 GiB RAM anyway")
+    sp.add_argument("--no-log", dest="no_log", action="store_true", default=False,
+                    help="leave no trace: no access row, no access count (no recall ever stores the words asked)")
     sp.add_argument("--json", action="store_true", help="structured envelope")
     _add_global_flags(sp)
     sp.set_defaults(_fn=verb_recall)
@@ -3461,6 +3620,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="importance 0.0-1.0 (default 0.5)")
     sp.add_argument("--answers", default=None,
                     help="comma-separated dream id(s) this recorded memory settles (evidence: +0.10 each, cap 0.65)")
+    _add_mark_flags(sp)
     sp.add_argument("--json", action="store_true", help="structured envelope")
     _add_global_flags(sp)
     sp.set_defaults(_fn=verb_store)
@@ -3493,6 +3653,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-rerank", dest="no_rerank", action="store_true", default=False,
                     help="skip the reranker for this run (vector + keyword + RRF). It can only turn the reranker "
                          "OFF: it never runs on CPU-only machines or below 15.0 GiB RAM anyway")
+    sp.add_argument("--no-log", dest="no_log", action="store_true", default=False,
+                    help="leave no trace: no access row, no access count (no recall ever stores the words asked)")
     sp.add_argument("--json", action="store_true", help="structured envelope")
     _add_global_flags(sp)
     sp.set_defaults(_fn=verb_batch_recall)
@@ -3508,6 +3670,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "or - (stdin). Each element needs content+category; "
                          "tags/kind/importance/summary/project/context/"
                          "source_user/auto_edges are optional.")
+    _add_mark_flags(sp, sources=False)
     sp.add_argument("--json", action="store_true", help="structured envelope")
     _add_global_flags(sp)
     sp.set_defaults(_fn=verb_batch_store)

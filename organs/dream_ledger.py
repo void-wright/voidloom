@@ -48,6 +48,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
+try:
+    import marks
+except ImportError:  # imported from outside the organ directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
@@ -532,17 +538,20 @@ def dream_watch(conn: sqlite3.Connection, window_days: float = 2.0, now: Optiona
 
 def surfacing_report(conn: sqlite3.Connection, now: Optional[datetime] = None, days: float = 7.0) -> Optional[Dict[str, Any]]:
     """THE SURFACING REPORT (owner ruling 3, VL-DF-v1.1; DREAM_FLOOR_DECISION): a REPORT over the met ledger, not a
-    new instrument. One recall writes its rows with ONE (query_text, accessed_at); a recall that returned nothing
+    new instrument. One recall writes its rows with ONE event id (before event ids: one (query_text, accessed_at)); a recall that returned nothing
     writes none, so the denominator is recalls-with-results (stated in the key name). Also: dreams in the corpus now
     and at 7 / 14 / 28 days back (the corpus OVER TIME), and dreams ELIGIBLE under the channel's confidence gate
     (young enough, or carrying evidence) -- the population the absolute floor is applied to."""
     now = now or _utcnow()
     try:
         wk = _sql_ts(now - timedelta(days=days))
-        rec = conn.execute("SELECT COUNT(DISTINCT COALESCE(query_text,'') || '|' || accessed_at) FROM access_log "
+        one = "COALESCE(query_text,'') || '|' || accessed_at"
+        if "event_id" in {r[1] for r in conn.execute("PRAGMA table_info(access_log)")}:
+            one = f"COALESCE(event_id, {one})"
+        rec = conn.execute(f"SELECT COUNT(DISTINCT {one}) FROM access_log "
                            "WHERE accessed_at >= ? AND access_type LIKE 'recall%' AND access_type NOT LIKE '%-lead'",
                            (wk,)).fetchone()[0]
-        sh = conn.execute("SELECT COUNT(DISTINCT COALESCE(query_text,'') || '|' || accessed_at), COUNT(*) FROM access_log "
+        sh = conn.execute(f"SELECT COUNT(DISTINCT {one}), COUNT(*) FROM access_log "
                           "WHERE accessed_at >= ? AND access_type=?", (wk, MET_ACCESS_TYPE)).fetchone()
         corp = conn.execute("SELECT COUNT(*), COALESCE(SUM(created_at >= ?),0) FROM memories WHERE derived_from=? "
                             "AND is_archived=0", (_sql_ts(now - timedelta(days=HALF_LIFE_DAYS)),
@@ -676,7 +685,7 @@ def plan(conn: sqlite3.Connection, days: float = 30.0, now: Optional[datetime] =
         if screen is not None and screen(body, "text"):
             excl_screen.append(dl_id)
             continue
-        taint = bool(ma["untrusted_source"] or mb["untrusted_source"])
+        taint = any(marks.state_of(m["untrusted_source"]) != marks.CLEAN for m in (ma, mb))
         tainted += 1 if taint else 0
         backfill.append({"dream_log_id": dl_id, "dream_type": dtype, "a": a, "b": b, "created_at": created,
                          "tainted": taint})
@@ -789,6 +798,7 @@ def apply(conn: sqlite3.Connection, the_plan: Dict[str, Any], parts: Sequence[st
                 continue
             conn.execute("UPDATE memories SET derived_from=?, confidence=?, summary=? WHERE id=?",
                          (DREAM_DERIVED_FROM, BIRTH_CONFIDENCE, it["new_summary"], it["id"]))
+            _restamp_parents(conn, it)
             n_upd += 1
             if it["linked"] and not it["has_provenance"] and it["pair"] and None not in it["pair"]:
                 ids = memory_write._record_provenance(conn, it["id"], it["pair"], "dream_synthesis",
@@ -860,6 +870,35 @@ def apply(conn: sqlite3.Connection, the_plan: Dict[str, Any], parts: Sequence[st
     return res
 
 
+_SOURCES_LINE = re.compile(r"^Source memories: #(\d+) and #(\d+)\s*$", re.M)
+
+
+def _restamp_parents(conn: sqlite3.Connection, it: Dict[str, Any]) -> None:
+    """Record a re-stamped dream's endpoints as its parents, so it takes their marks: the pair the ledger knows, else the
+    two ids the dream's own first lines name."""
+    if marks.schema_state(conn) != "ready":
+        return
+    pair = [p for p in (it.get("pair") or ()) if p is not None]
+    if not pair:
+        content = conn.execute("SELECT content FROM memories WHERE id=?", (it["id"],)).fetchone()
+        m = _SOURCES_LINE.search((content[0] if content else "") or "")
+        pair = [int(g) for g in m.groups()] if m else []
+    marks.record_parents(conn, it["id"], pair)
+    if marks.any_outside(conn, [it["id"]]):
+        was = conn.execute("SELECT importance FROM memories WHERE id=?", (it["id"],)).fetchone()[0]
+        conn.execute("UPDATE memories SET importance=? WHERE id=?", (marks.ceiling(conn, it["id"], was), it["id"]))
+
+
+def _restore(conn: sqlite3.Connection, memory_id: int, derived_from: Any, confidence: Any, *summary: Any) -> None:
+    """Put a pre-image back, except that a row that is marked keeps a derivation and stays at or under the outside
+    confidence: undoing a stamp does not make outside text trusted."""
+    if marks.any_outside(conn, [memory_id]):
+        derived_from = derived_from or conn.execute("SELECT derived_from FROM memories WHERE id=?", (memory_id,)).fetchone()[0]
+        confidence = marks.capped_confidence(confidence)
+    conn.execute(f"UPDATE memories SET derived_from=?, confidence=?{', summary=?' if summary else ''} WHERE id=?",
+                 (derived_from, confidence, *summary, memory_id))
+
+
 def rollback(conn: sqlite3.Connection, preimage: Dict[str, Any]) -> Dict[str, Any]:
     """EXECUTED rollback: archive the backfill by tag, restore every re-stamped field from the pre-image, un-archive
     the playbook duplicates and restore the kept playbooks' fields. Never deletes a memory."""
@@ -876,8 +915,7 @@ def rollback(conn: sqlite3.Connection, preimage: Dict[str, Any]) -> Dict[str, An
     n = n_vec = n_prov = 0
     table = preimage.get("active_table")
     for it in preimage.get("restamp") or []:
-        conn.execute("UPDATE memories SET derived_from=?, confidence=?, summary=? WHERE id=?",
-                     (it["derived_from"], it["confidence"], it["summary"], it["id"]))
+        _restore(conn, it["id"], it["derived_from"], it["confidence"], it["summary"])
         # R1-M7: the derived index rows THIS verb wrote are removed, so a rolled-back brain exposes no more
         # unlabelled dreams than before the apply (no memory row is deleted: archive-never-delete holds)
         if it.get("has_vector") is False and table and re.fullmatch(r"[a-z0-9_]+", table):
@@ -892,8 +930,7 @@ def rollback(conn: sqlite3.Connection, preimage: Dict[str, Any]) -> Dict[str, An
     out["restamp_vectors_removed"] = n_vec
     out["restamp_provenance_rows_removed"] = n_prov
     for it in preimage.get("playbook_stamped") or []:
-        conn.execute("UPDATE memories SET derived_from=?, confidence=? WHERE id=?",
-                     (it["derived_from"], it["confidence"], it["id"]))
+        _restore(conn, it["id"], it["derived_from"], it["confidence"])
     out["playbooks_stamp_restored"] = len(preimage.get("playbook_stamped") or [])
     arch = preimage.get("playbook_archived_ids") or []
     ptag = preimage.get("playbook_tag")
@@ -905,8 +942,7 @@ def rollback(conn: sqlite3.Connection, preimage: Dict[str, Any]) -> Dict[str, An
             conn.execute(f"DELETE FROM memory_tags WHERE tag=? AND memory_id IN ({q})", (ptag, *chunk))
     out["playbooks_unarchived"] = len(arch)
     for it in preimage.get("playbook_kept") or []:
-        conn.execute("UPDATE memories SET derived_from=?, confidence=? WHERE id=?",
-                     (it["derived_from"], it["confidence"], it["id"]))
+        _restore(conn, it["id"], it["derived_from"], it["confidence"])
     out["playbooks_kept_restored"] = len(preimage.get("playbook_kept") or [])
     conn.commit()
     return out
@@ -1001,7 +1037,7 @@ def run(argv: Optional[Sequence[str]] = None) -> Dict[str, Any]:
     if a.sub == "show":
         conn = _connect(db, ro=True)
         try:
-            row = conn.execute("SELECT id, content, summary, created_at, derived_from, COALESCE(untrusted_source, 0) "
+            row = conn.execute("SELECT id, content, summary, created_at, derived_from "
                                "FROM memories WHERE id=?", (a.dream_id,)).fetchone()
             if not row or row[4] != DREAM_DERIVED_FROM:
                 return _env("error", {"dream_id": a.dream_id}, "not a dream", "not_a_dream")
@@ -1009,9 +1045,12 @@ def run(argv: Optional[Sequence[str]] = None) -> Dict[str, Any]:
             import recall_channels
             frame = recall_channels.dream_frame(row[3], eff.get("effective"))
             # R1-L8: model text (which may echo web text) never reaches a terminal or an agent unsanitised
-            return _env("ok", {"dream_id": row[0], "provenance": "dream", "frame": frame,
-                               "content": frame + "\n" + recall_channels._sanitize(dream_body(row[1])),
-                               "summary": recall_channels._sanitize(row[2]), "untrusted_source": int(row[5] or 0),
+            shown = {"id": row[0], "content": frame + "\n" + recall_channels._sanitize(dream_body(row[1])),
+                     "summary": recall_channels._sanitize(row[2])}
+            recall_channels.present(conn, [shown])
+            outside = shown.pop("outside")
+            return _env("ok", {"dream_id": shown.pop("id"), "provenance": "dream", "frame": frame,
+                               **shown, "outside": outside, "untrusted_source": int(outside),
                                "confidence": eff.get("effective"), "birth_confidence": eff.get("birth"),
                                "evidence": eff.get("evidence"), "created_at": row[3],
                                "pair": dream_pairs(conn, [row[0]]).get(row[0])})

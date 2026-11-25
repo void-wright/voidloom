@@ -229,7 +229,7 @@ def _migration_files(mdir: pathlib.Path) -> List[pathlib.Path]:
     return sorted(mdir.glob("migration_*.sql"))
 
 
-def build_reference(mdir: pathlib.Path, dest: Optional[str] = None
+def build_reference(mdir: pathlib.Path, dest: Optional[str] = None, keep: Optional[list] = None
                     ) -> Tuple[Set[str], List[str], List[Dict[str, Any]]]:
     """Build a throwaway brain from schema.sql + every migration and return the
     objects it contains.  THIS is the required set: the package, executed.
@@ -239,6 +239,9 @@ def build_reference(mdir: pathlib.Path, dest: Optional[str] = None
     tables, which `cmd_init` creates from the RESOLVED embedding tier rather
     than from any migration file, plus this module's own `schema_migrations`
     record.  `audit` therefore reports what is MISSING and never what is extra.
+
+    `keep` receives the open reference connection, for a caller that compares more
+    than object names; that caller closes it.
     """
     # ":memory:" by default -- measured at 66 objects in 0.12 s, identical to the
     # on-disk build, and it litters nothing. The first draft wrote a temp .db
@@ -273,8 +276,27 @@ def build_reference(mdir: pathlib.Path, dest: Optional[str] = None
         objs = {row[0] for row in conn.execute(
             "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     finally:
-        conn.close()
+        if keep is None:
+            conn.close()
+        else:
+            keep.append(conn)
     return objs, unmeasurable, files_with_errors
+
+
+def _triggers(conn: sqlite3.Connection) -> Dict[str, str]:
+    """name -> its SQL with whitespace collapsed, so a trigger that lost a clause reads as a different trigger."""
+    return {n: " ".join((q or "").split()) for n, q in
+            conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'")}
+
+
+def _table_columns(conn: sqlite3.Connection, tables: Set[str]) -> Set[str]:
+    out: Set[str] = set()
+    for t in tables:
+        try:
+            out |= {f"{t}.{r[1]}" for r in conn.execute(f'PRAGMA table_info("{t}")')}
+        except sqlite3.Error:            # a virtual table whose module is not here: its columns cannot be asked for
+            continue
+    return out
 
 
 def signature(conn: sqlite3.Connection) -> Dict[str, Set[str]]:
@@ -363,14 +385,26 @@ def brain_objects(db: str) -> Set[str]:
 def audit(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
     """Compare a brain against the package, by re-reading both."""
     mdir = mdir or migrations_dir()
-    ref, unmeasurable, files_with_errors = build_reference(mdir)
+    kept: list = []
+    ref, unmeasurable, files_with_errors = build_reference(mdir, keep=kept)
+    have = brain_objects(db)
+    missing = sorted(ref - have)
+    # A table is not the whole of what a migration makes. A trigger that is gone leaves every table in place and the rule
+    # it held unenforced, and a column that is gone leaves its table. Compared by name against the same reference; a
+    # trigger is also compared by its text. Only the FULL-TEXT triggers are exempt from the text comparison: an older
+    # release re-creates them in its own words.
     _probe = connect(db)
     try:
         vec = has_vec0(_probe)
+        want_trg, have_trg = _triggers(kept[0]), _triggers(_probe)
+        plain = {t for t in ref & have if not t.startswith(("memories_fts", "memory_embeddings"))}
+        missing_columns = sorted(_table_columns(kept[0], plain) - _table_columns(_probe, plain))
     finally:
         _probe.close()
-    have = brain_objects(db)
-    missing = sorted(ref - have)
+        kept[0].close()
+    missing_triggers = sorted(set(want_trg) - set(have_trg))
+    altered_triggers = sorted(n for n, q in want_trg.items()
+                              if n in have_trg and have_trg[n] != q and not n.startswith("memories_fts_"))
     return {
         "database": db,
         "migrations_dir": str(mdir),
@@ -379,11 +413,14 @@ def audit(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
         "brain_objects": len(have),
         "missing": missing,
         "missing_count": len(missing),
+        "missing_triggers": missing_triggers,
+        "altered_triggers": altered_triggers,
+        "missing_columns": missing_columns,
         # D2-F1: `complete` is a claim about the BRAIN, and it may only be made
         # when the REFERENCE it is measured against was itself built completely.
         # A reference whose migrations errored has a denominator nobody can trust,
         # so `missing: 0` means "nothing was compared", not "nothing is missing".
-        "complete": (not missing) and not files_with_errors,
+        "complete": not (missing or missing_triggers or altered_triggers or missing_columns or files_with_errors),
         "reference_complete": not files_with_errors,
         "files_with_errors": files_with_errors,
         # UNMEASURABLE is first-class: "this tier cannot build these" is not
@@ -544,6 +581,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                      + (" ..." if len(_sk) > 6 else "") if _sk else ""))
         print(f"  missing            : {res['missing_count']}"
               + (f"  -> {', '.join(res['missing'][:8])}" if res["missing"] else ""))
+        for what in ("missing_triggers", "altered_triggers", "missing_columns"):
+            if res.get(what):
+                print(f"  {what.replace('_', ' '):<19}: {', '.join(res[what][:8])}")
         for u in res.get("unmeasurable") or []:
             print(f"  UNMEASURABLE       : {u}")
         for fe in res.get("files_with_errors") or []:

@@ -43,6 +43,7 @@ _STORE_REQUIRED = ("content", "category")
 _STORE_OPTIONAL = (
     "tags", "kind", "importance", "summary", "project", "context",
     "source_user", "auto_edges", "answers",
+    "outside", "research", "author", "session", "session_id", "parent", "parent_ref", "source_ids",
 )
 
 
@@ -84,7 +85,7 @@ def channel_keys(res: Dict[str, Any]) -> List[str]:
 
 def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
                  db_path: Optional[str] = None, leads: Optional[int] = None,
-                 explore: bool = False) -> List[Dict[str, Any]]:
+                 explore: bool = False, no_log: bool = False) -> List[Dict[str, Any]]:
     """Run N recalls in ONE process (single model load). Returns a per-item list.
 
     COLLAPSED-SHAPE contract (H6): each per-query record is the FLATTENED shape
@@ -117,7 +118,8 @@ def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
     for i, item in enumerate(queries):
         try:
             q, k = _coerce_recall_item(item, top_k)
-            res = _facade.recall(q, top_k=k, db_path=resolved, leads=leads, explore=explore)
+            res = _facade.recall(q, top_k=k, db_path=resolved, leads=leads, explore=explore,
+                                 **({"no_log": True} if no_log else {}))
             if isinstance(res, dict) and res.get("status") == "ok":
                 # Lift the engine dict's own memory list up to the record so the
                 # collapsed shape exposes memories at `.results[]` (no inner
@@ -129,7 +131,7 @@ def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
                 rec = {"index": i, "query": q, "top_k": k, "status": "ok", "results": hits}
                 if isinstance(res.get("coverage"), dict):   # carried even when `results` is empty
                     rec["coverage"] = res["coverage"]
-                for key in ("degraded", "degradation", "tier", "engine"):   # what kind of answer this item is
+                for key in ("degraded", "degradation", "degraded_reason", "tier", "engine"):   # what kind of answer this item is
                     if key in res:
                         rec[key] = res[key]
                 # The side channels ride beside `results` (memories only); the batch-recall default verb used to
@@ -202,7 +204,25 @@ def _validate_store_item(item: StoreItem) -> Dict[str, Any]:
         "source_user": item.get("source_user"),
         "auto_edges": bool(item.get("auto_edges", False)),
         "answers": _answers_arg(item.get("answers")),
+        **_marks_arg(item),
     }
+
+
+def _marks_arg(item: StoreItem) -> Dict[str, Any]:
+    """The item's own word on where its text came from. `outside` is true or false and nothing else: a string that reads
+    as false in one language is a mark that was lost."""
+    out: Dict[str, Any] = {"outside": item.get("outside") or False}
+    if item.get("outside") not in (None, True, False) or isinstance(item.get("outside"), (int, float)) \
+            and not isinstance(item.get("outside"), bool):
+        raise ValueError(f"outside must be true or false, got {item.get('outside')!r}")
+    for key, names in (("research", ("research",)), ("author", ("author",)), ("session_id", ("session_id", "session")),
+                       ("parent_ref", ("parent_ref", "parent"))):
+        given = [item[n] for n in names if item.get(n) is not None]
+        if any(not isinstance(v, str) for v in given):
+            raise ValueError(f"{key} must be a string")
+        out[key] = given[0] if given else None
+    out["source_ids"] = item.get("source_ids")
+    return out
 
 
 def _answers_arg(v: Any) -> Optional[str]:
@@ -222,6 +242,7 @@ def _answers_arg(v: Any) -> Optional[str]:
 def store_batch(items: Sequence[StoreItem], *,
                 db_path: Optional[str] = None,
                 valid_categories: Optional[Sequence[str]] = None,
+                defaults: Optional[Dict[str, Any]] = None,
                 ) -> List[Dict[str, Any]]:
     """Store N memories in ONE process (single model load). Returns a per-item list.
 
@@ -237,16 +258,24 @@ def store_batch(items: Sequence[StoreItem], *,
     the richer ``store_full`` facade path so a memory dict's kind / auto_edges /
     source_user / summary / project / context all reach the engine.
 
+    ``defaults`` is what the batch says about every item (outside, research, author, session_id, parent_ref): an item's own
+    value stands, except that an outside batch has no item that is not outside.
+
     The DB is resolved ONCE up front via the single resolver. An explicit
     ``db_path`` (a temp copy for tests / a non-live target) overrides it — and
     SHOULD be used for any batch that must not touch the live brain."""
     resolved = db_path if db_path is not None else _paths.resolve_db()
+    defaults = defaults or {}
     cats = set(valid_categories) if valid_categories else None
     results: List[Dict[str, Any]] = []
     from . import _facade  # lazy heavy import — once, then warm.
     for i, item in enumerate(items):
         try:
             kw = _validate_store_item(item)
+            kw["outside"] = bool(kw["outside"] or defaults.get("outside"))
+            for key in ("research", "author", "session_id", "parent_ref"):
+                if kw[key] is None:
+                    kw[key] = defaults.get(key)
             if cats is not None and kw["category"] not in cats:
                 results.append({
                     "index": i, "status": "error",
@@ -255,15 +284,23 @@ def store_batch(items: Sequence[StoreItem], *,
                 continue
             res = _facade.store_full(db_path=resolved, **kw)
             if isinstance(res, dict) and res.get("status") == "ok":
-                results.append({"index": i, "status": "ok",
-                                "memory_id": res.get("memory_id"),
-                                "result": res})
+                rec = {"index": i, "status": "ok", "memory_id": res.get("memory_id")}
+                for key in ("stored_sha256", "marks", "premark"):       # read back by the engine after its commit
+                    if key in res:
+                        rec[key] = res[key]
+                results.append({**rec, "result": res})
             else:
                 msg = (res.get("message") or res.get("error")
                        if isinstance(res, dict) else None) or \
                       "engine reported a non-ok store result"
-                results.append({"index": i, "status": "error",
-                                "message": str(msg), "result": res})
+                rec = {"index": i, "status": "error", "message": str(msg)}
+                if isinstance(res, dict):
+                    if isinstance(res.get("error"), str):
+                        rec["code"] = res["error"]
+                    for key in ("memory_id", "row_may_exist"):
+                        if key in res:
+                            rec[key] = res[key]
+                results.append({**rec, "result": res})
         except Exception as e:  # noqa: BLE001 — per-item isolation is the contract
             results.append({"index": i, "status": "error",
                             "message": f"{type(e).__name__}: {e}"})

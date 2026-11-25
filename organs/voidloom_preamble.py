@@ -158,12 +158,12 @@ def frame_text(text: str, sep: str = " ") -> str:
 def should_frame(untrusted: Any, kind: Any, confidence: Any) -> bool:
     """The framing predicate, spelled once.
 
-    Framed when ANY of: the immutable ``untrusted_source`` birth-mark, a
-    self-generated ``kind='reflection'`` row, or stored confidence at/below the
-    floor.  Unparseable confidence is NOT treated as low — an unreadable value
+    Framed when ANY of: a mark that is anything but the integer 0 (a value that is
+    neither 0 nor 1 is unknown, and unknown is not trusted), a self-generated
+    ``kind='reflection'`` row, or stored confidence at/below the floor.  Unparseable confidence is NOT treated as low — an unreadable value
     is unknown, and the structural flags carry the real signal.
     """
-    if untrusted:
+    if type(untrusted) not in (int, bool) or untrusted != 0:
         return True
     if isinstance(kind, str) and kind.strip().lower() == "reflection":
         return True
@@ -561,7 +561,7 @@ def read_priming(db: str, sanitize: Callable[[Any], str],
     for row in raw:
         mid = row[0]
         summ = row[1]
-        untrusted = bool(row[2]) if len(row) > 2 else False
+        untrusted = row[2] if len(row) > 2 else None
         kind = row[3] if len(row) > 3 else None
         conf = row[4] if len(row) > 4 else None
         s = sanitize(summ or "").replace("\n", " ")[:PRIMING_CLIP]

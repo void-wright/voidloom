@@ -48,6 +48,7 @@ from pathlib import Path
 # A per-module inline fallback would recreate the 13-way divergence this
 # module exists to end.
 import voidloom_env
+import marks
 from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -831,19 +832,19 @@ def _store_manifest_as_memory(conn: sqlite3.Connection, row: sqlite3.Row) -> Opt
         stored_content = content
 
     try:
-        cursor = conn.execute(
-            """INSERT INTO memories
-               (content, summary, category, importance, source_project, source_context,
-                kind, created_at, updated_at, last_accessed)
-               VALUES (?, ?, 'insight', 0.95, 'wizard-library', ?, 'reflection',
-                       datetime('now'), datetime('now'), datetime('now'))""",
-            (
-                stored_content,
-                summary,
-                f"arcane-manifest-{quarter}",
-            ),
-        )
-        memory_id = cursor.lastrowid
+        # The prose restates a quarter's memories and dreams and names none of them, so it has no parents to inherit
+        # from: it carries a sentinel and a low confidence instead.
+        memory_id = marks.derived_insert(conn, {
+            "content": stored_content,
+            "summary": summary,
+            "category": "insight",
+            "importance": 0.95,
+            "source_project": "wizard-library",
+            "source_context": f"arcane-manifest-{quarter}",
+            "kind": "reflection",
+            "derived_from": "manifest_synthesis",
+            "confidence": marks.OUTSIDE_CONFIDENCE,
+        }, ())
         # TO-03: this memory must be findable.
         _vl_attach(conn, memory_id, stored_content, "arcane_manifest._store_manifest_as_memory")
 

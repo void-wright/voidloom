@@ -44,6 +44,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import marks
+except ImportError:  # imported from outside the organ directory
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import marks
+
 # ============================================================
 # Constants
 # ============================================================
@@ -333,9 +339,12 @@ def backfill_kinds(db_path: str, dry_run: bool = False) -> Dict[str, Any]:
     updated = 0
     if not dry_run:
         for entry in audit:
+            confidence = entry["confidence"]
+            if marks.read_marks(conn, [entry["memory_id"]])[entry["memory_id"]].state == marks.MARKED:
+                confidence = marks.capped_confidence(confidence)      # a kind is not evidence for outside text
             conn.execute(
                 "UPDATE memories SET kind = ?, confidence = ? WHERE id = ?",
-                (entry["new_kind"], entry["confidence"], entry["memory_id"]),
+                (entry["new_kind"], confidence, entry["memory_id"]),
             )
             updated += 1
         conn.commit()

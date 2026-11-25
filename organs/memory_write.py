@@ -72,6 +72,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
 from pathlib import Path
+
+import marks
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 logger = logging.getLogger("voidloom.memory_write")
@@ -93,6 +95,13 @@ class EmbeddingWidthMismatch(MemoryWriteError):
     This is F-B1's failure, promoted from a swallowed OperationalError to a
     refusal with both numbers in the message.
     """
+
+
+class BrainNeedsMigration(MemoryWriteError):
+    """The write asked for a mark or a source this brain has no column for. Dropping it would store the row without it."""
+
+    code = "BRAIN_NEEDS_MIGRATION"
+    detail: Dict[str, Any] = {}
 
 
 @dataclass
@@ -244,7 +253,11 @@ def write_memory(
     (optionally) its provenance edges. Does NOT commit — the caller owns the
     transaction, as every current call site already does.
 
-    Raises rather than writing a row the brain cannot find.
+    Raises rather than writing a row the brain cannot find, and rather than dropping a mark it was asked to write.
+
+    ``sources`` makes it a DERIVED row (marks.derived_columns): it takes every mark of every source in its INSERT, is
+    worth no more than they are, and they are recorded in ``memory_parents`` in the same savepoint. ``memory_provenance``
+    stays the audit trail it was: best-effort, and only with a ``transformation``.
     """
     if embed_policy not in _POLICIES:
         raise ValueError(f"embed_policy must be one of {_POLICIES}, got {embed_policy!r}")
@@ -268,6 +281,13 @@ def write_memory(
     }
     if extra:
         proposed.update(extra)
+    parents = [int(x) for x in dict.fromkeys(sources or ()) if x is not None]
+    lost = [k for k in marks.MARK_COLUMNS if proposed.get(k) is not None and k not in have]
+    if lost or (parents and marks.schema_state(conn) != "ready"):
+        raise BrainNeedsMigration(f"BRAIN_NEEDS_MIGRATION: this brain cannot hold {', '.join(lost) or 'the parents of a derived row'}; "
+                                  "nothing was written. Run migration_046 (re-run the installer).")
+    if parents:
+        proposed = marks.derived_columns(conn, proposed, parents, author=proposed.get("author"))
 
     if embed_policy == "skip":
         note = f"embed_policy=skip: {skip_reason.strip()}"
@@ -329,6 +349,9 @@ def write_memory(
             vals,
         )
         memory_id = cur.lastrowid
+        if cur.rowcount != 1:
+            raise MemoryWriteError("the database took the INSERT and kept no row")
+        marks.record_parents(conn, memory_id, parents)
         if vec is not None:
             # M1-C2: the vector never lands without its stamp. Same class as
             # attach_embedding's write; one helper, one savepoint, both or neither.
@@ -363,9 +386,9 @@ def write_memory(
         res.enqueued_for_scan = _enqueue(conn, memory_id)
 
     # ---- TO-09: provenance, when the caller knows its sources ----
-    if sources and transformation:
+    if parents and transformation:
         res.provenance_ids = _record_provenance(
-            conn, memory_id, list(sources), transformation, agent,
+            conn, memory_id, parents, transformation, agent,
             provenance_confidence, provenance_metadata,
         )
     return res
@@ -2224,7 +2247,9 @@ _SOFT_REFERENCES = (("belief_scan_queue", "memory_id", True), ("edge_proposals",
                     ("belief_quarantine", "target_id", False), ("calibration_log", "source_memory_id", False),
                     ("council_sessions", "decision_memory_id", False), ("arcane_manifests", "manifest_memory_id", False),
                     ("gap_inventory", "research_memory_id", False), ("gap_research_log", "result_memory_id", False),
-                    ("governance_proposals", "target_memory_id", False), ("raptor_clusters", "synthesis_memory_id", False))
+                    ("governance_proposals", "target_memory_id", False), ("raptor_clusters", "synthesis_memory_id", False),
+                    ("memory_parents", "parent_id", True), ("forget_receipts", "memory_id", True),
+                    ("marks_backfill_preimage", "memory_id", True))
 # A shared run this long or longer is found wherever it sits in a cell: a cell is read at
 # every _RUN_GRAM-th character, so any run of 2 * _RUN_GRAM - 1 holds a gram read on the stride.
 _RUN_GRAM = 24
@@ -2284,9 +2309,12 @@ _NEVER_SWEPT_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "calibration_factors": ("*",), "cross_tier_bridges": ("*",), "whisper_digests": ("*",), "belief_scan_queue": ("*",),
     "dream_activity_profile": ("*",), "unit_attention": ("*",), "organ_declared_units": ("*",), "organ_run_log": ("*",),
     "approval_ping_state": ("*",), "assayer_scores": ("*",), "merge_provenance": ("*",), "memory_community_members": ("*",),
+    "research_configs": ("*",), "research_runs": ("*",), "memory_research_runs": ("*",), "memory_parents": ("*",),
+    "research_dispatch_refusals": ("*",), "forget_receipts": ("*",), "marks_backfill_preimage": ("*",),
     "memories": ("category", "source_project", "created_at", "updated_at", "last_accessed", "kind", "derived_from",
-                 "consolidated_at", "source_brain", "source_user", "origin", "skill_tier"),
-    "access_log": ("access_type", "accessed_at"),
+                 "consolidated_at", "source_brain", "source_user", "origin", "skill_tier", "research_run_id",
+                 "research_config_id", "author", "session_id", "parent_ref", "source_ids"),
+    "access_log": ("access_type", "accessed_at", "event_id"),
     "affect_quarantine_log": ("channel", "expires_on", "observed_at"),
     "approval_audit_log": ("surface", "ref", "action", "confirmed_via", "outcome_status", "reversible_note", "actor",
                            "created_at"),
@@ -2312,7 +2340,7 @@ _NEVER_SWEPT_COLUMNS: Dict[str, Tuple[str, ...]] = {
     "embedding_upgrade_log": ("started_at", "completed_at", "model_name", "status", "notes", "weights_hash"),
     "gap_inventory": ("gap_type", "last_mentioned", "inventoried_at", "acknowledged_at"),
     "gap_inventory_batches": ("started_at", "completed_at", "status", "config_snapshot"),
-    "gap_research_log": ("dispatch_method", "started_at", "completed_at", "status"),
+    "gap_research_log": ("dispatch_method", "started_at", "completed_at", "status", "approval_hash", "outcome"),
     "governance_proposals": ("report_batch", "writer_kind", "verdict", "reason_code", "intent_hash", "status", "created_at",
                              "decided_at"),
     "lexical_miss_log": ("ts",),
@@ -2362,6 +2390,7 @@ def _lineage_of(conn: sqlite3.Connection, memory_id: int, present: Set[str]) -> 
     found: Set[int] = set()
     for table, want, column in (("consolidation_sources", "consolidated_memory_id", "source_memory_id"),
                                 ("memory_provenance", "derived_memory_id", "source_memory_id"),
+                                ("memory_parents", "child_id", "parent_id"),
                                 ("dream_log", "dream_memory_id", "memory_a_id"),
                                 ("dream_log", "dream_memory_id", "memory_b_id")):
         if table in present:

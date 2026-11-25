@@ -63,6 +63,7 @@ from pathlib import Path
 # A per-module inline fallback would recreate the 13-way divergence this
 # module exists to end.
 import voidloom_env
+import marks
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -548,25 +549,19 @@ def generate_weekly_digest(
     # Store the digest as a proper reflection memory.
     embedding = _encode_for_embedding(content, conn)
 
-    cursor = conn.execute(
-        """INSERT INTO memories
-           (content, summary, category, importance, source_project, source_context,
-            kind, confidence, derived_from)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            content,
-            summary,
-            'insight',
-            0.7,
-            'whisper-network-digest',
-            f'observations_count={len(observations)}',
-            'reflection',
-            0.8,
-            # Voidloom #176 A3: non-authored sentinel -> trust floors below Drew.
-            WHISPER_DERIVED_FROM,
-        ),
-    )
-    digest_memory_id = cursor.lastrowid
+    # An observation names no memory, so the digest names no parents: it carries the sentinel and a low confidence
+    # instead, because what it restates may have come from anywhere.
+    digest_memory_id = marks.derived_insert(conn, {
+        'content': content,
+        'summary': summary,
+        'category': 'insight',
+        'importance': 0.7,
+        'source_project': 'whisper-network-digest',
+        'source_context': f'observations_count={len(observations)}',
+        'kind': 'reflection',
+        'confidence': marks.OUTSIDE_CONFIDENCE,
+        'derived_from': WHISPER_DERIVED_FROM,
+    }, ())
 
     # ROUND GAMMA (A6). What was here:
     #

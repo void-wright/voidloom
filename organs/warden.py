@@ -16,9 +16,9 @@ The gate already runs the two cheap structural screens:
     FOUNDATION memory (a trust anchor) is productive doubt.
 M5 adds NO new ML. It adds:
   (1) the WIRING — build a write_intent, call ``governance_gate``, and on ALLOW
-      write + stamp; on HOLD route to the existing approvals surface (batched,
-      +1 not +N) and do NOT write; fail-soft so a gate error never crashes the
-      harvest.
+      write, marked; on HOLD route to the existing approvals surface (batched,
+      +1 not +N) and do NOT write; a gate that cannot judge means nothing is
+      written.
   (2) the PROVENANCE-INTEGRITY KEEPER — an IMMUTABLE, VISIBLE ``untrusted_source``
       birth-mark on every web-sourced row, set once at ingestion, NEVER cleared
       (a storage-layer trigger forbids clearing it). It survives consolidation /
@@ -36,10 +36,8 @@ DOCTRINE (council #5839 / #6195 / #6193):
   * NEVER gate the owner's own writes or the brain's dreams (CALM / anti-autoimmunity).
     The Warden is invoked ONLY by the gap-research writer; nothing else routes
     through it.
-  * Off-by-default kill-switch ``VOIDLOOM_NO_WARDEN`` (matches the family). When
-    set, the writer falls back to its prior un-gated behavior BUT still stamps the
-    birth-mark + activates the trust-floor (the cheapest defense ships even with
-    the gate off — disabling the escalation must not re-open the laundering hole).
+  * There is no switch that turns the screen off for text from outside the machine:
+    a screen that cannot run means the text is not written.
 
 DEFERRED (federation / final security audit):
   # SECURITY-HOOK(#176): the Stage-3 nvidia/Nemotron-Content-Safety classifier
@@ -52,7 +50,6 @@ PURITY: stdlib only (os, sqlite3, hashlib) + a fail-graceful sibling import of
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -62,7 +59,6 @@ __all__ = [
     "UNTRUSTED_DERIVED_FROM",
     "WEB_ADMISSION_CONFIDENCE",
     "WEB_PROVENANCE_CONFIDENCE",
-    "is_warden_disabled",
     "ensure_warden_migration",
     "warden_migration_applied",
     "build_web_write_intent",
@@ -110,31 +106,13 @@ WEB_PROVENANCE_CONFIDENCE = 0.50
 # ---------------------------------------------------------------------------
 # Fail-graceful sibling import of the gate (the WorkingDirectory of the systemd
 # unit is <brain>, exactly like governance.py's bare
-# `import trust_tier`). If governance is somehow absent, the Warden degrades to
-# stamp-only (the cheapest defense still ships; the escalation is skipped).
+# `import trust_tier`). If governance is somehow absent, web text is not
+# written (screen_web_write).
 # ---------------------------------------------------------------------------
 try:  # pragma: no cover - exercised by the absence path in tests via monkeypatch
     import governance as _gov  # type: ignore
 except Exception:  # pragma: no cover
     _gov = None  # type: ignore
-
-
-# ---------------------------------------------------------------------------
-# Kill-switch
-# ---------------------------------------------------------------------------
-
-def _env_flag(name: str) -> bool:
-    """Truthy env flag: 1/true/yes/on (case-insensitive). Mirrors governance._env_flag."""
-    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
-
-
-def is_warden_disabled() -> bool:
-    """When VOIDLOOM_NO_WARDEN is set, the gate ESCALATION is skipped (the writer
-    writes without the HOLD path) BUT the birth-mark + trust-floor stamping still
-    happen — disabling the escalation must NOT re-open the provenance-laundering
-    hole. Also honors VOIDLOOM_NO_GOVERNANCE (the family-wide off switch) since
-    the Warden's escalation is the gate."""
-    return _env_flag("VOIDLOOM_NO_WARDEN") or _env_flag("VOIDLOOM_NO_GOVERNANCE")
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +207,21 @@ def ensure_warden_migration(conn: sqlite3.Connection,
         return out
 
 
+def ensure_trigger(conn: sqlite3.Connection) -> bool:
+    """Put the immutability trigger back on a brain that has the column and lost the trigger. Adds no column: a row on a
+    brain that never had one has never been said to be clean. Never raises."""
+    try:
+        if not warden_migration_applied(conn):
+            return False
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_untrusted_source_immutable'"
+                        ).fetchone() is None:
+            conn.execute(_TRIGGER_SQL)
+            conn.commit()
+        return True
+    except Exception:  # noqa: BLE001 -- runs on every open
+        return False
+
+
 # ---------------------------------------------------------------------------
 # The write-intent the gate screens
 # ---------------------------------------------------------------------------
@@ -283,37 +276,31 @@ def screen_web_write(
 
     Returns the gate's verdict dict (verdict ALLOW|HOLD|REJECT, reason,
     reason_code, routing receipt on a routed HOLD, ...). If the gate module is
-    absent OR the kill-switch is set, returns a synthetic ALLOW so the writer
-    proceeds (stamp-only mode) — disabling the escalation must never block or
-    silently drop a write (the calm contract).
+    absent, switched off, raised or says it could not judge, the answer is REJECT
+    and nothing is written. The gate itself is calm about the brain's own writers
+    (its internal errors and its kill-switch answer ALLOW); text from outside the
+    machine does not get that benefit, and no environment variable gives it one.
     """
-    if _gov is None or is_warden_disabled():
+    def unscreened(code: str, why: str) -> Dict[str, Any]:
         return {
-            "verdict": "ALLOW",
-            "reason": ("warden escalation disabled (kill-switch or governance "
-                       "absent) — write proceeds, still stamped untrusted"),
-            "reason_code": "warden_disabled",
-            "writer_kind": WARDEN_WRITER_KIND,
-            "elevated": False,
-            "trust_score": None,
-            "routing": None,
-            "ok": True,
-        }
-    try:
-        return _gov.governance_gate(conn, intent, config=config, route_holds=route_holds)
-    except Exception as e:  # pragma: no cover - the gate is itself fail-soft; belt+braces
-        # The gate never raises, but if a future refactor regresses that, the
-        # Warden still degrades to ALLOW-but-logged rather than crash the harvest.
-        return {
-            "verdict": "ALLOW",
-            "reason": f"warden: gate raised unexpectedly ({e}); degraded to ALLOW-but-logged",
-            "reason_code": "warden_gate_error",
+            "verdict": "REJECT",
+            "reason": f"web text is not written unscreened: {why}",
+            "reason_code": code,
             "writer_kind": WARDEN_WRITER_KIND,
             "elevated": False,
             "trust_score": None,
             "routing": None,
             "ok": False,
         }
+    if _gov is None:
+        return unscreened("screen_absent", "the governance module is absent")
+    try:
+        out = _gov.governance_gate(conn, intent, config=config, route_holds=route_holds)
+    except Exception as e:  # noqa: BLE001
+        return unscreened("screen_error", f"the gate raised ({type(e).__name__}: {e})")
+    if out.get("verdict") == "ALLOW" and (out.get("ok") is not True or out.get("reason_code") == "kill_switch"):
+        return unscreened("screen_off", str(out.get("reason") or "the gate did not judge it"))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -366,14 +353,8 @@ def stamp_untrusted_source(conn: sqlite3.Connection, memory_id: int) -> Dict[str
 
 
 def is_untrusted(conn: sqlite3.Connection, memory_id: int) -> bool:
-    """True iff the row carries the untrusted_source birth-mark. Read-only; False
-    if the column is absent (pre-migration) or the row is missing."""
-    if not warden_migration_applied(conn):
-        return False
-    try:
-        row = conn.execute(
-            "SELECT untrusted_source FROM memories WHERE id = ?", (memory_id,)
-        ).fetchone()
-    except sqlite3.Error:
-        return False
-    return bool(row and row[0] == 1)
+    """Does this row read as outside? Only a mark read as 0 says no, an unreadable one does not. A brain proved to have
+    no such column makes no claim about any row, and answers no; what it shows is framed all the same (marks)."""
+    import marks
+    got = marks.read_marks(conn, [memory_id])
+    return False if got.error == "PREMARK" else got[memory_id].outside

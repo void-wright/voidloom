@@ -91,6 +91,7 @@ from pathlib import Path
 # A per-module inline fallback would recreate the 13-way divergence this
 # module exists to end.
 import voidloom_env
+import marks
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 logger = logging.getLogger(__name__)
@@ -1221,13 +1222,12 @@ def _store_dream_as_reflection(
         return None
     metas = {}
     for mid in (memory_a_id, memory_b_id):
-        row = conn.execute("SELECT id, summary, content, is_archived, untrusted_source FROM memories WHERE id=?",
-                           (mid,)).fetchone()
+        row = conn.execute("SELECT id, summary, content, is_archived FROM memories WHERE id=?", (mid,)).fetchone()
         if not row or row[3]:
             rep["skipped"] = "endpoint_archived"
             rep["endpoint"] = mid
             return None
-        metas[mid] = {"id": row[0], "summary": row[1], "content": row[2], "untrusted_source": row[4]}
+        metas[mid] = {"id": row[0], "summary": row[1], "content": row[2]}
     rel, body = parse_relation(dream_content)
     relation = (relation or rel or "connection").lower()
     summary = _dl.summarize_dream(body, metas[memory_a_id], metas[memory_b_id])
@@ -1236,19 +1236,14 @@ def _store_dream_as_reflection(
         f"Source memories: #{memory_a_id} and #{memory_b_id}\n\n"
         f"{body}"
     )
-    ts_sql = "?" if created_at else "datetime('now')"
-    ts_args = (created_at, created_at, created_at) if created_at else ()
     conn.execute("SAVEPOINT dream_store")
     try:
-        cursor = conn.execute(
-            f"""INSERT INTO memories (content, summary, category, importance,
-                   source_project, kind, confidence, derived_from,
-                   created_at, updated_at, last_accessed)
-               VALUES (?, ?, 'insight', 0.55, 'memory-dreaming', 'reflection',
-                       ?, ?, {ts_sql}, {ts_sql}, {ts_sql})""",
-            (content, summary, DREAM_CONFIDENCE, DREAM_DERIVED_FROM, *ts_args),
-        )
-        mem_id = cursor.lastrowid
+        now = created_at or conn.execute("SELECT datetime('now')").fetchone()[0]
+        mem_id = marks.derived_insert(conn, {
+            "content": content, "summary": summary, "category": "insight", "importance": 0.55,
+            "source_project": "memory-dreaming", "kind": "reflection", "confidence": DREAM_CONFIDENCE,
+            "derived_from": DREAM_DERIVED_FROM, "created_at": now, "updated_at": now, "last_accessed": now,
+        }, (memory_a_id, memory_b_id))
         tags = ["dream", f"dream-{dream_type}", "auto-generated", *[t for t in extra_tags if t]]
         for tag in tags:
             conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)", (mem_id, tag))
@@ -1275,9 +1270,8 @@ def _store_dream_as_reflection(
                        VALUES (?, ?, 'elaborates', 0.6)""",
                     (mem_id, source_id),
                 )
-        # The endpoints' taint is the dream's taint (anti-laundering, as RAPTOR and playbooks already do).
-        if metas[memory_a_id]["untrusted_source"] or metas[memory_b_id]["untrusted_source"]:
-            conn.execute("UPDATE memories SET untrusted_source=1 WHERE id=?", (mem_id,))
+        # The endpoints' taint is the dream's taint: the INSERT above carried it; the tag makes it searchable.
+        if marks.any_outside(conn, [mem_id]):
             conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, 'untrusted-source')",
                          (mem_id,))
             rep["tainted"] = True
@@ -1706,9 +1700,10 @@ def flag_interesting(conn: sqlite3.Connection, dream_id: int) -> dict:
     importance_updated = False
     dream_memory_id = row[2]
     if dream_memory_id is not None:
+        # a flag on a dream of outside text does not lift it over what it was made from
         conn.execute(
             "UPDATE memories SET importance = ? WHERE id = ?",
-            (_FLAGGED_IMPORTANCE, dream_memory_id),
+            (marks.ceiling(conn, dream_memory_id, _FLAGGED_IMPORTANCE), dream_memory_id),
         )
         importance_updated = True
 

@@ -60,6 +60,8 @@ import re
 import sqlite3
 from typing import Any, Dict, Optional, Union
 
+import marks
+
 __all__ = [
     "TRUST_WEIGHTS",
     "DEFAULT_TRUST",
@@ -201,35 +203,29 @@ _ROW_COLUMNS = (
     "id", "content", "summary", "kind", "confidence",
     "foundation_score", "derived_from", "source_context", "untrusted_source",
 )
-#: The same column set MINUS the optional ``untrusted_source`` — used as a
-#: fallback SELECT on a pre-migration DB that lacks that column, so this module
-#: keeps working (fail-graceful) on an un-migrated brain.
+#: The same column set MINUS the optional ``untrusted_source`` — the SELECT on a
+#: brain PROVED to lack that column, so this module keeps working on one.
 _ROW_COLUMNS_LEGACY = tuple(c for c in _ROW_COLUMNS if c != "untrusted_source")
 
 
 def _fetch_row(conn: sqlite3.Connection, memory_id: int) -> Optional[Dict[str, Any]]:
     """Fetch a memory row by id as a plain dict, or None if absent.
 
-    Tries the full column set (including ``untrusted_source``); on a pre-migration
-    DB that lacks that column the SELECT raises an OperationalError, and we retry
-    with the legacy set so the keystone keeps working on an un-migrated brain.
+    The column set is chosen by asking the schema, never by which SELECT failed: a
+    locked database is not a brain without the column. Where the column is there and
+    cannot be read, the row comes back with an unreadable mark, which keeps the ceiling.
     """
+    def select(cols):
+        r = conn.execute(f"SELECT {', '.join(cols)} FROM memories WHERE id = ?", (memory_id,)).fetchone()
+        return None if r is None else {col: r[idx] for idx, col in enumerate(cols)}
+
+    if marks.schema_state(conn) == "bare":
+        return select(_ROW_COLUMNS_LEGACY)
     try:
-        cur = conn.execute(
-            f"SELECT {', '.join(_ROW_COLUMNS)} FROM memories WHERE id = ?",
-            (memory_id,),
-        )
-        cols = _ROW_COLUMNS
+        return select(_ROW_COLUMNS)
     except sqlite3.OperationalError:
-        cur = conn.execute(
-            f"SELECT {', '.join(_ROW_COLUMNS_LEGACY)} FROM memories WHERE id = ?",
-            (memory_id,),
-        )
-        cols = _ROW_COLUMNS_LEGACY
-    r = cur.fetchone()
-    if r is None:
-        return None
-    return {col: r[idx] for idx, col in enumerate(cols)}
+        row = select(_ROW_COLUMNS_LEGACY)
+        return row if row is None else {**row, "untrusted_source": None}
 
 
 def _coerce_row(
@@ -265,7 +261,7 @@ def _coerce_row(
         return None
 
     # If the supplied mapping lacks columns we depend on, refill from DB by id.
-    needed = ("confidence", "foundation_score", "derived_from", "source_context", "kind")
+    needed = ("confidence", "foundation_score", "derived_from", "source_context", "kind", "untrusted_source")
     if any(c not in data for c in needed) and data.get("id") is not None:
         try:
             fetched = _fetch_row(conn, int(data["id"]))
@@ -428,8 +424,8 @@ def _corroboration(
     to avoid provenance cycles.
     """
     mem_id = row.get("id")
-    if mem_id is None:
-        return 0.0
+    if mem_id is None or _is_untrusted_source(row):
+        return 0.0          # what the brain wrote from outside text is not a second source for it
     try:
         cur = conn.execute(
             "SELECT COUNT(DISTINCT derived_memory_id) FROM memory_provenance WHERE source_memory_id = ?",
@@ -469,20 +465,10 @@ def _corroboration(
 
 
 def _is_untrusted_source(row: Dict[str, Any]) -> bool:
-    """True if the row carries the Warden's immutable ``untrusted_source=1`` mark.
-
-    Defensive: a missing column (pre-migration DB / partial dict), NULL, 0, ''
-    or any non-truthy value reads as NOT untrusted. Only an explicit truthy
-    integer/1 trips the ceiling, so this can never spuriously bury a row.
+    """Does the row read as outside? Present and anything but the integer 0: yes (marks.state_of). Absent from the row (a
+    brain with no such column, a partial dict with no id to fetch by): no claim is made.
     """
-    v = row.get("untrusted_source")
-    if v is None:
-        return False
-    try:
-        return int(v) == 1
-    except (TypeError, ValueError):
-        # A non-numeric truthy value ('1', 'true') still counts as marked.
-        return str(v).strip().lower() in ("1", "true", "yes")
+    return "untrusted_source" in row and marks.state_of(row["untrusted_source"]) != marks.CLEAN
 
 
 def _citation_bonus(row: Dict[str, Any]) -> float:
