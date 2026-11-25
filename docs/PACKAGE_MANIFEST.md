@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-25T18:17:42Z from the working tree whose HEAD was `e85a8fd`
+> Generated 2026-11-25T18:24:55Z from the working tree whose HEAD was `dd1b53a`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 566 |
 | files hashed | 566 |
-| total bytes | 12042138 |
+| total bytes | 12045480 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -107,7 +107,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  285 files, 3878449 bytes
+### `voidloom` — The CLI facade  ·  285 files, 3881742 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -271,7 +271,7 @@
 | `voidloom/tests/test_manifest_lays_no_tests.py` | 5030 | `9ab8c613bb1645a3` |
 | `voidloom/tests/test_marks_every_writer_is_classified.py` | 10811 | `ca75f92965daa821` |
 | `voidloom/tests/test_marks_schema.py` | 17668 | `0085fb6f93e5a4ea` |
-| `voidloom/tests/test_marks_surfaces.py` | 20753 | `efd26bc12ac69458` |
+| `voidloom/tests/test_marks_surfaces.py` | 24046 | `dbc3fd31ba290521` |
 | `voidloom/tests/test_migration_041_plain_sql_release_r2.py` | 4209 | `fc4edf7319aaea4a` |
 | `voidloom/tests/test_migrations_042_045.py` | 12277 | `9ebb0e1fb5f14d38` |
 | `voidloom/tests/test_missing_compute_card_reads_degraded.py` | 6975 | `cb9da9004849e328` |
@@ -460,7 +460,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 155336 | `d61bc6f17891fa05` |
+| `install/lay_manifest.json` | 155336 | `ba8d6921cfb7889d` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -620,12 +620,12 @@
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12145 | `502a3f183d8e0022` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 496892 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 496941 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 55762 | `f41f23a3f016ccff` |
+| `CHANGELOG.md` | 55811 | `341542b237df649f` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
 | `COMPAT.json` | 3083 | `991dddaa3eb27070` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |

@@ -280,6 +280,69 @@ class Refusals(Case):
         self.assertEqual(marks.health(wb.premark_brain(self.tmp / "pre"))["verdict"], "BRAIN_NEEDS_MIGRATION")
 
 
+class DispatchExactness(Case):
+    TOPIC = "Zanzibar quokka freezing"
+
+    def sent(self, name, approved, warden=True):
+        import gap_mapping as gm
+        b = Brain(self.tmp / name)
+        b.c.execute("INSERT INTO gap_inventory (entity, gap_type, score, auto_research_eligible) VALUES (?, 'thin_entity', 0.9, 1)", (self.TOPIC,))
+        b.c.commit()
+        (Path(b.path).parent / gm.APPROVED_TOPICS_FILE).write_text(json.dumps(approved))
+        got = []
+        with wb.engine(b.path), mock.patch.object(gm, "_dispatch_research", lambda p, t=0: got.append(p) or {
+                "status": "success", "output": "A measured rate, doi 10.1/x.", "wall_clock_seconds": 0.1}), \
+                contextlib.ExitStack() as st:
+            if not warden:
+                st.enter_context(mock.patch.object(gm, "_warden", None))
+            r = gm.dispatch_auto_research(b.path, gap_ids=[1])
+        return len(got), r["status"]
+
+    def test_each_near_spelling_alone_opens_nothing_and_the_exact_one_does(self):
+        near = [self.TOPIC + " ", " " + self.TOPIC, self.TOPIC.lower(), self.TOPIC.upper(), self.TOPIC[:-1], self.TOPIC + "\n",
+                self.TOPIC.replace(" ", "\u00a0"), "*", "quokka"]
+        self.assertEqual({t: self.sent("n%d" % i, [t]) for i, t in enumerate(near)}, {t: (0, "refused") for t in near})
+        self.assertEqual(self.sent("yes", [self.TOPIC]), (1, "ok"))
+        self.assertEqual(self.sent("yes2", {"topics": [self.TOPIC]}), (1, "ok"))
+
+    def test_with_no_screen_nothing_is_sent(self):
+        self.assertEqual(self.sent("nw", [self.TOPIC], warden=False), (0, "refused"))
+
+    def test_a_json_key_given_twice_grants_nothing(self):
+        import gap_mapping as gm
+        (self.tmp / gm.APPROVED_TOPICS_FILE).write_text('{"topics": [], "topics": ["x"]}')
+        self.assertEqual(gm.approved_topics(str(self.tmp / "b.db"))[0], None)
+
+
+class DiscardedRow(Case):
+    """A trigger that ignores an INSERT leaves `lastrowid` naming the row before it."""
+
+    def brain(self):
+        b = Brain(self.tmp)
+        b.c.execute("CREATE TRIGGER planted BEFORE INSERT ON memories WHEN NEW.content LIKE '%VANISH%' BEGIN SELECT RAISE(IGNORE); END")
+        b.c.commit()
+        return b
+
+    def test_every_writer_notices_on_a_connection_that_has_written_before(self):
+        import claude_memory_lite as lite
+        import memory_write as mw
+        b = self.brain()
+        kw = dict(summary="s", category="insight", kind="episodic", importance=0.5, project=None, context=None, tags="")
+        lite._insert_memory(b.c, content="kept", **kw)
+        with self.assertRaises(lite.RowNotKept):
+            lite._insert_memory(b.c, content="VANISH", **kw)
+        with self.assertRaises(sqlite3.Error):
+            marks.derived_insert(b.c, {"content": "VANISH", "category": "insight"}, [])
+        with self.assertRaises(mw.MemoryWriteError):
+            mw.write_memory(b.c, content="VANISH", category="insight", encoder=wb.fake_vec)
+
+    def test_the_lexical_log_keeps_no_words_whatever_it_is_handed(self):
+        import recall_diversity
+        b = Brain(self.tmp)
+        self.assertTrue(recall_diversity.record_lexical_miss(b.c, "a private question", fts_hits=0))
+        self.assertRegex(b.one("SELECT query FROM lexical_miss_log")[0], r"^[0-9a-f]{32}$")
+
+
 class Pin(Case):
     def test_a_worker_of_a_pinned_call_carries_no_pin_and_is_refused(self):
         got = {}

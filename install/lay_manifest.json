@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "e85a8fd",
+  "derived_at_head": "dd1b53a",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 566,
   "not_laid": {
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 55762,
+   "bytes": 55811,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "f41f23a3f016ccff7402bd0932aeee6379d89f6556ab67f51015fa49c19cdd5a",
+   "sha256": "341542b237df649f96ba5378538662fd24ab7bc9170c80e4aab6bdcbc4559a61",
    "src": "CHANGELOG.md"
   },
   {
@@ -4477,13 +4477,13 @@
    "src": "voidloom/tests/test_marks_schema.py"
   },
   {
-   "bytes": 20753,
+   "bytes": 24046,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "efd26bc12ac69458c2a2bf84a3576bef6f38fc2897f74ee26f8c0e2c2008122d",
+   "sha256": "dbc3fd31ba2905211c0565fb1ca13204daf584f5c89a55e67a22bbf586d547fb",
    "src": "voidloom/tests/test_marks_surfaces.py"
   },
   {

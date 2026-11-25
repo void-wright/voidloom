@@ -55,7 +55,7 @@ release that can say where a memory's words came from.
 - Trust: an unreadable mark keeps the outside ceiling, and an outside memory is not corroborated by what was written from it.
 - A brain before `migration_046`: plain stores work and say `premark: true`; marked and derived writes refuse
   `BRAIN_NEEDS_MIGRATION`. A read no longer adds the mark column to a brain that has none.
-- `memories_fts_after_update` fires on a change of the indexed text only.
+- `memories_fts_after_update` fires on a change of the indexed text only, so archiving a memory no longer needs the index.
 
 ### Fixed
 
