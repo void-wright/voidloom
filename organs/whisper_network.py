@@ -733,6 +733,7 @@ def _run_unit_tests():
                 );
             """)
         conn.commit()
+        marks.fixture_schema(conn)
 
         # --- Test 1: is_whisper_migration_applied ---
         print("\n[T01] is_whisper_migration_applied on fresh DB...")

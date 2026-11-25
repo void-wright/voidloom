@@ -247,6 +247,29 @@ class Refusals(Case):
             mw.write_memory(b.c, content="derived words", category="insight", encoder=wb.fake_vec, sources=[p], transformation="distillation")
         self.assertEqual(b.new_ids(top), [])
 
+    def test_a_derived_row_and_its_parents_land_together_and_end_no_transaction(self):
+        b = Brain(self.tmp)
+        p = b.add("parent")
+        b.c.execute("CREATE TRIGGER planted BEFORE INSERT ON memory_parents BEGIN SELECT RAISE(ABORT, 'planted'); END")
+        b.c.commit()
+        top = b.top()
+        for level, opened in ((b.c.isolation_level, False), (b.c.isolation_level, True), (None, False)):
+            b.c.isolation_level = level
+            if opened:
+                b.c.execute("UPDATE memories SET access_count = 7 WHERE id = ?", (p,))
+            with self.assertRaises(sqlite3.Error):
+                marks.derived_insert(b.c, {"content": "x", "category": "insight"}, [p])
+            self.assertEqual((b.new_ids(top), b.c.in_transaction), ([], opened), (level, opened))
+            b.c.commit()
+        self.assertEqual(b.one("SELECT access_count FROM memories WHERE id = ?", (p,))[0], 7)      # the caller's own write stood
+        b.c.execute("DROP TRIGGER planted")
+        b.c.isolation_level = ""
+        b.c.commit()
+        marks.derived_insert(b.c, {"content": "x", "category": "insight"}, [p])
+        self.assertTrue(b.c.in_transaction)
+        b.c.rollback()                                  # the caller can still take the whole thing back
+        self.assertEqual(b.new_ids(top), [])
+
     def test_doctor_names_a_lost_trigger_and_a_brain_before_the_migration(self):
         b = Brain(self.tmp / "b")
         self.assertEqual(marks.health(b.path)["verdict"], "ok")

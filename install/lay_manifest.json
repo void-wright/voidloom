@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "6d926c8",
+  "derived_at_head": "33fba4a",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 566,
   "not_laid": {
@@ -1617,13 +1617,13 @@
    "src": "organs/approvals_policy.py"
   },
   {
-   "bytes": 70971,
+   "bytes": 71006,
    "component": "core",
    "dst": "organs/arcane_manifest.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a9f8ee93923986c5215af1e6860e5e3a606faca0c2185ad8576a58198f43ff96",
+   "sha256": "cc205e70689b4bae18c75e5e9e9a63d19241d4ecd91202f0733de940d1ec5458",
    "src": "organs/arcane_manifest.py"
   },
   {
@@ -1837,13 +1837,13 @@
    "src": "organs/engine_pin.py"
   },
   {
-   "bytes": 110138,
+   "bytes": 107494,
    "component": "core",
    "dst": "organs/gap_mapping.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "686d60b24abd7799d83717b12caafda08bc05d8735db06f8a7550efa4a61d363",
+   "sha256": "0b4ed1db5d1309bc58beca4aacb636c08d2e25d6ba3450d7e5479580b66ec2a6",
    "src": "organs/gap_mapping.py"
   },
   {
@@ -1907,13 +1907,13 @@
    "src": "organs/mark_admin.py"
   },
   {
-   "bytes": 34620,
+   "bytes": 36758,
    "component": "core",
    "dst": "organs/marks.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6f6ae8a1c46d83c6f300d99ec56fdfc30ef50dae2f9c53b6c5097f644edacc74",
+   "sha256": "c7fd93811e854c6f8c067708c04999bef17e408cac82dbe36a9a9872bdd34b87",
    "src": "organs/marks.py"
   },
   {
@@ -2127,13 +2127,13 @@
    "src": "organs/skill_graduation.py"
   },
   {
-   "bytes": 116043,
+   "bytes": 116078,
    "component": "core",
    "dst": "organs/sleep_loop.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "aa2254465b9948e93461fdafbe5c454b4878a88befe873f1d0617a0086050fd4",
+   "sha256": "f2746c3f2bc7fc09f0615bf271913d484f92da05868adaa3dbeb7c7af81f5c24",
    "src": "organs/sleep_loop.py"
   },
   {
@@ -2357,13 +2357,13 @@
    "src": "organs/website_memory.py"
   },
   {
-   "bytes": 45488,
+   "bytes": 45523,
    "component": "core",
    "dst": "organs/whisper_network.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "ebdb9ee9bacc52945ec7e2e288e06c7af691fbaae361f03027f625911f9f2b65",
+   "sha256": "ca6432739edf613ec0f65a2a8e788155c10ea820986c4231018ad029892a6774",
    "src": "organs/whisper_network.py"
   },
   {
@@ -4467,23 +4467,23 @@
    "src": "voidloom/tests/test_marks_every_writer_is_classified.py"
   },
   {
-   "bytes": 15581,
+   "bytes": 17668,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "c0aa66717678d718418441c10e3ca80a1ea2f125ec8bb035896cd64e58de885c",
+   "sha256": "0085fb6f93e5a4ea3e8a113b2f5202bad09c22e0372949a1ae0a03498e1bb4f8",
    "src": "voidloom/tests/test_marks_schema.py"
   },
   {
-   "bytes": 19427,
+   "bytes": 20753,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "5a3704859ec57252ba2ff02ab16660e897d548607069d2b80731612ec152f4c0",
+   "sha256": "efd26bc12ac69458c2a2bf84a3576bef6f38fc2897f74ee26f8c0e2c2008122d",
    "src": "voidloom/tests/test_marks_surfaces.py"
   },
   {

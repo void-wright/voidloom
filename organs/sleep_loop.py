@@ -2202,6 +2202,7 @@ def unit_tests():
                 );
             """)
         conn.commit()
+        marks.fixture_schema(conn)
         _vl_mw.ensure_provenance_table(conn)
         conn.commit()
 

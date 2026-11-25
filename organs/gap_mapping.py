@@ -2028,15 +2028,10 @@ def unit_tests():
     # NWR should NOT be thin (appears in many memories)
     assert_true("T5: Northwind Robotics NOT thin", not any("Northwind Robotics" == e for e in thin_entities))
 
-    # ---- Test 6: Weak recall detection ----
+    # ---- Test 6: a question that found little is not a topic ----
     conn = _get_conn(db_path)
-    weak = detect_weak_recalls(conn, score_threshold=-0.3, lookback_days=30, min_query_count=2)
+    assert_eq("T6: weak-recall detection is retired", detect_weak_recalls(conn), [])
     conn.close()
-    weak_queries = [g['entity'] for g in weak]
-    assert_true("T6: Faraday Grid query detected as weak recall",
-                any("Faraday Grid" in q for q in weak_queries))
-    assert_true("T6: Atlas Pro II query NOT in weak (good score)",
-                not any("Atlas Pro II technical" in q for q in weak_queries))
 
     # ---- Test 7: Unresolved contradiction detection ----
     conn = _get_conn(db_path)
@@ -2183,47 +2178,6 @@ def unit_tests():
     assert_eq("T21: overridden value", merged['thin_entity_max_mentions'], 5)
     assert_eq("T21b: default preserved", merged['weak_recall_lookback_days'], 30)
     assert_true("T21c: nested dict merged", 'nwr' in merged['strategic_weights'])
-
-    # ---- Test 22: Weak recall score differentiation (P3 fix) ----
-    conn = _get_conn(db_path)
-    weak_very_poor = "Cialdini persuasion principles audience engagement"
-    for i in range(3):
-        conn.execute("""
-            INSERT INTO access_log (memory_id, access_type, query_text, relevance_score, accessed_at)
-            VALUES (?, 'recall:hybrid', ?, ?, ?)
-        """, (1, weak_very_poor, 0.92, recent))
-    weak_barely = "Cloudflare Workers KV storage pattern"
-    for i in range(3):
-        conn.execute("""
-            INSERT INTO access_log (memory_id, access_type, query_text, relevance_score, accessed_at)
-            VALUES (?, 'recall:hybrid', ?, ?, ?)
-        """, (1, weak_barely, 0.45, recent))
-    conn.commit()
-    weak2 = detect_weak_recalls(conn, score_threshold=-0.3, lookback_days=30, min_query_count=2)
-    conn.close()
-    cialdini = [g for g in weak2 if 'Cialdini' in g['entity']]
-    cloudflare = [g for g in weak2 if 'Cloudflare Workers' in g['entity']]
-    assert_true("T22a: Cialdini query found", len(cialdini) == 1)
-    assert_true("T22b: Cloudflare query found", len(cloudflare) == 1)
-    if cialdini and cloudflare:
-        assert_true("T22c: Cloudflare has HIGHER importance than Cialdini (worse match = more important)",
-                    cloudflare[0]['raw_importance'] > cialdini[0]['raw_importance'])
-        assert_true("T22d: Cialdini importance near 0.08",
-                    0.01 < cialdini[0]['raw_importance'] < 0.20)
-        assert_true("T22e: Cloudflare importance near 0.55",
-                    0.40 < cloudflare[0]['raw_importance'] < 0.70)
-        assert_true("T22f: scores are genuinely different (not uniform 1.0)",
-                    abs(cloudflare[0]['raw_importance'] - cialdini[0]['raw_importance']) > 0.3)
-
-    # ---- Test 23: Weak recall importance boundary clamping ----
-    assert_eq("T23a: negative best_score clamps to 1.0",
-              max(0.0, min(1.0, 1.0 - (-0.05))), 1.0)
-    assert_eq("T23b: high best_score clamps to 0.0",
-              max(0.0, min(1.0, 1.0 - 1.5)), 0.0)
-    assert_true("T23c: typical weak recall (0.93) gives low importance",
-                0.05 < max(0.0, min(1.0, 1.0 - 0.93)) < 0.10)
-    assert_true("T23d: marginal weak recall (0.45) gives medium importance",
-                0.50 < max(0.0, min(1.0, 1.0 - 0.45)) < 0.60)
 
     # Cleanup
     try:

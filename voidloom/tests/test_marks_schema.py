@@ -216,6 +216,41 @@ class Undo(Case):
         self.assertEqual((rc, data(env)["rows_changed"], all(b.marked(k) for k in kids)), (0, len(kids), True))
 
 
+    def test_the_migration_can_be_taken_out_and_put_back_and_the_older_shape_is_what_is_left(self):
+        """The rollback of the file itself, on a copy: nothing of it is left, every row stands, and it applies again."""
+        old = wb.premark_brain(self.tmp / "old")
+        db = wb.premark_brain(self.tmp / "db")
+        c = sqlite3.connect(db)
+        c.execute("INSERT INTO memories (content, category) VALUES ('kept', 'insight')")
+        c.commit()
+        self.assertTrue(schema_migrator.apply(str(db))["complete"])
+        c.execute("UPDATE memories SET untrusted_source = 1")
+        c.commit()
+        for (name,) in c.execute("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_marks_%'").fetchall():
+            c.execute("DROP TRIGGER %s" % name)
+        for table in (*marks.NEW_TABLES, "forget_receipts", "marks_backfill_preimage"):
+            c.execute("PRAGMA foreign_keys = OFF")
+            c.execute("DROP TABLE %s" % table)
+        for col in marks.NEW_COLUMNS:
+            c.execute("ALTER TABLE memories DROP COLUMN %s" % col)
+        for table, col in (("access_log", "event_id"), ("access_log", "machine"), ("gap_research_log", "approval_hash"),
+                           ("gap_research_log", "outcome")):
+            c.execute("ALTER TABLE %s DROP COLUMN %s" % (table, col))
+        c.commit()
+
+        def shape(conn):
+            return {(t, n): sorted(r[1] for r in conn.execute('PRAGMA table_info("%s")' % n)) if t == "table" else None
+                    for t, n in conn.execute("SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+                    if not n.startswith(("memories_fts_", "memory_embeddings"))}
+        self.assertEqual(shape(c), shape(sqlite3.connect(old)))
+        self.assertEqual(c.execute("SELECT content, untrusted_source FROM memories").fetchall(), [("kept", 1)])
+        with self.assertRaises(sqlite3.Error):
+            c.execute("UPDATE memories SET untrusted_source = 0")
+        c.rollback()
+        c.close()
+        self.assertTrue(schema_migrator.apply(str(db))["complete"])
+
+
 class OlderRelease(Case):
     """A real 1.1.3 process on a migrated database."""
 

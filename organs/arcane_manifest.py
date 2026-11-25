@@ -1305,6 +1305,7 @@ def _run_tests():
             memory_id INTEGER NOT NULL, tag TEXT NOT NULL,
             UNIQUE(memory_id, tag)
         )""")
+        marks.fixture_schema(conn)
         for i in range(25):
             conn.execute(
                 """INSERT INTO memories (content, summary, category, importance, kind, created_at)
