@@ -635,7 +635,7 @@ class TestTensionFadeEvidence(_TmpCase):
             ids = _plant_channel_brain(b, n_dreams=1)
             # Every reader must have something to say, or a reader that counted the leads would read the same empty
             # answer on both arms: tags for the per-tag spike and cadence, a multi-day baseline with a spike on the
-            # last day, and a genuinely weak human query for gap mapping.
+            # last day, and a genuinely weak human query, which gap mapping no longer reads.
             for m in (ids["m1"], ids["m2"], ids["d0"]):
                 for tag in ("gradle", "build"):
                     b.c.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)", (m, tag))
@@ -681,7 +681,8 @@ class TestTensionFadeEvidence(_TmpCase):
                 r["self_eval_recall_count"] = mse._score_module_only_piece(
                     b.c, "hybrid_retrieval", anchor.strftime("%Y-%m"), "recall")
             outs.append(json.loads(json.dumps(r, default=str)))
-        for k in ("spike", "cadence", "gaps"):
+        self.assertEqual(outs[0]["gaps"], [], "a question became a topic again")
+        for k in ("spike", "cadence"):
             self.assertTrue(outs[0][k], f"{k} is empty on the fixture: a reader that counted leads could not be caught")
         self.assertEqual(outs[0], outs[1], lead_type)
 

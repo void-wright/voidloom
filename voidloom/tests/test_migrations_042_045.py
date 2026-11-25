@@ -67,7 +67,7 @@ class _Box(unittest.TestCase):
         self.mdir041 = self.box / "migrations041"
         self.mdir041.mkdir()
         for f in MDIR.iterdir():
-            if f.name not in NEW:
+            if f.name not in NEW and not f.name.startswith("migration_046_"):      # 041 is before all of them
                 shutil.copy2(f, self.mdir041 / f.name)
 
     def tearDown(self):
@@ -153,7 +153,7 @@ class TestUpgradeFrom041(_Box):
         db = self._brain_at_041()
         r = sm.apply(str(db), MDIR)
         self.assertTrue(r["ok"], r["files_with_errors"])
-        self.assertEqual(self._ran(r), sorted(NEW))
+        self.assertEqual([f for f in self._ran(r) if f < "migration_046"], sorted(NEW))
         c = sqlite3.connect(db)
         try:
             rows = c.execute("SELECT memory_id, model_id, model_ref, weights_hash, input_kind, inputs "

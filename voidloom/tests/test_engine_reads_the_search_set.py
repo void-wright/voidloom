@@ -105,7 +105,8 @@ class _Engine(unittest.TestCase):
 
     def add(self, text, category="insight", importance=0.5):
         mid = int(self.conn.execute(
-            "INSERT INTO memories (content, summary, category, importance) VALUES (?, ?, ?, ?)",
+            # the machine's own rows: maintenance archives no row for being alike that is not recorded as one
+            "INSERT INTO memories (content, summary, category, importance, author) VALUES (?, ?, ?, ?, 'model')",
             (text, text[:40], category, importance)).lastrowid)
         self.conn.commit()
         return mid

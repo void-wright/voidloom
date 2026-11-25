@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "organs"))
 
 import embedder_lock as el  # noqa: E402
+import marks  # noqa: E402
 import memory_write as mw  # noqa: E402
 import sleep_loop  # noqa: E402
 
@@ -73,6 +74,7 @@ class _Brain(unittest.TestCase):
         c.execute("INSERT INTO metadata (key, value) VALUES ('active_embedding_table', ?)", (self.TABLE,))
         c.executescript((MIGRATIONS / "migration_005_sleep_loop.sql").read_text())
         mw.ensure_provenance_table(c)
+        marks.fixture_schema(c)                 # a centroid is a derived row: it needs somewhere to record its parents
         c.commit()
         self.conn = c
         self.rng = random.Random(7)

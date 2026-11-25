@@ -350,6 +350,8 @@ class TestAgentContext(unittest.TestCase):
         # 2026-10-30, tier set: the one route that changes a brain's embedding model (re-embeds every memory, keeps
         # the old vectors until cleanup). Admitted deliberately.
         "tier",
+        # 2026-11-25, marks: the registrar, the reversible archive and its undo, and the one-time backfill.
+        "research-register", "forget", "unarchive", "marks",
     }
 
     def test_manifest_valid_json_all_verbs(self):

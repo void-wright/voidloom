@@ -387,8 +387,6 @@ def audit(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
     mdir = mdir or migrations_dir()
     kept: list = []
     ref, unmeasurable, files_with_errors = build_reference(mdir, keep=kept)
-    have = brain_objects(db)
-    missing = sorted(ref - have)
     # A table is not the whole of what a migration makes. A trigger that is gone leaves every table in place and the rule
     # it held unenforced, and a column that is gone leaves its table. Compared by name against the same reference; a
     # trigger is also compared by its text. Only the FULL-TEXT triggers are exempt from the text comparison: an older
@@ -397,11 +395,14 @@ def audit(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
     try:
         vec = has_vec0(_probe)
         want_trg, have_trg = _triggers(kept[0]), _triggers(_probe)
-        plain = {t for t in ref & have if not t.startswith(("memories_fts", "memory_embeddings"))}
+        there = {r[0] for r in _probe.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        plain = {t for t in ref & there if not t.startswith(("memories_fts", "memory_embeddings"))}
         missing_columns = sorted(_table_columns(kept[0], plain) - _table_columns(_probe, plain))
     finally:
         _probe.close()
         kept[0].close()
+    have = brain_objects(db)
+    missing = sorted(ref - have)
     missing_triggers = sorted(set(want_trg) - set(have_trg))
     altered_triggers = sorted(n for n, q in want_trg.items()
                               if n in have_trg and have_trg[n] != q and not n.startswith("memories_fts_"))

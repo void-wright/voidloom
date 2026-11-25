@@ -5,8 +5,8 @@ knowledge.
 The health check found replies such as "I can't tell which entity you mean" in
 the brain as `domain_knowledge`. Re-derived on the live brain (read-only,
 2026-10-15) with the gate's rules: 55 of 270 stored replies. The thinker is a
-double, the Warden is off and the embedding attach is a no-op: no model, no
-network.
+double, the topic is approved, the screen allows and the embedding attach is a
+no-op: no model, no network.
 """
 from __future__ import annotations
 
@@ -88,7 +88,8 @@ def brain(schema_db, tmp_path, monkeypatch):
     c.close()
     monkeypatch.setattr(GM._thinker, "read_record", lambda *a, **k: {"backend": "double"})
     monkeypatch.setattr(GM._thinker, "load_catalog", lambda *a, **k: {"backends": {"double": {"web": True}}})
-    monkeypatch.setattr(GM, "_warden", None)
+    (tmp_path / GM.APPROVED_TOPICS_FILE).write_text('["ZQX"]')
+    monkeypatch.setattr(GM._warden, "screen_web_write", lambda *a, **k: {"verdict": "ALLOW", "reason_code": "double", "ok": True})
     monkeypatch.setattr(GM, "_vl_attach", lambda *a, **k: {"embedded": False})
     return path, gid
 

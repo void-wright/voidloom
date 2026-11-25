@@ -220,13 +220,17 @@ class SchemaDamage(_Room):
         c.execute(sql)
         c.commit(); c.close()
 
-    def test_a_dropped_index_is_typed_on_every_writing_verb(self):
+    def test_a_dropped_index_is_typed_on_every_verb_that_writes_indexed_text(self):
         self.plant("DROP TABLE memories_fts")
-        for argv in (("update", "--id", "1", "--summary", "changed"), ("delete", "--id", "1")):
-            out, p = self.engine(*argv)
-            self.assertNotIn("Traceback", p.stderr, (argv, p.stderr[-500:]))
-            self.assertEqual(out.get("error"), "SCHEMA_DAMAGED", (argv, out))
-            self.assertIn("coverage", out)
+        out, p = self.engine("update", "--id", "1", "--summary", "changed")
+        self.assertNotIn("Traceback", p.stderr, p.stderr[-500:])
+        self.assertEqual(out.get("error"), "SCHEMA_DAMAGED", out)
+        self.assertIn("coverage", out)
+
+    def test_a_soft_archive_changes_no_indexed_text_and_needs_no_index(self):
+        self.plant("DROP TABLE memories_fts")
+        out, p = self.engine("delete", "--id", "1")
+        self.assertEqual((out.get("status"), out.get("soft_archived")), ("ok", True), (out, p.stderr[-300:]))
 
     def test_the_front_door_does_not_call_a_damaged_brain_uninitialized(self):
         self.plant("DROP TABLE memories_fts")

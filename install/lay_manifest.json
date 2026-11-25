@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "33fba4a",
+  "derived_at_head": "146542d",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 566,
   "not_laid": {
@@ -2097,13 +2097,13 @@
    "src": "organs/recall_explain.py"
   },
   {
-   "bytes": 27496,
+   "bytes": 27599,
    "component": "core",
    "dst": "organs/schema_migrator.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "e2e0f088df376c96ea7171472d1db0e2f47793dcd850dad210df00151d7736c0",
+   "sha256": "15118cf2069c57639b5c928b4fc9c14e024f068a79ffea812644743507cb4be9",
    "src": "organs/schema_migrator.py"
   },
   {
@@ -3417,13 +3417,13 @@
    "src": "voidloom/tests/test_capability_names_the_shipped_tier.py"
   },
   {
-   "bytes": 15745,
+   "bytes": 15892,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "3bc92d0f790d5ab0ed4fc69e6354d578fbe76b07ebbb2546848b0ee7b2526b1c",
+   "sha256": "fcfa240497ded3aaf82cbf11d9d2f4cc6f729319bbdf9f2fdeee3b2fc93c5d55",
    "src": "voidloom/tests/test_centroid_stamp.py"
   },
   {
@@ -3787,13 +3787,13 @@
    "src": "voidloom/tests/test_dreamfix_r2w2a.py"
   },
   {
-   "bytes": 49500,
+   "bytes": 49592,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "b36a386b88b63d038e20685b6d598a98e818c84609edc65624e18bd3815c7ab7",
+   "sha256": "ac828b36b748b24068acec929965b592936d45d9c8601cd10aac9a562d9c0004",
    "src": "voidloom/tests/test_dreamfix_tranche_a.py"
   },
   {
@@ -3917,13 +3917,13 @@
    "src": "voidloom/tests/test_encoder_tier_is_bijective.py"
   },
   {
-   "bytes": 32789,
+   "bytes": 32916,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "ef7b5ff432fda0f6f6f901c9d9595e1488525f207773c0c2ba80721be647bd0b",
+   "sha256": "fb200b19a5044adde242998a882d9239c921c09ad3cfc89dbb54e78ad3bec5b0",
    "src": "voidloom/tests/test_engine_reads_the_search_set.py"
   },
   {
@@ -4037,13 +4037,13 @@
    "src": "voidloom/tests/test_fts_lone_punctuation_r2.py"
   },
   {
-   "bytes": 7580,
+   "bytes": 7752,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "d13acb6dcd505e6cb2259dbd659c4a5e4096488a049d671963dd3b20339c70a2",
+   "sha256": "6eaaa464c8a7cb5869e6eb39a3cc61ef4946edbf667af76bcf94183fee162927",
    "src": "voidloom/tests/test_gap_research_non_answer_r1.py"
   },
   {
@@ -4497,13 +4497,13 @@
    "src": "voidloom/tests/test_migration_041_plain_sql_release_r2.py"
   },
   {
-   "bytes": 12164,
+   "bytes": 12277,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "d533e837d338f13dddfa0a93ed940d296a13770d3dbf735653eb24d5f13ef280",
+   "sha256": "9ebb0e1fb5f14d38b7c7d7a55f2afebc038a544d5277530d30a21b0e8cd7e415",
    "src": "voidloom/tests/test_migrations_042_045.py"
   },
   {
@@ -4817,13 +4817,13 @@
    "src": "voidloom/tests/test_recall_topk_after_placement.py"
   },
   {
-   "bytes": 37752,
+   "bytes": 37968,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "16c5957b7c380cf9ed7a2b3130edcff9b8ea818c3918ec05caf4cd2bdd516367",
+   "sha256": "31098697867fea88ac418f8fb40fe22ae3f02dcfdda0f0a0f04cf8e059d40394",
    "src": "voidloom/tests/test_refusals_name_the_way_out.py"
   },
   {
@@ -5587,13 +5587,13 @@
    "src": "voidloom/tests/test_upgrade_embeds_nothing_unasked.py"
   },
   {
-   "bytes": 37835,
+   "bytes": 38004,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "7047522d98ca676c94b71e2147c62d9d837b677d8f1f15ad7eb8b28913af7a04",
+   "sha256": "608d9b53b234fc5e10f191a6f60eb3aed4c377c367ea80fdb41c0ac1af564f6f",
    "src": "voidloom/tests/test_voidloom.py"
   },
   {
