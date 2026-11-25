@@ -86,6 +86,7 @@ pattern), #3912 (kind taxonomy), #3918 (procedural memory design),
 """
 
 import argparse
+import functools
 import json
 import logging
 import os
@@ -1797,6 +1798,23 @@ def _frame_untrusted_results(conn, results):
 # --- end Voidloom #176 A2 helper -------------------------------------------
 
 
+def _temporal_rerank_per_call(recall):
+    """`--no-temporal-rerank` is this call's, so it is set for the length of this call: an environment variable would
+    bind every later recall of the process."""
+    @functools.wraps(recall)
+    def call(args):
+        off = getattr(hybrid_retrieval, "NO_TEMPORAL_RERANK", None)
+        if off is None or not getattr(args, "no_temporal_rerank", False):
+            return recall(args)
+        token = off.set(True)
+        try:
+            return recall(args)
+        finally:
+            off.reset(token)
+    return call
+
+
+@_temporal_rerank_per_call
 def cmd_recall(args):
     """Hybrid retrieval entry point.
 
@@ -1806,19 +1824,6 @@ def cmd_recall(args):
     Falls back to legacy vector-only if the hybrid module isn't importable
     or if --vector-only is explicitly requested.
     """
-    # The flag is this call's, so it is set for the length of this call: an environment variable would bind every later
-    # recall of the process.
-    off = getattr(hybrid_retrieval, "NO_TEMPORAL_RERANK", None)
-    if off is None or not getattr(args, "no_temporal_rerank", False):
-        return _recall(args)
-    token = off.set(True)
-    try:
-        return _recall(args)
-    finally:
-        off.reset(token)
-
-
-def _recall(args):
     t0 = time.time()
     mode = _resolve_recall_mode(args)
     conn = _get_conn()

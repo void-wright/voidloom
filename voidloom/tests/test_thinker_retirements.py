@@ -89,6 +89,7 @@ def brain(monkeypatch):
     c.execute("INSERT INTO gap_research_log (gap_id, dispatch_method, status) VALUES (1, 'claude_cli', 'success')")
     c.commit()
     c.close()
+    (w.brain / "approved_research_topics.json").write_text('["ollama num_ctx"]')      # dispatch is closed without it
     w.db = db
     yield w
     shutil.rmtree(str(root), ignore_errors=True)
@@ -121,7 +122,7 @@ def test_the_units_alias_dispatches_through_the_seam(brain):
     mem = c.execute("SELECT source_context FROM memories WHERE source_project='gap-research'").fetchall()
     c.close()
     assert rows[0][:2] == ("claude_cli", "success"), "the old row survives the rebuild"
-    assert rows[1][0] == "thinker" and rows[1][1] == "success" and rows[1][2].startswith("thinker:claude | ")
+    assert rows[1][0] == "thinker" and rows[1][1] == "success" and rows[1][2] == "thinker:claude"        # never the topic
     assert mem and "method=thinker:claude" in mem[-1][0]
     argv = [r for r in F.read_log(brain.log) if not r.get("end")][-1]["argv"]
     assert argv[argv.index("--tools") + 1] == "WebSearch,WebFetch", "gap research = the research posture (web only)"
@@ -146,6 +147,10 @@ def test_agy_is_refused_and_a_web_less_backend_skips(brain):
     c.close()
 
 
+COLS015 = ("id, gap_id, dispatch_method, dispatch_command, started_at, completed_at, status, result_memory_id, "
+           "wall_clock_seconds, error_message, raw_output_length")
+
+
 def _narrow(db):
     """Put gap_research_log back to migration_015's narrow CHECK lists (a brain that predates migration_039_gap_research_log_thinker.sql): the
     table rebuilt with 015's own CREATE statement, rows kept, 039's journal row and marker index gone."""
@@ -153,7 +158,7 @@ def _narrow(db):
     create = sql015[sql015.index("CREATE TABLE IF NOT EXISTS gap_research_log"):]
     create = create[:create.index(";") + 1].replace("IF NOT EXISTS gap_research_log", "gap_research_log_narrow")
     c = sqlite3.connect(str(db))
-    c.executescript("PRAGMA legacy_alter_table=ON; BEGIN; " + create + " INSERT INTO gap_research_log_narrow SELECT * FROM "
+    c.executescript("PRAGMA legacy_alter_table=ON; BEGIN; " + create + " INSERT INTO gap_research_log_narrow SELECT " + COLS015 + " FROM "
                     "gap_research_log; DROP TABLE gap_research_log; ALTER TABLE gap_research_log_narrow RENAME TO "
                     "gap_research_log; CREATE INDEX idx_gap_research_gap ON gap_research_log(gap_id); "
                     "DELETE FROM schema_migrations WHERE name = 'migration_039_gap_research_log_thinker.sql'; COMMIT;")
