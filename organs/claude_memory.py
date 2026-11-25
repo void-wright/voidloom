@@ -1623,38 +1623,43 @@ def cmd_store(args):
             insert_cols.append(col)
             insert_vals.append(val)
 
-    cursor = conn.execute(
-        f"INSERT INTO memories ({', '.join(insert_cols)}) "
-        f"VALUES ({', '.join('?' * len(insert_vals))})",
-        insert_vals,
-    )
-    if cursor.rowcount != 1:
-        conn.rollback()
-        conn.close()
-        _marks_refusal(marks.readback_failure(None, "the database took the statement and kept no row"), "store")
-    memory_id = cursor.lastrowid
-    marks.record_parents(conn, memory_id, wanted.source_ids)
+    # Every statement from the row to the commit, together: a write that fails (a full disk, a lock, a lost file) rolls
+    # all of it back and answers with a code, never with the id of a row that is not there.
+    try:
+        cursor = conn.execute(
+            f"INSERT INTO memories ({', '.join(insert_cols)}) "
+            f"VALUES ({', '.join('?' * len(insert_vals))})",
+            insert_vals,
+        )
+        if cursor.rowcount != 1:
+            conn.rollback()
+            conn.close()
+            _marks_refusal(marks.readback_failure(None, "the database took the statement and kept no row"), "store")
+        memory_id = cursor.lastrowid
+        marks.record_parents(conn, memory_id, wanted.source_ids)
 
-    _vt, _vd = _active_embed_table(), _active_embed_dim()
-    conn.execute(
-        f"INSERT INTO {_vt} (memory_id, embedding) VALUES (?, ?)",
-        (memory_id, embedding),
-    )
-    _stamp_vector_provenance(conn, memory_id, args.content, "claude_memory.store", table=_vt, dim=_vd)
+        _vt, _vd = _active_embed_table(), _active_embed_dim()
+        conn.execute(
+            f"INSERT INTO {_vt} (memory_id, embedding) VALUES (?, ?)",
+            (memory_id, embedding),
+        )
+        _stamp_vector_provenance(conn, memory_id, args.content, "claude_memory.store", table=_vt, dim=_vd)
 
-    # L5-G surprise birth-certificate: compute novelty at WRITE time (1 ANN MATCH;
-    # the embedding already exists). Best-effort -- the store ALWAYS proceeds even
-    # if novelty fails. encoding_surprise is INSERT-time only; it is NEVER updated
-    # again here (the absence of an update path is the anti-rot guard). Surprise
-    # FEEDS importance (+beta*novelty), never replaces it.
-    novelty = None
-    # H4: track the value actually PERSISTED to memories.importance so the store
-    # envelope echoes the truth, not the un-mutated input. Starts as the input
-    # and is bumped by the surprise feed below if novelty was computed.
-    persisted_importance = args.importance
-    if "encoding_surprise" in columns:
-        try:
-            novelty = _compute_write_novelty(conn, memory_id, embedding)
+        # L5-G surprise birth-certificate: compute novelty at WRITE time (1 ANN MATCH;
+        # the embedding already exists). Best-effort -- the store ALWAYS proceeds even
+        # if novelty fails. encoding_surprise is INSERT-time only; it is NEVER updated
+        # again here (the absence of an update path is the anti-rot guard). Surprise
+        # FEEDS importance (+beta*novelty), never replaces it.
+        novelty = None
+        # H4: track the value actually PERSISTED to memories.importance so the store
+        # envelope echoes the truth, not the un-mutated input. Starts as the input
+        # and is bumped by the surprise feed below if novelty was computed.
+        persisted_importance = args.importance
+        if "encoding_surprise" in columns:
+            try:
+                novelty = _compute_write_novelty(conn, memory_id, embedding)
+            except Exception:  # noqa: BLE001 -- a read; the store proceeds with encoding_surprise left NULL
+                novelty = None
             if novelty is not None:
                 # an outside row keeps the importance it was given: being new to the brain is no reason to value
                 # somebody else's text more
@@ -1667,19 +1672,24 @@ def cmd_store(args):
                      persisted_importance,
                      memory_id),
                 )
-        except Exception:
-            pass  # graceful: store proceeds with encoding_surprise left NULL
 
-    if args.tags:
-        for tag in args.tags.split(","):
-            tag = tag.strip()
-            if tag:
-                conn.execute(
-                    "INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
-                    (memory_id, tag),
-                )
+        if args.tags:
+            for tag in args.tags.split(","):
+                tag = tag.strip()
+                if tag:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",
+                        (memory_id, tag),
+                    )
 
-    conn.commit()
+        conn.commit()
+    except sqlite3.Error as e:
+        try:
+            conn.rollback()
+        except sqlite3.Error:
+            pass
+        conn.close()
+        _marks_refusal(marks.write_failure(e), "store")
     try:
         stored = marks.read_back(_db_path(), memory_id, content=args.content, outside=wanted.outside,
                                  research_run_id=wanted.columns.get("research_run_id"))

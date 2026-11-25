@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 553,
+    "core": 555,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 508,
+    "all": 510,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 262,
     "home": 2,
-    "null": 288,
+    "null": 290,
     "skills": 19
    }
   },
-  "derived_at_head": "3e43d52",
+  "derived_at_head": "bf3c554",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 571,
+  "entries": 573,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 277,
+     "count": 279,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 288
+   "total": 290
   },
   "platforms": [
    "all",
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 60194,
+   "bytes": 60693,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "aa70058c6c40e51f0c8a18d9ec799ed23f01ec558c1f3aeac912f8c029874305",
+   "sha256": "aed78377f838ef77f8d7263a96087adafc0fbcc1a638fe3a84627e3ab49cbb1d",
    "src": "CHANGELOG.md"
   },
   {
@@ -193,7 +193,7 @@
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "73b3f4b81b2227ecaac08f73980629dcf74d2e8a91739da61aa7f8e3fb706011",
+   "sha256": "f1a8d4a39bf4cf5678a33c1953a3132348d3ded8dc86069c360aacdc671384b3",
    "src": "COMPAT.json"
   },
   {
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "17c58a4079323b425ebd5dbca9981673c5b38a3ecd5594c37b93be25f3211ab8",
+   "sha256": "2c6c21f7730414fe08558750fab91f72e1971cf836f33f55e91008c28ce58f55",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -1537,13 +1537,13 @@
    "src": "migrations/migration_045_derived_layer_stamp.sql"
   },
   {
-   "bytes": 27883,
+   "bytes": 28124,
    "component": "core",
    "dst": "migrations/migration_046_marks.sql",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "fe18ba86608c5780d0840ef76965a185e67fe72cb21e0c5a7aacdc91d1aaef9a",
+   "sha256": "92ca1c466d0e4488ed214cc278735e402c1a1cac6dfc0ad34dddbbac7965b7db",
    "src": "migrations/migration_046_marks.sql"
   },
   {
@@ -1677,23 +1677,23 @@
    "src": "organs/calibration_memory.py"
   },
   {
-   "bytes": 233539,
+   "bytes": 234148,
    "component": "core",
    "dst": "organs/claude_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "cca83b627afef517f8b514a16fe199490301b7cb197368f0f8fb27cdbedb4f0f",
+   "sha256": "9c864d77b6105ad73a528939b103901ffb306c6992ed80b32eff693d0b26ea24",
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 69241,
+   "bytes": 69493,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "aecd9e6ad0ce56318add386e9ddebeebea08bd9c7f8ddfaeddebb2b84aef1b0f",
+   "sha256": "1fcdb89029981a228c993b0e9fa116cb6921401706734c9389e6acfb08b85564",
    "src": "organs/claude_memory_lite.py"
   },
   {
@@ -1907,13 +1907,13 @@
    "src": "organs/mark_admin.py"
   },
   {
-   "bytes": 43325,
+   "bytes": 43957,
    "component": "core",
    "dst": "organs/marks.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a398dda09817535ac51fa0d552044cf1544d76df86dc7706867aa86ba26dd688",
+   "sha256": "a5e70e7c01e4eff0cb04dc199ed1f1d702f217e8dbc8c36b733ecd2afc5d50c3",
    "src": "organs/marks.py"
   },
   {
@@ -2977,13 +2977,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 207332,
+   "bytes": 207601,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "8ed1fdcf1de92b3ac78c9e3be48526acf23ae779854cd219498e4dfe18cd45fb",
+   "sha256": "74e9be67539608948885e7915c5a48c6835b26519574b2fb8f00730e0eb1c382",
    "src": "voidloom/cli.py"
   },
   {
@@ -4467,6 +4467,26 @@
    "src": "voidloom/tests/test_marks_answers.py"
   },
   {
+   "bytes": 5455,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "8f2bb21f96474555ccaf7204472641c810a5f3dfa55db45c0a44b40d93cbd714",
+   "src": "voidloom/tests/test_marks_dedup_seed.py"
+  },
+  {
+   "bytes": 7233,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "f946efa6baf9aae6e2f71b57bc7505578b60dcf52aa1caab1d05da9d21d7df02",
+   "src": "voidloom/tests/test_marks_disk_full.py"
+  },
+  {
    "bytes": 7564,
    "component": "core",
    "dst": null,
@@ -4477,13 +4497,13 @@
    "src": "voidloom/tests/test_marks_dispatch.py"
   },
   {
-   "bytes": 22661,
+   "bytes": 24904,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "8c5aa0afda96dbe48c13e554c4262c99a3a70c8b5b3ea6e8680e40b6e1f61062",
+   "sha256": "8e2f0b1356c8710d18cce645a87b0d796f7ad2c97bd94f51de5e9b245bbfc209",
    "src": "voidloom/tests/test_marks_every_reader_is_classified.py"
   },
   {
@@ -4507,13 +4527,13 @@
    "src": "voidloom/tests/test_marks_readers.py"
   },
   {
-   "bytes": 21296,
+   "bytes": 22498,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "d7b65b57a86be1dd9a67460051ccaebc3219753986186a70846e5dce6dbf53ab",
+   "sha256": "25330afae1bf323c80614ed3794145f2d6e181ac83350103d3bd0d6724942ede",
    "src": "voidloom/tests/test_marks_repair.py"
   },
   {

@@ -607,6 +607,16 @@ def read_back(db: Union[str, Path], memory_id: Any, *, content: str, outside: bo
                      memory_id=memory_id, row_may_exist=True)
 
 
+def write_failure(e: BaseException) -> MarksError:
+    """A store whose writing failed and was rolled back: DISK_FULL when the database or its disk is full, otherwise
+    STORE_FAILED. Nothing was stored, and the answer carries no id."""
+    full = isinstance(e, sqlite3.Error) and "full" in str(e).lower()
+    return MarksError("DISK_FULL" if full else "STORE_FAILED",
+                      f"{type(e).__name__}: {e}. Nothing was stored." + (" Free space where the brain lies and store again."
+                                                                          if full else ""),
+                      row_may_exist=False)
+
+
 def readback_failure(memory_id: Any, why: str) -> MarksError:
     return MarksError("STORE_READBACK_FAILED", f"memory {memory_id}: {why}. The row may exist.",
                       memory_id=memory_id, row_may_exist=True)

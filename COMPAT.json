@@ -94,7 +94,7 @@
       "migration_045_derived_layer_stamp.sql",
       "migration_046_marks.sql"
     ],
-    "schema_sha256": "f3df883d37891d91f7f8e6447c284f8c3f02020a5eabbe5b8dbdb521d9b294ae"
+    "schema_sha256": "da4ce80ee1a894e4410ca877f26ab6e953d1b125d609ff9cba778ffba9a33e82"
   },
   "version": "1.1.3"
 }

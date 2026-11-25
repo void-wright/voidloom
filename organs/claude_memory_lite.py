@@ -543,7 +543,12 @@ def cmd_store(args: argparse.Namespace) -> int:
         conn.rollback()
         return _refuse("STORE_READBACK_FAILED", f"{e}. The row may exist.", memory_id=None, row_may_exist=True)
     except Exception as e:  # noqa: BLE001 -- a typed refusal is the answer; anything else is not ours to rephrase
-        conn.rollback()
+        try:
+            conn.rollback()
+        except sqlite3.Error:
+            pass
+        if isinstance(e, sqlite3.Error) and _marks is not None:
+            e = _marks.write_failure(e)     # the write failed and was rolled back: a code, never the id of a row not there
         if not isinstance(getattr(e, "code", None), str):
             raise
         return _refuse(e.code, str(e), **(getattr(e, "detail", None) or {}))

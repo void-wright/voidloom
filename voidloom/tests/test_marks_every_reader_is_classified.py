@@ -16,10 +16,23 @@ would notice.
   authored   the column holds words a person or a model wrote there; no code copies a memory into it
   other      another database with no marks (website_memory.db)
   fixture    a self-test's own rows
+
+WHAT THE CENSUS RECOGNISES. A statement written as a string literal, an f-string, `+` of literals, and a name the same
+function set to such an expression (`=` and `+=`). In it: every SELECT (a CTE, a subquery, each arm of a union); a
+table named plain, quoted ("", [], ``) or prefixed main. or temp.; a column list naming the text, `*`, snippet() or
+highlight(), or a part known only at run time.
+
+WHAT IT DOES NOT FOLLOW, pinned below as expected failures (a census that learns one turns its test into a failure, and
+the line moves up): str.format(); % formatting; MIN() or MAX() of a text column; a comment between
+FROM and the table; a schema other than main or temp (an ATTACHed brain); str.join(); an annotated assignment
+(`q: str = ...`); str.replace() templating; a statement assembled across functions. And a function classified once is
+classified for all its statements: a second, raw read added to a presenter is not seen.
 """
 import ast
 import re
 import unittest
+
+import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -401,6 +414,25 @@ class EveryReaderIsClassified(unittest.TestCase):
         }
         for source, want in cases.items():
             self.assertEqual(sites(source), want, source)
+
+
+NOT_FOLLOWED = {
+    "str.format": 'def f(c):\n    c.execute("SELECT id, {} FROM memories".format("content"))\n',
+    "% formatting": 'def f(c):\n    c.execute("SELECT id, %s FROM memories" % "content")\n',
+    "MAX of a text column": 'def f(c):\n    c.execute("SELECT source_project, MAX(content) FROM memories GROUP BY source_project")\n',
+    "a comment before the table": 'def f(c):\n    c.execute("SELECT id, content FROM /* c */ memories")\n',
+    "an attached schema": 'def f(c):\n    c.execute("SELECT id, content FROM brain.memories")\n',
+    "str.join": 'def f(c):\n    c.execute(" ".join(["SELECT id, content", "FROM memories"]))\n',
+    "an annotated assignment": 'def f(c):\n    q: str = "SELECT id, content "\n    c.execute(q + "FROM memories")\n',
+    "str.replace templating": 'def f(c):\n    c.execute("SELECT id, COLS FROM memories".replace("COLS", "summary"))\n',
+    "across functions": 'def cols():\n    return "SELECT id, content "\n\n\ndef f(c):\n    c.execute(cols() + "FROM memories")\n',
+}
+
+
+@pytest.mark.xfail(strict=True, reason="declared: the census does not follow this form")
+@pytest.mark.parametrize("form", sorted(NOT_FOLLOWED))
+def test_a_form_the_census_does_not_follow(form):
+    assert any(table == "memories" for _fn, table in sites(NOT_FOLLOWED[form]))
 
 
 if __name__ == "__main__":

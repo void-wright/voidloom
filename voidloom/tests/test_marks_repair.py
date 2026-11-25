@@ -5,6 +5,7 @@ WHAT WOULD BREAK WITHOUT IT: an undo that hands a web page back as the owner's o
 and does nothing; an unarchive that brings back a row its owner deleted in between.
 """
 import argparse
+import hashlib
 import contextlib
 import io
 import json
@@ -365,10 +366,26 @@ class OlderFullTextTrigger(Case):
         b.c.execute("INSERT INTO memories_fts(memories_fts) VALUES ('integrity-check')")
 
 
+    def test_the_wide_form_is_named_whatever_else_is_wrong(self):
+        for n, also in enumerate(("DROP TRIGGER trg_marks_run_linked",
+                                  "INSERT INTO schema_migrations (name, applied_at, sha256, statements) VALUES ('migration_999_later.sql', 'x', 'x', 1)")):
+            b = Brain(self.tmp / str(n))
+            b.c.execute("DROP TRIGGER memories_fts_after_update")
+            b.c.execute(self.WIDE)
+            b.c.execute(also)
+            b.c.commit()
+            check = marks.health(b.path)
+            self.assertIn(check["verdict"], ("MARK_TRIGGERS_MISSING", "brain_newer_than_package"))
+            _rc, env, _err = wb.full_cli(b.path, "doctor")
+            got = data(env)["checks"]["marks"]
+            self.assertTrue(got["wide_full_text_trigger"], also)
+            self.assertIn("memories_fts_after_update is in an older release's wide form", got.get("fault") or got.get("warning"), also)
+
+
 class DispatchRows(Case):
     def test_a_blank_approval_is_no_approval(self):
         b = Brain(self.tmp)
-        for value in (None, "", "   "):
+        for value in (None, "", "   ", "\t", "\n", "\u00a0", "x", "a" * 63, "a" * 65, "A" * 64, "g" * 64, " " + "a" * 63, 7):
             with self.assertRaisesRegex(sqlite3.Error, "RESEARCH_DISPATCH_CLOSED"):
                 b.c.execute("INSERT INTO gap_research_log (gap_id, dispatch_method, dispatch_command, status, approval_hash) "
                             "VALUES (1, 'thinker', 'x', 'running', ?)", (value,))
@@ -377,7 +394,8 @@ class DispatchRows(Case):
         with self.assertRaisesRegex(sqlite3.Error, "RESEARCH_DISPATCH_CLOSED"):
             b.c.execute("UPDATE gap_research_log SET status = 'running' WHERE id = ?", (rid,))
         b.c.execute("INSERT INTO gap_research_log (gap_id, dispatch_method, dispatch_command, status, approval_hash) "
-                    "VALUES (1, 'thinker', 'x', 'running', ?)", ("ab" * 32,))
+                    "VALUES (1, 'thinker', 'x', 'running', ?)", (hashlib.sha256(b"a topic").hexdigest(),))
+        b.c.execute("UPDATE gap_research_log SET status = 'running', approval_hash = ? WHERE id = ?", ("0123456789abcdef" * 4, rid))
 
 
 if __name__ == "__main__":

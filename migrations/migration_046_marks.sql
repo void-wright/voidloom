@@ -465,10 +465,11 @@ BEGIN
      WHERE EXISTS (SELECT 1 FROM memories c WHERE c.id = NEW.synthesis_memory_id);
 END;
 
--- an older program records a dispatch as 'running' before it sends anything: without an approval it stops there ----
+-- an older program records a dispatch as 'running' before it sends anything: without an approval it stops there. An
+-- approval is the sha256 of the topic, 64 lowercase hex characters; anything else is none ----------------------------
 CREATE TRIGGER IF NOT EXISTS trg_marks_dispatch_closed
 BEFORE INSERT ON gap_research_log
-FOR EACH ROW WHEN NEW.status = 'running' AND (NEW.approval_hash IS NULL OR TRIM(NEW.approval_hash) = '')
+FOR EACH ROW WHEN NEW.status = 'running' AND NOT (typeof(NEW.approval_hash) = 'text' AND length(NEW.approval_hash) = 64 AND NEW.approval_hash NOT GLOB '*[^0-9a-f]*')
 BEGIN
     SELECT RAISE(ABORT, 'RESEARCH_DISPATCH_CLOSED');
 END;
@@ -476,7 +477,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_marks_dispatch_closed_update
 BEFORE UPDATE OF status, approval_hash ON gap_research_log
 FOR EACH ROW WHEN NEW.status = 'running' AND OLD.status IS NOT 'running'
-              AND (NEW.approval_hash IS NULL OR TRIM(NEW.approval_hash) = '')
+              AND NOT (typeof(NEW.approval_hash) = 'text' AND length(NEW.approval_hash) = 64 AND NEW.approval_hash NOT GLOB '*[^0-9a-f]*')
 BEGIN
     SELECT RAISE(ABORT, 'RESEARCH_DISPATCH_CLOSED');
 END;
