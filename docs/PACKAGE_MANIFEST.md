@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-25T23:21:29Z from the working tree whose HEAD was `c6086ce`
+> Generated 2026-11-25T23:22:19Z from the working tree whose HEAD was `bebe5d5`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,12 +14,12 @@
 |---|---|
 | files tracked | 573 |
 | files hashed | 573 |
-| total bytes | 12191582 |
+| total bytes | 12191475 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  83 files, 4989174 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  83 files, 4989067 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -59,7 +59,7 @@
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
 | `organs/mark_admin.py` | 21668 | `e19dee0327ab9345` |
 | `organs/marks.py` | 43957 | `a5e70e7c01e4eff0` |
-| `organs/memory_dreaming.py` | 108035 | `a2ccf48282b5b93b` |
+| `organs/memory_dreaming.py` | 107928 | `916036661478226c` |
 | `organs/memory_write.py` | 145716 | `8c392f962d1aea22` |
 | `organs/model_fetch.py` | 8995 | `faf76bcf1a2b2418` |
 | `organs/model_garden.py` | 42154 | `a1278c6297f38640` |
@@ -467,7 +467,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 157142 | `77b4f4c748b5173a` |
+| `install/lay_manifest.json` | 157142 | `a00173426ad8b83a` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |

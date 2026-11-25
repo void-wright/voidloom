@@ -1287,9 +1287,7 @@ def _store_dream_as_reflection(
             conn.commit()
         rep["memory_id"] = mem_id
         return mem_id
-    except Exception as e:
-        if not (isinstance(e, sqlite3.Error) or isinstance(getattr(e, "code", None), str)):
-            raise                       # a refusal or the database's error is an answer; anything else is a fault
+    except Exception as e:  # noqa: BLE001 -- every failure is recorded on the dream's log row and read as BROKEN by its watch
         rep["error"] = "%s: %s" % (type(e).__name__, e)
         logger.error("Failed to store dream as reflection: %s", rep["error"])
         try:
