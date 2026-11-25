@@ -66,6 +66,7 @@ READERS = {
     (BELIEF, "_family_of", "memories"): I,
     (BELIEF, "_memory_text", "memories"): I,                            # scored by a local model
     (BELIEF, "quarantine_report", "memories"): P,
+    (CM, "_cmd_recall_legacy", "memories"): P,
     (BELIEF, "quarantine_template_pairs", "gap_inventory"): I,
     (BELIEF, "quarantine_template_pairs", "memories"): I,
     (CM, "cmd_context", "memories"): P,
@@ -160,40 +161,88 @@ READERS = {
     (WEB, "cmd_stats", "memories"): "other",
     (WEB, "cmd_update", "memories"): "other",
     ("organs/whisper_network.py", "get_digest_history", "memories"): P,
+    ("organs/cognitive_map.py", "get_edge_graph", "memories"): P,
     ("voidloom/cli.py", "_memory_record", "memories"): "label",
     ("voidloom/cli.py", "_text_matches_stamp", "memories"): I,
 }
 KINDS = {P, I, D, A, "label", "clean", "other", "fixture"}
 
 
-def _text(node):
+def _text(node, held=None):
+    """The text of a string expression: literals, f-strings (a value only known at run time is "{?}"), + and %, and a
+    name the same function set to such an expression."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.JoinedStr):
-        return "".join(v.value if isinstance(v, ast.Constant) else "{?}" for v in node.values)
+        return "".join(v.value if isinstance(v, ast.Constant) else
+                       ((held or {}).get(v.value.id, "{?}") if isinstance(v, ast.FormattedValue) and isinstance(v.value, ast.Name)
+                        else "{?}") for v in node.values)
+    if isinstance(node, ast.Name) and held and node.id in held:
+        return held[node.id]
     if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mod)):
-        return (_text(node.left) or "") + (_text(node.right) or "" if isinstance(node.op, ast.Add) else "")
+        left = _text(node.left, held)
+        if left is None and not isinstance(node.op, ast.Add):
+            return None
+        return (left or "") + ((_text(node.right, held) or "") if isinstance(node.op, ast.Add) else "")
     return None
 
 
+_NAME = r'(?:main\.|temp\.)?["\[`]?(?:{})["\]`]?(?![\w])'
+_STOP = re.compile(r"\b(?:WHERE|GROUP|ORDER|LIMIT|UNION|INTERSECT|EXCEPT|HAVING|WINDOW|ON\s+CONFLICT|RETURNING)\b", re.I)
+_AGGREGATE = re.compile(r"\b(?:COUNT|LENGTH|TYPEOF|MAX|MIN|SUM|AVG|TOTAL|COALESCE\s*\(\s*SUM)\s*\(\s*(?:DISTINCT\s+)?[\w.*]*\s*\)",
+                        re.I)
+
+
+def _arms(sql):
+    """(the select list, the FROM clause) of every SELECT in a statement: a CTE's, a subquery's, each union arm's. The
+    list runs to its FROM at the same depth of parentheses, the clause to the next keyword that ends it at that depth."""
+    out = []
+    for m in re.finditer(r"\bSELECT\b", sql, re.I):
+        depth, i, start, cut = 0, m.end(), m.end(), None
+        while i < len(sql):
+            ch = sql[i]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif depth == 0 and re.match(r"FROM\b", sql[i:i + 5], re.I) and not re.match(r"\w", sql[i - 1]):
+                cut = i
+                break
+            i += 1
+        if cut is None:
+            continue
+        depth, j = 0, cut + 4
+        while j < len(sql):
+            ch = sql[j]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif depth == 0 and _STOP.match(sql, j) and not re.match(r"\w", sql[j - 1]):
+                break
+            j += 1
+        out.append((sql[start:cut], sql[cut:j]))
+    return out
+
+
 def reads(sql):
-    """The tables whose words one statement selects. A column list or a table name only known at run time counts."""
-    m = SELECT.search(sql)
-    if not m:
-        return set()
-    cols = re.sub(r"\b(?:COUNT|LENGTH)\s*\([^()]*(?:\([^()]*\)[^()]*)*\)", "", m.group(1), flags=re.I)
-    if re.search(r"\{\?\}", cols) or re.search(r"(?:^|,|\.)\s*\*", cols):
-        wild = True
-    else:
-        wild = False
+    """The tables whose words one statement selects. Every SELECT in it is read: a CTE, a subquery, each arm of a union. A
+    table name may be schema-qualified or quoted; snippet() and highlight() are its text, and so are `*` and a column list
+    only known at run time."""
     out = set()
-    for table, words in WORDS.items():
-        if re.search(rf"\b(?:FROM|JOIN)\s+{table}\b(?!_)", "FROM " + m.group(2), re.I) or \
-                re.search(rf",\s*{table}\b(?!_)", m.group(2), re.I):
-            if wild or re.search(rf"\b(?:{words})\b", cols, re.I):
-                out.add(table)
-    if not out and re.match(r"\s*\{\?\}", m.group(2)) and re.search(r"\b(?:content|summary|entity|dream_content)\b", cols, re.I):
-        out.add("{?}")
+    for cols, source in _arms(sql):
+        cols = _AGGREGATE.sub("", cols)
+        wild = bool(re.search(r"\b(?:snippet|highlight)\s*\(|\{\?\}|(?:^|[\s,.])\*", cols, re.I))
+        known = {t for t, words in WORDS.items()
+                 if re.search(r"(?:\bFROM|\bJOIN|,)\s*" + _NAME.format(t), source, re.I)
+                 and (wild or re.search(rf"\b(?:{words})\b", cols, re.I))}
+        out |= known
+        if not known and re.match(r"\s*FROM\s*\{\?\}", source, re.I) and re.search(r"\b(?:content|summary|entity|dream_content)\b", cols, re.I):
+            out.add("{?}")
     return out
 
 
@@ -201,21 +250,29 @@ def sites(source):
     """{(function, table)} for one module's source, docstrings left out."""
     out = set()
 
-    def walk(node, fn):
+    def walk(node, fn, held):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            fn = node.name
+            fn, held = node.name, {}
+            for stmt in ast.walk(node):         # a statement assembled from strings held apart, by name
+                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                    got = _text(stmt.value, held)
+                    if got is not None:
+                        held[stmt.targets[0].id] = got
+                elif isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add) and isinstance(stmt.target, ast.Name) \
+                        and stmt.target.id in held:
+                    held[stmt.target.id] += _text(stmt.value, held) or ""
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.Expr) and isinstance(child.value, ast.Constant):
                 continue                                    # a docstring, or a string nobody reads
             if isinstance(child, ast.Call) and getattr(child.func, "id", None) == "select_gaps_fair":
                 out.add((fn, "gap_inventory"))              # it builds the statement from the columns it is given
-            text = _text(child)
+            text = _text(child, held)
             if text:
                 out.update((fn, t) for t in reads(text))
                 if not isinstance(child, ast.BinOp):
                     continue
-            walk(child, fn)
-    walk(ast.parse(source), "<module>")
+            walk(child, fn, held)
+    walk(ast.parse(source), "<module>", {})
     return out
 
 
@@ -254,6 +311,16 @@ def words(node):
     return out
 
 
+LEAK = ('''
+
+def leak_top_words(conn):
+    for r in conn.execute("WITH t AS (SELECT memory_id FROM memory_tags) "
+                          "SELECT m.id, m.content FROM memories m JOIN t ON t.memory_id = m.id"): print(r[1])
+    for r in conn.execute("SELECT id, content FROM main.memories"): print(r[1])
+    for r in conn.execute('SELECT id, snippet(memories_fts, 1, "", "", "", 64) FROM memories_fts'): print(r[1])
+''')
+
+
 class EveryReaderIsClassified(unittest.TestCase):
     def test_the_census_is_what_the_table_says(self):
         found = census()
@@ -262,6 +329,17 @@ class EveryReaderIsClassified(unittest.TestCase):
                                   "(marks.present_rows / shown / present_copies) if they reach a person, a model, a file or "
                                   "another table, then classify the function here")
         self.assertEqual(sorted(set(READERS) - found), [], "these no longer read a memory's words: remove them")
+
+    def test_three_planted_readers_fail_it(self):
+        """A copy of a module with a reader of each kind the census once missed: each is a site no row of the table names."""
+        rel = "organs/communities.py"
+        planted = {(rel, fn, t) for fn, t in sites((ROOT / rel).read_text(encoding="utf-8") + LEAK)}
+        self.assertEqual(sorted(planted - set(READERS)),
+                         [(rel, "leak_top_words", "memories"), (rel, "leak_top_words", "memories_fts")])
+        for statement in ("WITH t AS (SELECT memory_id FROM memory_tags) SELECT m.id, m.content FROM memories m JOIN t ON 1",
+                          "SELECT id, content FROM main.memories",
+                          'SELECT id, snippet(memories_fts, 1, "", "", "", 64) FROM memories_fts'):
+            self.assertTrue(reads(statement), statement)
 
     def test_the_classes_are_known(self):
         for site, kind in READERS.items():
@@ -307,6 +385,19 @@ class EveryReaderIsClassified(unittest.TestCase):
                 {("h", "memories_fts")},
             'def f(c):\n    c.execute("SELECT COUNT(*) FROM memories")\n    c.execute("SELECT id FROM memories")\n': set(),
             'def f(c):\n    """SELECT summary FROM memories."""\n': set(),
+            'def f(c):\n    c.execute("WITH t AS (SELECT memory_id FROM memory_tags) "\n              "SELECT m.id, m.content FROM memories m JOIN t ON t.memory_id = m.id")\n':
+                {("f", "memories")},
+            'def f(c):\n    c.execute("SELECT id, content FROM main.memories")\n': {("f", "memories")},
+            'def f(c):\n    c.execute(\'SELECT id, snippet(memories_fts, 1, "", "", "", 64) FROM memories_fts\')\n':
+                {("f", "memories_fts")},
+            'def f(c):\n    c.execute(\'SELECT id, highlight(memories_fts, 0, "[", "]") FROM "memories_fts"\')\n':
+                {("f", "memories_fts")},
+            'def f(c):\n    c.execute(\'SELECT 1 FROM x UNION SELECT summary FROM [memories]\')\n': {("f", "memories")},
+            'def f(c):\n    c.execute("SELECT summary FROM `memories` WHERE id IN (SELECT id FROM memory_tags)")\n':
+                {("f", "memories")},
+            'def f(c):\n    cols = "id, summary"\n    c.execute("SELECT " + cols + " FROM memories")\n': {("f", "memories")},
+            'def f(c):\n    cols = "id, summary"\n    q = " FROM memories"\n    c.execute("SELECT " + cols + q)\n': {("f", "memories")},
+            'def f(c, t):\n    q = "SELECT id, content"\n    q += f" FROM {t} JOIN memories m ON 1"\n    c.execute(q)\n': {("f", "memories")},
         }
         for source, want in cases.items():
             self.assertEqual(sites(source), want, source)

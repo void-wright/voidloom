@@ -128,14 +128,16 @@ BEGIN
 END;
 
 -- INSERT OR REPLACE over a marked row would delete it and leave a clean one under its id: no update happens, so no
--- update trigger can see it. A row stored without an id has NEW.id = -1 here, which names nothing.
+-- update trigger can see it. A trigger cannot tell REPLACE from OR IGNORE or an upsert, so every INSERT that names the id
+-- of a marked row without its mark is refused; such a row is changed with UPDATE. A row stored without an id has
+-- NEW.id = -1 here, which names nothing.
 CREATE TRIGGER IF NOT EXISTS trg_marks_replace_refused
 BEFORE INSERT ON memories
 FOR EACH ROW WHEN EXISTS (SELECT 1 FROM memories m WHERE m.id = NEW.id
                              AND ((m.untrusted_source IS NOT 0 AND NEW.untrusted_source IS 0)
                                OR (m.research_mark = 1 AND NEW.research_mark = 0)))
 BEGIN
-    SELECT RAISE(ABORT, 'MARKED_ROW_REPLACED: a marked memory is not replaced by one without its mark');
+    SELECT RAISE(ABORT, 'MARKED_ROW_REPLACED: an INSERT that names the id of a marked memory without its mark is refused, whatever its conflict clause (REPLACE, OR IGNORE, ON CONFLICT); change that row with UPDATE');
 END;
 
 -- research: marked, named, registered, written once ----------------------------------------------------------------
@@ -466,14 +468,15 @@ END;
 -- an older program records a dispatch as 'running' before it sends anything: without an approval it stops there ----
 CREATE TRIGGER IF NOT EXISTS trg_marks_dispatch_closed
 BEFORE INSERT ON gap_research_log
-FOR EACH ROW WHEN NEW.status = 'running' AND NEW.approval_hash IS NULL
+FOR EACH ROW WHEN NEW.status = 'running' AND (NEW.approval_hash IS NULL OR TRIM(NEW.approval_hash) = '')
 BEGIN
     SELECT RAISE(ABORT, 'RESEARCH_DISPATCH_CLOSED');
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_marks_dispatch_closed_update
 BEFORE UPDATE OF status, approval_hash ON gap_research_log
-FOR EACH ROW WHEN NEW.status = 'running' AND OLD.status IS NOT 'running' AND NEW.approval_hash IS NULL
+FOR EACH ROW WHEN NEW.status = 'running' AND OLD.status IS NOT 'running'
+              AND (NEW.approval_hash IS NULL OR TRIM(NEW.approval_hash) = '')
 BEGIN
     SELECT RAISE(ABORT, 'RESEARCH_DISPATCH_CLOSED');
 END;

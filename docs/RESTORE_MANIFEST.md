@@ -83,7 +83,7 @@ built at import (constructing a path is not opening it) and read only on
 `init`, `migrate`, or self-heal. Warden's migration SQL is *embedded in the
 Python*, not on disk.
 
-The tree ships 39 `migration_*.sql` and the code names 26 of them by file. `schema_migrator`
+The tree ships 39 `migration_*.sql` and the code names 27 of them by file. `schema_migrator`
 applies them all, whether the code names them or not.
 
 ## 4. Sidecars — small files with large consequences

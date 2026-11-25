@@ -196,15 +196,6 @@ class Triggers(Case):
         self.assertEqual(marks.ensure_triggers(b.c), ["memories_fts_after_update"])
         self.assertTrue(schema_migrator.audit(b.path)["complete"])
 
-    def test_a_newer_releases_trigger_is_left_alone_and_a_lost_one_is_not(self):
-        b = Brain(self.tmp)
-        self.gut(b)
-        b.c.execute("DROP TRIGGER trg_marks_late_outside")
-        b.c.execute("INSERT INTO schema_migrations (name) VALUES ('migration_999_later.sql')")
-        b.c.commit()
-        self.assertEqual(marks.ensure_triggers(b.c), ["trg_marks_late_outside"])
-        self.assertEqual(marks.wrong_triggers(b.c), {"trg_marks_edge_parent": "altered"})
-
     def test_a_package_with_no_migrations_to_compare_is_not_called_well(self):
         b = Brain(self.tmp)
         kept, marks._TRIGGERS = marks._TRIGGERS, {}
@@ -301,6 +292,92 @@ class LateEdges(Case):
         b.c.execute("INSERT INTO memories (id, content, category) VALUES (90001, 'an id of its own', 'insight')")
         b.c.commit()
         self.assertEqual([b.marked(web), b.marked(mine)], [True, False])
+
+
+    def test_every_insert_that_names_a_marked_id_without_its_mark_is_refused_by_name(self):
+        """A trigger cannot tell REPLACE from OR IGNORE or an upsert, so all of them are refused, and the refusal says so."""
+        b = Brain(self.tmp)
+        web, mine = b.add("web", marked=True), b.add("mine")
+        forms = ("INSERT OR REPLACE INTO memories (id, content, category) VALUES (?, 'x', 'insight')",
+                 "REPLACE INTO memories (id, content, category) VALUES (?, 'x', 'insight')",
+                 "INSERT OR IGNORE INTO memories (id, content, category) VALUES (?, 'x', 'insight')",
+                 "INSERT INTO memories (id, content, category) VALUES (?, 'x', 'insight') "
+                 "ON CONFLICT(id) DO UPDATE SET access_count = access_count + 1",
+                 "INSERT INTO memories (id, content, category) VALUES (?, 'x', 'insight') ON CONFLICT(id) DO NOTHING")
+        for sql in forms:
+            with self.assertRaises(sqlite3.Error) as e:
+                b.c.execute(sql, (web,))
+            self.assertIn("MARKED_ROW_REPLACED", str(e.exception), sql)
+            self.assertIn("UPDATE", str(e.exception))
+        for n, sql in enumerate(forms):                     # the controls: an unmarked id, and a fresh one
+            b.c.execute(sql, (mine,))
+            b.c.execute(sql, (90000 + n,))
+        b.c.execute("UPDATE memories SET access_count = access_count + 1 WHERE id = ?", (web,))
+        b.c.commit()
+        self.assertEqual(b.one("SELECT content, untrusted_source, access_count FROM memories WHERE id = ?", (web,)), ("web", 1, 1))
+        self.assertEqual(b.one("SELECT COUNT(*) FROM memories WHERE id >= 90000")[0], len(forms))
+
+
+class NewerBrain(Case):
+    def newer(self):
+        b = Brain(self.tmp)
+        b.c.execute("INSERT INTO schema_migrations (name, applied_at, sha256, statements) VALUES ('migration_999_later.sql', 'x', 'x', 1)")
+        b.c.execute("DROP TRIGGER trg_marks_signature_insert")
+        b.c.execute("CREATE TRIGGER trg_marks_signature_insert AFTER INSERT ON memories WHEN 0 BEGIN SELECT 1; END")
+        b.c.execute("DROP TRIGGER trg_marks_replace_refused")
+        b.c.commit()
+        return b
+
+    def test_nothing_is_put_back(self):
+        b = self.newer()
+        held = triggers(b.c)
+        self.assertEqual(marks.ensure_triggers(b.c), [])
+        wb.full_cli(b.path, "store", "--content", "an owner note", "--category", "insight")
+        self.assertEqual(triggers(b.c), held)
+
+    def test_doctor_says_upgrade_and_finds_no_fault_in_it(self):
+        b = self.newer()
+        self.assertEqual(marks.health(b.path)["verdict"], "brain_newer_than_package")
+        rc, env, _err = wb.full_cli(b.path, "doctor")
+        text = json.dumps(env)
+        self.assertNotIn("MARK_TRIGGERS_MISSING", text)
+        self.assertNotIn("MARK_TRIGGERS_ALTERED", text)
+        self.assertIn("Upgrade this package", text)
+        marks_check = data(env)["checks"]["marks"]
+        self.assertEqual(marks_check["verdict"], "brain_newer_than_package")
+        self.assertNotIn("fault", marks_check)
+
+
+class OlderFullTextTrigger(Case):
+    WIDE = ("CREATE TRIGGER memories_fts_after_update AFTER UPDATE ON memories BEGIN "
+            "INSERT INTO memories_fts(memories_fts, rowid, summary, content) VALUES('delete', old.id, old.summary, old.content); "
+            "INSERT INTO memories_fts(rowid, summary, content) VALUES (new.id, new.summary, new.content); END")
+
+    def test_doctor_names_the_wide_form_and_an_open_narrows_it(self):
+        b = Brain(self.tmp)
+        b.c.execute("DROP TRIGGER memories_fts_after_update")
+        b.c.execute(self.WIDE)
+        b.c.commit()
+        rc, env, _err = wb.full_cli(b.path, "doctor")
+        self.assertIn("memories_fts_after_update is in an older release's wide form", json.dumps(env))
+        wb.full_cli(b.path, "store", "--content", "gradle daemon", "--category", "insight", "--outside")
+        self.assertIn("UPDATE OF id, summary, content", triggers(b.c)["memories_fts_after_update"])
+        b.c.execute("INSERT INTO memories_fts(memories_fts) VALUES ('integrity-check')")
+
+
+class DispatchRows(Case):
+    def test_a_blank_approval_is_no_approval(self):
+        b = Brain(self.tmp)
+        for value in (None, "", "   "):
+            with self.assertRaisesRegex(sqlite3.Error, "RESEARCH_DISPATCH_CLOSED"):
+                b.c.execute("INSERT INTO gap_research_log (gap_id, dispatch_method, dispatch_command, status, approval_hash) "
+                            "VALUES (1, 'thinker', 'x', 'running', ?)", (value,))
+        rid = b.c.execute("INSERT INTO gap_research_log (gap_id, dispatch_method, dispatch_command, status, approval_hash) "
+                          "VALUES (1, 'thinker', 'x', 'error', '')").lastrowid
+        with self.assertRaisesRegex(sqlite3.Error, "RESEARCH_DISPATCH_CLOSED"):
+            b.c.execute("UPDATE gap_research_log SET status = 'running' WHERE id = ?", (rid,))
+        b.c.execute("INSERT INTO gap_research_log (gap_id, dispatch_method, dispatch_command, status, approval_hash) "
+                    "VALUES (1, 'thinker', 'x', 'running', ?)", ("ab" * 32,))
 
 
 if __name__ == "__main__":

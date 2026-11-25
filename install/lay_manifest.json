@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "f3296f2",
+  "derived_at_head": "3e43d52",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 571,
   "not_laid": {
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 59224,
+   "bytes": 60194,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "a63d7fb20f8baabda4741589d4650e02980c9ffab46d3ec9eeb87a873577b5fb",
+   "sha256": "aa70058c6c40e51f0c8a18d9ec799ed23f01ec558c1f3aeac912f8c029874305",
    "src": "CHANGELOG.md"
   },
   {
@@ -193,7 +193,7 @@
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "957ba5144f49a975f77486f60168aa96a403432dd76e60ce8e49c0178a835992",
+   "sha256": "73b3f4b81b2227ecaac08f73980629dcf74d2e8a91739da61aa7f8e3fb706011",
    "src": "COMPAT.json"
   },
   {
@@ -843,7 +843,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "2789d0146e5f6f5378cb50fafb726f74e90554a6b4dac9c41586d8fe16fa7f02",
+   "sha256": "eea0c0217e3dcf72ba2006eaddc309368645979258e2909d1b346fc4a3790d85",
    "src": "docs/RESTORE_MANIFEST.md"
   },
   {
@@ -1537,13 +1537,13 @@
    "src": "migrations/migration_045_derived_layer_stamp.sql"
   },
   {
-   "bytes": 27510,
+   "bytes": 27883,
    "component": "core",
    "dst": "migrations/migration_046_marks.sql",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "9abb93e7f961c16b365f0ced00824064e6ab0a7f64384dce798ef4ef82bffebc",
+   "sha256": "fe18ba86608c5780d0840ef76965a185e67fe72cb21e0c5a7aacdc91d1aaef9a",
    "src": "migrations/migration_046_marks.sql"
   },
   {
@@ -1907,13 +1907,13 @@
    "src": "organs/mark_admin.py"
   },
   {
-   "bytes": 43130,
+   "bytes": 43325,
    "component": "core",
    "dst": "organs/marks.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7b486c3c0ac3524c22d6d8fd08a17b5188a8c33e5ea268c0ec66dbad6f32c41a",
+   "sha256": "a398dda09817535ac51fa0d552044cf1544d76df86dc7706867aa86ba26dd688",
    "src": "organs/marks.py"
   },
   {
@@ -2977,13 +2977,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 206714,
+   "bytes": 207332,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "6c62296d6c20da7e11a479554e68982c7dfa2067fd77e6f48eb0c946b3755ae1",
+   "sha256": "8ed1fdcf1de92b3ac78c9e3be48526acf23ae779854cd219498e4dfe18cd45fb",
    "src": "voidloom/cli.py"
   },
   {
@@ -4477,13 +4477,13 @@
    "src": "voidloom/tests/test_marks_dispatch.py"
   },
   {
-   "bytes": 17171,
+   "bytes": 22661,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "2e683a239c1e7fa6d381094a9216d1619b245d7d529bb77e581d8fe904218091",
+   "sha256": "8c5aa0afda96dbe48c13e554c4262c99a3a70c8b5b3ea6e8680e40b6e1f61062",
    "src": "voidloom/tests/test_marks_every_reader_is_classified.py"
   },
   {
@@ -4507,13 +4507,13 @@
    "src": "voidloom/tests/test_marks_readers.py"
   },
   {
-   "bytes": 16654,
+   "bytes": 21296,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "4f2b65bb1cbfb9471c6c9ceda4876f5fa45a485174dc0d4502f53b5e9aaab722",
+   "sha256": "d7b65b57a86be1dd9a67460051ccaebc3219753986186a70846e5dce6dbf53ab",
    "src": "voidloom/tests/test_marks_repair.py"
   },
   {

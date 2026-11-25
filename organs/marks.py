@@ -201,15 +201,14 @@ def _newer_brain(conn: sqlite3.Connection) -> bool:
 def ensure_triggers(conn: sqlite3.Connection) -> List[str]:
     """Put back any trigger this brain lost or that no longer says what was shipped. Only on a migrated brain, only what
     is wrong, all of them or none, and never raises: a read-only brain keeps whatever it has. A trigger that differs is
-    left alone on a brain a newer release has migrated. Returns the names put back."""
+    left alone, missing or changed, on a brain a newer release has migrated. Returns the names put back."""
     try:
         if schema_state(conn) != "ready":
             return []
         wrong = wrong_triggers(conn)
-        if not wrong:
+        if not wrong or _newer_brain(conn):     # a newer release may have dropped or changed these on purpose
             return []
-        newer = _newer_brain(conn)
-        todo = [n for n, how in wrong.items() if how == "missing" or not newer]
+        todo = list(wrong)
         if FTS_TRIGGER in todo and conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (FTS_TABLE,)).fetchone() is None:
             todo.remove(FTS_TRIGGER)        # a trigger on a missing index would fail every later change of a memory
         if not todo:
@@ -833,6 +832,7 @@ def health(db: Union[str, Path]) -> Dict[str, Any]:
         try:
             out["state"] = schema_state(conn)
             if out["state"] == "ready":
+                out["newer_release"] = _newer_brain(conn)
                 wrong = wrong_triggers(conn)
                 out["missing_triggers"] = sorted(n for n, how in wrong.items() if how == "missing")
                 out["altered_triggers"] = sorted(n for n, how in wrong.items() if how == "altered")
@@ -845,7 +845,9 @@ def health(db: Union[str, Path]) -> Dict[str, Any]:
             conn.close()
     except (sqlite3.Error, OSError, ValueError) as e:
         out["error"] = f"{type(e).__name__}: {e}"
-    if out["state"] == "ready" and out["missing_triggers"]:
+    if out["state"] == "ready" and out.get("newer_release"):
+        out["verdict"] = "brain_newer_than_package"
+    elif out["state"] == "ready" and out["missing_triggers"]:
         out["verdict"] = "MARK_TRIGGERS_MISSING"
     elif out["state"] == "ready" and out["altered_triggers"]:
         out["verdict"] = "MARK_TRIGGERS_ALTERED"

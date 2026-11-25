@@ -2134,6 +2134,13 @@ def _doctor_marks(db: Optional[str]) -> Dict[str, Any]:
         out["fault"] = (f"MARK_TRIGGERS_ALTERED: {len(out['altered_triggers'])} trigger(s) that carry marks no longer say "
                         f"what was shipped ({', '.join(out['altered_triggers'][:3])}); the next store puts them back. Then "
                         "run: voidloom marks backfill --dry-run")
+        if "memories_fts_after_update" in out["altered_triggers"]:
+            out["fault"] += (". memories_fts_after_update is in an older release's wide form (an older installer puts it "
+                             "back): until it is narrowed again a marked store can fail with 'database disk image is "
+                             "malformed'")
+    elif out["verdict"] == "brain_newer_than_package":
+        out["warning"] = ("marks: a newer release has migrated this brain; its triggers are its own and are left as they "
+                          "are. Upgrade this package to the release that migrated it.")
     elif out["verdict"] == "UNMEASURED":
         out["warning"] = ("marks: the migrations this package ships could not be read, so the triggers that carry marks were "
                           "not compared. Re-run the installer.")

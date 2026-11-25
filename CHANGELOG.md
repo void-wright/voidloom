@@ -21,8 +21,14 @@ Known limits, all of them declared rather than fixed:
 - the mark is universal, the weight is not: see *Added*;
 - a memory enacted from an approved self-evaluation proposal is a model's words at importance 0.8; its row says
   `author: model` and carries no mark, because nothing records which memories the proposal was written from;
-- `INSERT OR REPLACE` over the id of a marked memory is refused (`MARKED_ROW_REPLACED`) unless the new row carries the
-  mark; a plain `DELETE` followed by an `INSERT` under the same id is not seen.
+- any `INSERT` that names the id of an existing marked memory without its mark is refused (`MARKED_ROW_REPLACED`),
+  whatever its conflict clause: `INSERT OR REPLACE`, `REPLACE`, `INSERT OR IGNORE`, `ON CONFLICT ... DO UPDATE` and
+  `ON CONFLICT ... DO NOTHING` alike, because a trigger cannot tell them apart. Such a row is changed with `UPDATE`. A
+  plain `DELETE` followed by an `INSERT` under the same id is not seen;
+- running an older release's installer on a migrated brain can put back the wide form of `memories_fts_after_update`.
+  Until a 1.2.0 engine next opens the brain to write, a store that is marked as it is inserted can fail with "database
+  disk image is malformed"; `doctor` names the trigger. A brain migrated by a newer release is left as it is: its
+  triggers are its own, and `doctor` says `brain_newer_than_package`.
 
 ### Added
 
@@ -57,8 +63,11 @@ Known limits, all of them declared rather than fixed:
   surface the reader census lists: recall in every mode, batch, context, list, stats, edges, promotions, anticipation and
   its activity line, the dream channel and dream digests, the session hook, Tier 0, the resurfacing digest, council
   context, the provenance graph, counterfactuals, skill and procedure reports, the belief quarantine report, the quarterly
-  manifest, the HTML map and community summaries. A test (`test_marks_every_reader_is_classified`) lists every statement
-  that reads a memory's words and fails on a new one. A database error, a value that is neither 0 nor 1 and a brain with no
+  manifest, the HTML map and community summaries. A test (`test_marks_every_reader_is_classified`) lists every SQL statement
+  in the package's code that selects a memory's words (every SELECT in it, a CTE, a subquery and each union arm; a name
+  schema-qualified or quoted; `snippet()`, `highlight()`, `*`; text assembled in the same function) and fails on a new
+  one. A statement assembled across functions is not followed, and a function that presents is classified once for all
+  its statements. A database error, a value that is neither 0 nor 1 and a brain with no
   mark column all show framed, with `degraded_reason`. Text that begins with the frame's own words is framed like any other.
 - **Recall stores no query text**, in the access log, the lexical-miss log, the met ledger, the skill-usage log or
   `website_memory`, and no setting turns it back on. Text stored by earlier releases is left as it is. The spike detector
