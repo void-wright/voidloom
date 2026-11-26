@@ -8,14 +8,19 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ### Added
 
-- **migration_048: the persona leaves the schema text.** The council's `participants` DEFAULT names the generic
-  `synthesizer` seat, and three comments (in `council_sessions`, `arcane_manifests`, `self_eval_reports`) lose the
-  persona's name, on every brain: a column created with its table stores its value in each row, so no stored row
-  changes (every row of the three tables is hashed before and after). Same discipline as migration_047: one
-  `BEGIN IMMEDIATE`, each piece matched exactly once, whole-database checks inside and on a new connection, abort with
-  nothing changed, recorded in `schema_migrations`, read-only brains left alone. `marks.rollback_048` is the reverse
-  edit; no copy of the old text is kept. The blank seed carries the edit; doctor reports it under `brain_label`.
-  `cross_tier_bridges` keeps the CHECK of its frozen migration (a declared limit).
+- **migration_048: the names of the first installation leave the schema text.** The council's `participants` DEFAULT
+  names the generic `synthesizer` seat; `decision_events.actor`'s DEFAULT is the generic `owner` wherever no stored row
+  reads it (a column created with its table stores its value in each row; on a table that got the column after it held
+  rows, that one piece is left as it is and the result says so); the comments of `gap_inventory`, `dream_log`,
+  `council_sessions`, `counterfactual_decisions`, `arcane_manifests`, `self_eval_reports` and the view
+  `v_decision_unit_state` lose the persona's and the owner's names. Column names that carry the owner's handle stay
+  (declared legacy identifiers). Same discipline as migration_047: one `BEGIN IMMEDIATE`, each piece matched exactly
+  once, whole-database checks, every row of the edited tables hashed before and after, abort with nothing changed,
+  recorded in `schema_migrations`, read-only brains left alone. The read-back on a new connection compares the text and
+  the rows that existed inside the edit, and a row another writer stores or changes after the COMMIT never puts the old
+  text back (`applied-unverified` says such a row reads differently). `marks.rollback_048` is the reverse edit; no copy
+  of the old text is kept. The blank seed carries the edit; doctor reports it under `brain_label`. `cross_tier_bridges`
+  keeps the CHECK of its frozen migration (a declared limit).
 
 ### Fixed
 

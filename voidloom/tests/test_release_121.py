@@ -63,18 +63,33 @@ def fresh_install(tmp):
     return str(db)
 
 
-def persona_census(db):
-    """Every schema object whose text names a legacy label, with how many times: (type, name) -> count."""
+HANDLE = getattr(marks, "LEGACY_OWNER_COLUMN", "drew_input").split("_")[0]     # a legacy column identifier
+#: the owner's handle as a word; followed by an underscore it is a legacy column identifier, counted apart
+WORD = re.compile(r"(?<![A-Za-z_])%s(?![A-Za-z_])" % HANDLE, re.I)
+IDENT = re.compile(r"(?<![A-Za-z_])%s_\w+" % HANDLE, re.I)
+
+
+def census(db, pattern):
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
         out = {}
         for t, n, s in c.execute("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL"):
-            k = sum(s.lower().count(x) for x in LEGACY)
+            k = pattern(s)
             if k:
                 out[(t, n)] = k
         return out
     finally:
         c.close()
+
+
+def persona_census(db):
+    """Every schema object whose text names a legacy label or the owner's handle as a word: (type, name) -> count."""
+    return census(db, lambda s: sum(s.lower().count(x) for x in LEGACY) + len(WORD.findall(s)))
+
+
+def identifier_census(db):
+    """The legacy column identifiers (and the two legacy values) that carry the handle: (type, name) -> sorted list."""
+    return census(db, lambda s: sorted(m.lower() for m in IDENT.findall(s)))
 
 
 class Recorded047(Case):
@@ -127,9 +142,19 @@ class NoPersonaInTheSchema(Case):
     def test_the_seed_names_nobody(self):
         self.assertEqual(persona_census(SEED), {})
 
+    IDENTIFIERS = {     # declared legacy identifiers: column names, one index on one of them, two values
+        ("table", "dream_log"): [HANDLE + "_flagged_interesting"],
+        ("index", "idx_dream_flagged"): [HANDLE + "_flagged_interesting"] * 2,
+        ("table", "council_sessions"): [HANDLE + "_input"],
+        ("table", "arcane_manifests"): [HANDLE + "_addendum", HANDLE + "_reviewed"],
+        ("table", "self_eval_reports"): [HANDLE + "_approved", HANDLE + "_reviewed"],
+        ("table", "decision_events"): [HANDLE + "_approved"],
+    }
+
     def test_a_fresh_install_names_nobody_but_the_declared_check(self):
         db = fresh_install(self.tmp)
         self.assertEqual(persona_census(db), self.ALLOWED)
+        self.assertEqual(identifier_census(db), self.IDENTIFIERS)
         self.assertEqual(record(db, F048), (file_sha(F048), 0))
 
     def test_a_brain_built_without_the_seed_names_nobody_either(self):
@@ -160,7 +185,7 @@ class NoPersonaInTheSchema(Case):
 
     def test_a_populated_brain_is_edited_and_no_stored_row_changes(self):
         db = self.older()
-        self.assertEqual(len(persona_census(db)), 4)
+        self.assertEqual({n for _t, n in persona_census(db)}, set(marks._persona_edits()) | {"cross_tier_bridges"})
         before = self.participants(db)
         self.assertIn(LEGACY[0], before[0][1])                    # a row that took the old DEFAULT keeps its own value
         got = marks.migrate_048(db)
@@ -183,7 +208,7 @@ class NoPersonaInTheSchema(Case):
         new = {n: s for n, s in c.execute("SELECT name, sql FROM sqlite_master")}
         c.close()
         changed = {n for n in old if old[n] != new[n]}
-        self.assertEqual(changed, {"council_sessions", "arcane_manifests", "self_eval_reports"})
+        self.assertEqual(changed, set(marks._persona_edits()))
         for n in changed:
             back = new[n]
             for o, w in marks._persona_edits()[n]:
@@ -226,6 +251,72 @@ class NoPersonaInTheSchema(Case):
             os.chmod(db, 0o644)
         self.assertEqual((got["status"], got["code"]), ("aborted", "READ_ONLY"))
         self.assertEqual(Path(db).read_bytes(), raw)
+
+    def test_a_row_stored_after_the_commit_is_not_a_difference(self):
+        self.after_commit(update=False, want=("applied",))
+
+    def test_a_writer_after_the_commit_never_puts_the_old_text_back(self):
+        """Another process stores a council row and changes an existing one between the edit's COMMIT and its read-back."""
+        self.after_commit(update=True, want=("applied", "applied-unverified"))
+
+    def after_commit(self, update, want):
+        db = self.older()
+        writer = ("import sqlite3, sys\nc = sqlite3.connect(sys.argv[1], timeout=30)\n"
+                  "c.execute(\"INSERT INTO council_sessions (trigger_type, topic) VALUES ('manual', 'during 048')\")\n"
+                  + ("c.execute(\"UPDATE council_sessions SET status = 'completed' WHERE id = 1\")\n" if update else "")
+                  + "c.commit()\nc.close()\n")
+        real, fired = marks._table_sql, []
+
+        def spy(conn, name):
+            sql = real(conn, name)
+            if not fired and name == "council_sessions" and not conn.in_transaction and sql and \
+                    marks.SYNTHESIZER_SLUG in sql:
+                fired.append(subprocess.run([sys.executable, "-c", writer, db], capture_output=True, text=True,
+                                            timeout=60).returncode)
+            return sql
+        with mock.patch.object(marks, "_table_sql", spy):
+            got = marks.migrate_048(db)
+        self.assertEqual(fired, [0])
+        self.assertIn(got["status"], want, got)
+        self.assertEqual(persona_census(db), self.ALLOWED)
+        self.assertEqual(record(db, F048), (file_sha(F048), 0))
+        c = sqlite3.connect(db)
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM council_sessions WHERE topic = 'during 048'").fetchone()[0], 1)
+        self.assertEqual(c.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+        c.close()
+
+    def test_a_default_some_rows_still_read_is_left_and_the_rest_is_done(self):
+        """decision_events.actor added after rows existed: those rows read its DEFAULT, so that piece stays."""
+        self.tmp.mkdir(parents=True, exist_ok=True)
+        db = str(self.tmp / "late.db")
+        actor_old = marks._persona_edits()["decision_events"][0][0]
+        gap_old = marks._persona_edits()["gap_inventory"][0][0]
+        c = sqlite3.connect(db)
+        c.execute("CREATE TABLE decision_events (id INTEGER PRIMARY KEY, what TEXT)")
+        c.execute("INSERT INTO decision_events (what) VALUES ('before the column')")
+        c.execute(f"ALTER TABLE decision_events ADD COLUMN {actor_old}")
+        c.execute(f"CREATE TABLE gap_inventory (id INTEGER PRIMARY KEY,\n    {gap_old}\n    seen INTEGER)")
+        c.execute("INSERT INTO gap_inventory (seen) VALUES (1)")
+        c.commit()
+        rows = c.execute("SELECT * FROM decision_events").fetchall()
+        c.close()
+        got = marks.migrate_048(db)
+        self.assertEqual((got["status"], got["tables"], sorted(got["left"])), ("applied", ["gap_inventory"], ["decision_events"]))
+        c = sqlite3.connect(db)
+        self.assertEqual(c.execute("SELECT * FROM decision_events").fetchall(), rows)
+        self.assertIn(actor_old, c.execute("SELECT sql FROM sqlite_master WHERE name = 'decision_events'").fetchone()[0])
+        self.assertNotIn(gap_old, c.execute("SELECT sql FROM sqlite_master WHERE name = 'gap_inventory'").fetchone()[0])
+        self.assertEqual(marks.status_048(c)["status"], "pending")      # no schema_migrations here: nothing records it
+        c.close()
+        self.assertEqual(marks.migrate_048(db)["status"], "already")
+
+    def test_an_empty_decision_events_takes_the_generic_actor(self):
+        db = fresh_install(self.tmp)
+        c = sqlite3.connect(db)
+        sql = c.execute("SELECT sql FROM sqlite_master WHERE name = 'decision_events'").fetchone()[0]
+        c.close()
+        self.assertIn("DEFAULT '%s'" % marks.OWNER_WORD, sql)
+        self.assertEqual(WORD.findall(sql), [])
 
     def test_doctor_reads_it(self):
         db = self.older()

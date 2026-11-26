@@ -96,7 +96,7 @@
       "migration_047_brain_label.sql",
       "migration_048_persona_schema_text.sql"
     ],
-    "schema_sha256": "93519be8dc4096cf87ceea78182aac4b0e929795fb5ffa5a70363dc3b347a271"
+    "schema_sha256": "19d13f3bcd3bca3ee8c5282e96775019d217f9d6efc3a41c46b901c570f0a250"
   },
   "version": "1.2.0"
 }

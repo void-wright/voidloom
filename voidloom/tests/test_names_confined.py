@@ -517,9 +517,8 @@ class WhatShips(Case):
         b = Brain(self.tmp)
         pattern = re.compile(r"\b(?:drew\w*|%s)" % "|".join(re.escape(n) + r"[\w-]*" for n in LEGACY), re.I)
         objects = sorted(n for _t, n, s in b.all("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL") if pattern.search(s))
-        self.assertEqual(objects, sorted(["gap_inventory", "dream_log", "idx_dream_flagged", "council_sessions",
-                                          "counterfactual_decisions", "arcane_manifests", "self_eval_reports",
-                                          "cross_tier_bridges", "decision_events", "v_decision_unit_state"]))
+        self.assertEqual(objects, sorted(["dream_log", "idx_dream_flagged", "council_sessions", "arcane_manifests",
+                                          "self_eval_reports", "cross_tier_bridges", "decision_events"]))
         notice = " ".join((ROOT / "NOTICE").read_text(encoding="utf-8").split())
         self.assertIn("%d schema objects of a new brain carry them" % len(objects), notice)
         self.assertIn("test_names_confined.py", notice)

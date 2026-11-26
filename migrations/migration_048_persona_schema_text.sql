@@ -1,16 +1,23 @@
 -- migration_048_persona_schema_text.sql
 --
--- WHAT: the schema text of three tables stops naming the persona the first installs used. council_sessions'
--- participants DEFAULT lists the generic synthesizer seat; three comments (in council_sessions, arcane_manifests and
--- self_eval_reports) lose the name. Nothing a program reads changes: the code always writes participants itself, and a
--- column created with its table stores its value in every row, so editing its DEFAULT changes no stored row.
+-- WHAT: the schema text stops naming the persona and the owner of the first installation.
+--   * council_sessions' participants DEFAULT lists the generic synthesizer seat;
+--   * decision_events.actor's DEFAULT is the generic word 'owner', only where no stored row reads that DEFAULT (a
+--     column created with its table stores its value in every row; one added later leaves older rows reading it);
+--   * the comments of gap_inventory, dream_log, council_sessions, counterfactual_decisions, arcane_manifests,
+--     self_eval_reports and the view v_decision_unit_state lose the names.
+-- Column names that carry the owner's handle are legacy identifiers and stay. The code always writes participants and
+-- actor itself, so nothing a program reads changes.
 --
 -- HOW: SQLite has no ALTER for a DEFAULT or a comment, so this step edits the schema text, which a statement file
 -- cannot do. schema_migrator.apply runs it after every file, as marks.migrate_048:
 --   * every piece is matched exactly once, in its old form or (already done) its new form; anything else is an abort;
 --   * one BEGIN IMMEDIATE transaction; PRAGMA schema_version is bumped; quick_check, integrity_check and
---     foreign_key_check before and after, and every row of the three tables hashed before and after, inside the
---     transaction and again on a new connection. On any difference nothing is changed;
+--     foreign_key_check before and after, and every row of the edited tables hashed before and after the edit. A
+--     table whose rows would read differently (the actor DEFAULT on a table that got the column late) is left as it
+--     was; any other difference changes nothing at all;
+--   * read back on a new connection: the text, the checks, and the rows that existed inside the edit. A row another
+--     writer stored or changed after the COMMIT is never a reason to put the old text back;
 --   * recorded in schema_migrations; a brain that cannot be written is left alone.
 -- Rollback: marks.rollback_048 makes the reverse edit under the same checks. No copy of the old text is kept: the edit
 -- is its own undo. cross_tier_bridges keeps the CHECK of its frozen migration (a declared limit).

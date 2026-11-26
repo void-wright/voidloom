@@ -1257,16 +1257,26 @@ def rollback_047(db: Union[str, Path]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# migration_048: the persona's name leaves the schema text of three tables
+# migration_048: the names of the first installation leave the schema text
 # ---------------------------------------------------------------------------------------------------------------------
 M048_FILE = "migration_048_persona_schema_text.sql"
 SYNTHESIZER_SLUG = "synthesizer"
+OWNER_WORD = "owner"
+#: a legacy column identifier (declared; it stays): the owner's handle is its first word, so the handle itself is never
+#: written in this file as a word
+LEGACY_OWNER_COLUMN = "drew_input"
+#: pieces that change a DEFAULT a row might still be reading (a column added to a table that already held rows):
+#: left alone on such a brain, decided by the hash of every row of the table before and after
+CONDITIONAL_TABLES = ("decision_events",)
 
 
 def _persona_edits() -> Dict[str, List[Tuple[str, str]]]:
-    """(old, new) pieces of schema text, per table. Only the council's participants DEFAULT is a value; every other piece
-    is a comment. The persona's name is built from the legacy label, never written here."""
+    """(old, new) pieces of schema text, per table or view. Two are values (the council's participants DEFAULT and
+    decision_events.actor's DEFAULT); every other piece is a comment. The names are built from the legacy label and the
+    legacy column identifier, never written here."""
     p, P = LEGACY_BRAINS[0], LEGACY_BRAINS[0].upper()
+    h = LEGACY_OWNER_COLUMN.split("_")[0]
+    H = h.capitalize()
     seats = '"orin","vael","dessa","kael-em",'
     return {
         "council_sessions": [
@@ -1275,26 +1285,58 @@ def _persona_edits() -> Dict[str, List[Tuple[str, str]]]:
              "-- The synthesis (extracted from transcript for quick access)"),
             (f"-- Default is all four + {P}; allows future partial councils",
              "-- Default is all four + the synthesizer; allows future partial councils"),
+            (f"-- {H}'s optional closing voice", "-- The owner's optional closing voice"),
         ],
         "arcane_manifests": [(f"-- The full prose document ({P}'s final synthesis)",
-                              "-- The full prose document (the synthesizer's final synthesis)")],
+                              "-- The full prose document (the synthesizer's final synthesis)"),
+                             (f"-- {H}'s optional closing voice", "-- The owner's optional closing voice")],
         "self_eval_reports": [(f"-- Persona evolution narrative: how {P} grew this month.",
-                               "-- Persona evolution narrative: how the persona grew this month.")],
+                               "-- Persona evolution narrative: how the persona grew this month."),
+                              (f"-- {H}'s approval decisions.", "-- The owner's approval decisions.")],
+        "gap_inventory": [(f'-- Acknowledgement: {H} can mark a gap as "seen" or "not-a-gap"',
+                           '-- Acknowledgement: the owner can mark a gap as "seen" or "not-a-gap"')],
+        "dream_log": [(f"-- {H} can flag dreams as interesting via cmd_dream or API.",
+                       "-- The owner can flag dreams as interesting via cmd_dream or API.")],
+        "counterfactual_decisions": [(f"'manual',           -- {H} explicitly captured via cmd",
+                                      "'manual',           -- the owner explicitly captured via cmd")],
+        "v_decision_unit_state": [(f"-- A DISCARDED event is {H} deciding and the system dropping it.",
+                                   "-- A DISCARDED event is the owner deciding and the system dropping it.")],
+        "decision_events": [(f"actor           TEXT    NOT NULL DEFAULT '{h}'",
+                             f"actor           TEXT    NOT NULL DEFAULT '{OWNER_WORD}'")],
     }
 
 
+def _object(conn: sqlite3.Connection, name: str) -> Optional[Tuple[str, str]]:
+    row = conn.execute("SELECT type, sql FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?",
+                       (name,)).fetchone()
+    return (row[0], row[1] or "") if row else None
+
+
 def _table_sql(conn: sqlite3.Connection, table: str) -> Optional[str]:
-    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone()
-    return row[0] if row else None
+    o = _object(conn, table)
+    return o[1] if o else None
 
 
-def _plan_048(conn: sqlite3.Connection, forward: bool = True) -> Tuple[Optional[Dict[str, Tuple[str, str]]], Optional[str]]:
-    """{table: (text now, text after)} for the tables that need the edit, or (None, why) when a text cannot be matched:
+def _write_object(conn: sqlite3.Connection, text: str, name: str) -> None:
+    version = conn.execute("PRAGMA schema_version").fetchone()[0]
+    conn.execute("PRAGMA writable_schema = ON")
+    try:
+        cur = conn.execute("UPDATE sqlite_master SET sql = ? WHERE type IN ('table', 'view') AND name = ?", (text, name))
+        if cur.rowcount != 1:
+            raise sqlite3.DatabaseError(f"{name}: its schema row was not found")
+        conn.execute(f"PRAGMA schema_version = {int(version) + 1}")
+    finally:
+        conn.execute("PRAGMA writable_schema = OFF")
+
+
+def _plan_048(conn: sqlite3.Connection, forward: bool = True, skip: Iterable[str] = ()) \
+        -> Tuple[Optional[Dict[str, Tuple[str, str]]], Optional[str]]:
+    """{name: (text now, text after)} for the objects that need the edit, or (None, why) when a text cannot be matched:
     each piece must be found exactly once, in its old form or its new form (already done), never both, never neither."""
     plan: Dict[str, Tuple[str, str]] = {}
-    for table, pieces in _persona_edits().items():
-        now = _table_sql(conn, table)
-        if now is None:
+    for name, pieces in _persona_edits().items():
+        now = _table_sql(conn, name)
+        if now is None or name in skip:
             continue
         after = now
         for old, new in pieces:
@@ -1303,21 +1345,32 @@ def _plan_048(conn: sqlite3.Connection, forward: bool = True) -> Tuple[Optional[
             if (a, b) == (1, 0):
                 after = after.replace(src, dst, 1)
             elif (a, b) != (0, 1):
-                return None, (f"{table}: a piece of its schema text is found {a} time(s) in the form to change and {b} "
+                return None, (f"{name}: a piece of its schema text is found {a} time(s) in the form to change and {b} "
                               "in the changed form; this step changes only a text it matches exactly once")
         if after != now:
-            plan[table] = (now, after)
+            plan[name] = (now, after)
     return plan, None
 
 
-def _rows_hash(conn: sqlite3.Connection, tables: Iterable[str]) -> str:
-    """Every row of these tables, every column, hashed in rowid order: a schema-text edit must change none of them."""
-    h = hashlib.sha256()
-    for table in sorted(tables):
-        h.update(table.encode())
-        for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid'):
+def _tables(conn: sqlite3.Connection, names: Iterable[str]) -> List[str]:
+    return sorted(n for n in names if (_object(conn, n) or ("", ""))[0] == "table")
+
+
+def _tops(conn: sqlite3.Connection, names: Iterable[str]) -> Dict[str, int]:
+    return {t: conn.execute(f'SELECT COALESCE(MAX(rowid), 0) FROM "{t}"').fetchone()[0] for t in _tables(conn, names)}
+
+
+def _rows_hash(conn: sqlite3.Connection, names: Iterable[str], tops: Optional[Dict[str, int]] = None) -> Dict[str, str]:
+    """Every row of these tables, every column, hashed in rowid order (with `tops`, only the rows up to that rowid):
+    a schema-text edit must change none of them. Views hold no rows of their own."""
+    out = {}
+    for table in _tables(conn, names):
+        h = hashlib.sha256()
+        sql = f'SELECT * FROM "{table}"' + (" WHERE rowid <= ?" if tops is not None else "") + " ORDER BY rowid"
+        for row in conn.execute(sql, (tops.get(table, 0),) if tops is not None else ()):
             h.update(repr(tuple(row)).encode("utf-8", "surrogatepass"))
-    return h.hexdigest()
+        out[table] = h.hexdigest()
+    return out
 
 
 def _edit_048(db: Union[str, Path], forward: bool, *, edit: Optional[Any] = None) -> Dict[str, Any]:
@@ -1329,6 +1382,7 @@ def _edit_048(db: Union[str, Path], forward: bool, *, edit: Optional[Any] = None
         conn = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
     except sqlite3.Error as e:
         return {"action": action, "status": "aborted", "code": "BRAIN_UNREADABLE", "reason": f"{type(e).__name__}: {e}"}
+    left: Dict[str, str] = {}
     try:
         conn.execute("BEGIN IMMEDIATE")
         plan, why = _plan_048(conn, forward)
@@ -1351,19 +1405,43 @@ def _edit_048(db: Union[str, Path], forward: bool, *, edit: Optional[Any] = None
                     "reason": f"the brain was already damaged ({_damaged(pre)}); nothing was changed"}
         if edit is not None:
             plan = {t: (a, edit(t, b)) for t, (a, b) in plan.items()}
+        tops = _tops(conn, plan)
         before = _rows_hash(conn, plan)
-        try:
-            for table, (_now, after) in plan.items():
-                _write_schema(conn, after, table)
+
+        def attempt(plan):
+            conn.execute("SAVEPOINT edit_048")
+            try:
+                for name, (_now, after) in plan.items():
+                    _write_object(conn, after, name)
+                now = _rows_hash(conn, plan)
+            except sqlite3.Error as e:
+                conn.execute("ROLLBACK TO edit_048")
+                conn.execute("RELEASE edit_048")
+                return None, f"{type(e).__name__}: {e}"
+            moved = sorted(t for t in now if now[t] != before.get(t))
+            if moved:
+                conn.execute("ROLLBACK TO edit_048")
+                conn.execute("RELEASE edit_048")
+                return moved, None
+            conn.execute("RELEASE edit_048")
+            return [], None
+
+        moved, wrong = attempt(plan)
+        if moved and set(moved) <= set(CONDITIONAL_TABLES):
+            # a DEFAULT some row still reads: leave that table's text as it is, do the rest
+            left = {t: "its existing rows read the DEFAULT this piece would change: left as it is" for t in moved}
+            plan = {t: v for t, v in plan.items() if t not in left}
+            moved, wrong = attempt(plan) if plan else ([], None)
+        if moved:
+            wrong = "a stored row changed (%s)" % ", ".join(moved)
+        if not wrong:
             recorded = False
             if forward:
                 recorded = _record(conn, M048_FILE)
             else:
                 _unrecord(conn, M048_FILE)
-            wrong = _checks(conn, pre) or (None if _rows_hash(conn, plan) == before else "a stored row changed") or \
+            wrong = _checks(conn, pre) or \
                 next((f"{t}: the schema read back differs" for t, (_n, a) in plan.items() if _table_sql(conn, t) != a), None)
-        except sqlite3.Error as e:
-            wrong = f"{type(e).__name__}: {e}"
         if wrong:
             conn.execute("ROLLBACK")
             return {"action": action, "status": "aborted", "code": "CHECK_FAILED", "reason": f"{wrong}; nothing was changed"}
@@ -1377,49 +1455,64 @@ def _edit_048(db: Union[str, Path], forward: bool, *, edit: Optional[Any] = None
         return {"action": action, "status": "aborted", "code": "BRAIN_UNREADABLE", "reason": f"{type(e).__name__}: {e}"}
     finally:
         conn.close()
+    if not plan:            # only a piece that must stay was left: the rest was already done
+        return {"action": action, "status": "already" if forward else "refused", "recorded": recorded, "left": left,
+                **({} if forward else {"code": "NOTHING_TO_UNDO", "reason": "nothing else to undo"})}
+    out = {"action": action, "status": "applied" if forward else "ok", "tables": sorted(plan),
+           "rows_hash": hashlib.sha256(json.dumps(before, sort_keys=True).encode()).hexdigest(), "recorded": recorded,
+           **({"left": left} if left else {})}
+    # Read back on a new connection. Other writers may have stored or changed rows since the COMMIT: only the text and
+    # the rows that existed inside the edit are compared, and a row that differs now is never a reason to put the old
+    # text back (the rows were proved unchanged under the lock).
     again = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
     try:
         wrong = next((f"{t}: the schema read back differs" for t, (_n, a) in plan.items() if _table_sql(again, t) != a),
-                     None) or _checks(again, pre) or (None if _rows_hash(again, plan) == before else "a stored row changed")
+                     None) or _checks(again, pre)
         if wrong:
-            # the edit touched only schema text: put the text back as it was, in one transaction
             again.execute("BEGIN IMMEDIATE")
-            for table, (now, _after) in plan.items():
-                _write_schema(again, now, table)
+            for name, (now, _after) in plan.items():
+                _write_object(again, now, name)
             (_unrecord if forward else _record)(again, M048_FILE)
             again.execute("COMMIT")
             return {"action": action, "status": "aborted", "code": "CHECK_FAILED",
                     "reason": f"on reading back: {wrong}; the old text was put back"}
+        later = {t: h for t, h in _rows_hash(again, plan, tops).items()} != {t: before[t] for t in _tables(again, plan)}
     finally:
         again.close()
-    return {"action": action, "status": "applied" if forward else "ok", "tables": sorted(plan), "rows_hash": before,
-            "recorded": recorded}
+    if later:
+        out.update(status="applied-unverified" if forward else "ok-unverified",
+                   reason="a row that existed during the edit reads differently now: another writer changed it after the "
+                          "edit (which changed no row under its lock); the edit stands")
+    return out
 
 
 def migrate_048(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str, Any]:
-    """migration_048: the schema text of council_sessions, arcane_manifests and self_eval_reports stops naming the
-    persona. The council's participants DEFAULT names the generic synthesizer seat (rows hold their own value: a DEFAULT
-    edit changes none of them, on any brain); three comments lose the name. Each piece matched exactly once; one
-    transaction; whole-database checks and a hash of every row of the three tables before and after, inside and again
-    on a new connection; on any difference nothing is changed. Recorded in schema_migrations. `edit` (tests) replaces
-    the text after the edit."""
+    """migration_048: the schema text of the brain stops naming the persona and the owner of the first installation.
+    The council's participants DEFAULT names the generic synthesizer seat, decision_events.actor's DEFAULT the generic
+    'owner' (only where no row reads that DEFAULT), and nine comments lose the names. Each piece matched exactly once;
+    one transaction; whole-database checks and a hash of every row of the edited tables before and after; read back on
+    a new connection; on any difference nothing is changed. Recorded in schema_migrations. Column names are legacy
+    identifiers and stay. `edit` (tests) replaces the text after the edit."""
     return _edit_048(db, True, edit=edit)
 
 
 def rollback_048(db: Union[str, Path]) -> Dict[str, Any]:
-    """Put the three texts back as migration_048 found them (the edit is its own undo: no copy of the old text is kept)."""
+    """Put the texts back as migration_048 found them (the edit is its own undo: no copy of the old text is kept)."""
     return _edit_048(db, False)
 
 
 def status_048(conn: sqlite3.Connection) -> Dict[str, Any]:
-    """Read only: 'applied', 'not applicable' (none of the three tables), or 'pending' with the reason."""
+    """Read only: 'applied', 'not applicable' (none of the objects), or 'pending' with the reason."""
     if not any(_table_sql(conn, t) is not None for t in _persona_edits()):
         return {"status": "not applicable"}
     plan, why = _plan_048(conn, True)
     if plan is None:
         return {"status": "pending", "reason": why + ": an apply aborts and changes nothing"}
+    if plan and set(plan) <= set(CONDITIONAL_TABLES) and _recorded(conn, M048_FILE):
+        return {"status": "applied", "left": sorted(plan)}      # a DEFAULT its rows still read stays as it is
     return {"status": "applied"} if not plan else {"status": "pending", "reason": "not run yet: "
                                                    "python3 organs/schema_migrator.py apply --db <brain>"}
+
 
 # --------------------------------------------------------------------------------------------------------------------
 # What doctor says
