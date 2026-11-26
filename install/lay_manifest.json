@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "7d880c7",
+  "derived_at_head": "ab8640f",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 576,
   "not_laid": {
@@ -1917,13 +1917,13 @@
    "src": "organs/mark_admin.py"
   },
   {
-   "bytes": 56641,
+   "bytes": 59561,
    "component": "core",
    "dst": "organs/marks.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7b5820682b0b893446dbbb7c0e719f4018fe8e8d7b137ceb1655227b1a869eed",
+   "sha256": "a5f78d0032fd1ad26e4df55dc5803b08e776553f649c8e3017b21f8f51fb57db",
    "src": "organs/marks.py"
   },
   {
@@ -2107,13 +2107,13 @@
    "src": "organs/recall_explain.py"
   },
   {
-   "bytes": 28854,
+   "bytes": 29052,
    "component": "core",
    "dst": "organs/schema_migrator.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "34f0507377a124310de32d1a63f0d279a07fdfe06153bafd745e2976d1a21ada",
+   "sha256": "13393dde4162f1badb2d07c38f09416c6ee1254261ef4d4c34d134521b4c5a58",
    "src": "organs/schema_migrator.py"
   },
   {
@@ -2987,13 +2987,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 210738,
+   "bytes": 210758,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "d7a14179282632500d22a4f017426d85023690fca283c16e9cbe93440ca70603",
+   "sha256": "7972b25dde758515513e51159595da4d4d4e03e5e1c55ddcf9f2cb2354b80c3b",
    "src": "voidloom/cli.py"
   },
   {
@@ -4617,13 +4617,13 @@
    "src": "voidloom/tests/test_models_present_is_this_brains.py"
   },
   {
-   "bytes": 23352,
+   "bytes": 27332,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "b07e843f119382cbd59639f15ea5fc24ca4376dd527f90ee55151cd735a9446d",
+   "sha256": "4198510f566573599409e00c43b211b32b3a2fd61c3f1d944f38905c8c77904e",
    "src": "voidloom/tests/test_names_confined.py"
   },
   {

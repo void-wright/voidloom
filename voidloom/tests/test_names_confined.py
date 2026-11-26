@@ -111,7 +111,7 @@ class Migration047(Case):
     def test_a_default_edit_on_a_populated_brain_is_refused_and_changes_nothing(self):
         db = old_brain(self.tmp, "027 file")
         before, raw = label_hash(db), Path(db).read_bytes()
-        got = marks.migrate_047(db, edit=lambda new, rows: new.replace("DEFAULT '%s'" % LEGACY[0], "DEFAULT 'local'"))
+        got = marks.migrate_047(db, edit=lambda new, rows, conn: new.replace("DEFAULT '%s'" % LEGACY[0], "DEFAULT 'local'"))
         self.assertEqual(got["status"], "aborted")
         self.assertIn("label changed", got["reason"])
         self.assertEqual((label_hash(db), Path(db).read_bytes()), (before, raw))
@@ -119,8 +119,8 @@ class Migration047(Case):
     def test_a_text_that_breaks_the_database_is_refused(self):
         db = old_brain(self.tmp, "027 file")
         raw = Path(db).read_bytes()
-        for bad in (lambda new, rows: new.replace("CREATE TABLE", "CREATE TABL", 1),
-                    lambda new, rows: new + " CHECK (source_brain IN ('nobody'))"):
+        for bad in (lambda new, rows, conn: new.replace("CREATE TABLE", "CREATE TABL", 1),
+                    lambda new, rows, conn: new + " CHECK (source_brain IN ('nobody'))"):
             got = marks.migrate_047(db, edit=bad)
             self.assertEqual(got["status"], "aborted")
             self.assertEqual(Path(db).read_bytes(), raw)
@@ -169,6 +169,90 @@ class Migration047(Case):
         self.assertIn("DEFAULT 'local'", sql)
         got = schema_migrator.apply(b.path)
         self.assertIn(got["migration_047"]["status"], ("already",))
+
+
+def owner_shaped(tmp, rows=414, orphans=29):
+    """A copy shaped like a long-lived brain: rows stored before the column existed, tags whose memory is gone, and
+    write-ahead logging. Built here and copied with the backup API; never anyone's brain."""
+    src = old_brain(tmp, "027 file", rows=rows)
+    c = sqlite3.connect(src)
+    c.execute("PRAGMA journal_mode = WAL")
+    c.execute("PRAGMA foreign_keys = OFF")
+    for i in range(orphans):
+        c.execute("INSERT INTO memory_tags (memory_id, tag) VALUES (?, ?)", (900000 + i, "orphan"))
+    c.commit()
+    copy = Path(src).parent / "copy.db"
+    d = sqlite3.connect(copy)
+    c.backup(d)
+    d.execute("PRAGMA journal_mode = WAL")
+    d.close()
+    c.close()
+    return str(copy)
+
+
+class LongLivedBrain(Case):
+    def fk_rows(self, db):
+        c = sqlite3.connect(db)
+        try:
+            return sorted(c.execute("PRAGMA foreign_key_check").fetchall())
+        finally:
+            c.close()
+
+    def test_a_brain_that_already_breaks_foreign_keys_is_migrated_and_keeps_them(self):
+        db = owner_shaped(self.tmp)
+        before, fk = label_hash(db), self.fk_rows(db)
+        self.assertEqual(len(fk), 29)
+        got = marks.migrate_047(db)
+        self.assertEqual((got["status"], got["check_removed"], got["foreign_key_rows_kept"]), ("applied", True, 29), got)
+        self.assertEqual((label_hash(db), self.fk_rows(db)), (before, fk))
+        c = sqlite3.connect(db)
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM memories WHERE source_brain = ?", (LEGACY[0],)).fetchone()[0], 414)
+        self.assertFalse(marks.BRAIN_CHECK.search(c.execute("SELECT sql FROM sqlite_master WHERE name = 'memories'").fetchone()[0]))
+        self.assertEqual(marks.status_047(c)["status"], "applied")
+        c.close()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            schema_migrator.main(["apply", "--db", db])
+        self.assertIn("migration_047      : already", out.getvalue())
+
+    def test_a_foreign_key_break_added_during_the_edit_aborts_it(self):
+        db = owner_shaped(self.tmp)
+        raw_fk = self.fk_rows(db)
+
+        def plant(new, rows, conn):
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("INSERT INTO memory_tags (memory_id, tag) VALUES (999999, 'during')")
+            return new
+        got = marks.migrate_047(db, edit=plant)
+        self.assertEqual(got["status"], "aborted")
+        self.assertIn("foreign_key_check changed", got["reason"])
+        self.assertEqual(self.fk_rows(db), raw_fk)
+        c = sqlite3.connect(db)
+        self.assertTrue(marks.BRAIN_CHECK.search(c.execute("SELECT sql FROM sqlite_master WHERE name = 'memories'").fetchone()[0]))
+        c.close()
+
+    def test_a_damaged_brain_is_left_alone_and_says_why(self):
+        db = owner_shaped(self.tmp)
+        c = sqlite3.connect(db)
+        c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        root = c.execute("SELECT rootpage FROM sqlite_master WHERE name = 'idx_tags_tag'").fetchone()[0]
+        size = c.execute("PRAGMA page_size").fetchone()[0]
+        c.close()
+        raw = bytearray(Path(db).read_bytes())
+        raw[(root - 1) * size + 8:(root - 1) * size + 64] = b"\xff" * 56       # one index page scrambled
+        Path(db).write_bytes(bytes(raw))
+        got = marks.migrate_047(db)
+        self.assertEqual(got["status"], "aborted")
+        self.assertIn("already damaged", got["reason"])
+        self.assertEqual(Path(db).read_bytes(), bytes(raw))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            schema_migrator.main(["apply", "--db", db])
+        self.assertIn("migration_047      : aborted -- the brain was already damaged", out.getvalue())
+        rc, env, _err = wb.full_cli(db, "doctor")
+        got = data(env)["checks"]["brain_label"]
+        self.assertEqual(got["migration_047"]["status"], "pending")
+        self.assertIn("damaged", got["migration_047"]["reason"])
 
 
 class Resolver(Case):

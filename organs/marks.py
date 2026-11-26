@@ -970,14 +970,37 @@ def _write_schema(conn: sqlite3.Connection, text: str) -> None:
         conn.execute("PRAGMA writable_schema = OFF")
 
 
-def _checks(conn: sqlite3.Connection) -> Optional[str]:
-    """None when the database reads whole, or what is wrong with it."""
+def _state(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """What the whole-database checks say now. Rows that break a foreign key are kept as they are: they are the owner's
+    (a tag whose memory is gone), and an edit of the schema must neither add one nor take one away."""
+    out: Dict[str, Any] = {}
     for pragma in ("quick_check", "integrity_check"):
-        got = conn.execute(f"PRAGMA {pragma}").fetchone()[0]
-        if got != "ok":
-            return f"{pragma}: {got}"
-    if conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
-        return "foreign_key_check found a row"
+        try:
+            out[pragma] = [r[0] for r in conn.execute(f"PRAGMA {pragma}").fetchall()]
+        except sqlite3.DatabaseError as e:          # a database too damaged to check is a damaged database
+            out[pragma] = [f"{type(e).__name__}: {e}"]
+    try:
+        out["foreign_key_check"] = sorted(tuple(r) for r in conn.execute("PRAGMA foreign_key_check").fetchall())
+    except sqlite3.DatabaseError as e:
+        out["foreign_key_check"] = [("unreadable", str(e))]
+    return out
+
+
+def _damaged(state: Dict[str, Any]) -> Optional[str]:
+    for pragma in ("quick_check", "integrity_check"):
+        if state[pragma] != ["ok"]:
+            return f"{pragma}: {'; '.join(state[pragma][:3])}"
+    return None
+
+
+def _checks(conn: sqlite3.Connection, before: Dict[str, Any]) -> Optional[str]:
+    """None when the database reads whole and holds exactly the foreign-key breaks it held before, or what changed."""
+    now = _state(conn)
+    if _damaged(now):
+        return _damaged(now)
+    if now["foreign_key_check"] != before["foreign_key_check"]:
+        return (f"foreign_key_check changed: {len(before['foreign_key_check'])} row(s) before, "
+                f"{len(now['foreign_key_check'])} after")
     return None
 
 
@@ -1005,11 +1028,16 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
         except sqlite3.Error as e:
             return {**out, "status": "aborted", "reason": f"{type(e).__name__}: {e}"}
         rows = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        pre = _state(conn)
+        if _damaged(pre):
+            conn.execute("ROLLBACK")
+            return {**out, "status": "aborted", "rows": rows,
+                    "reason": f"the brain was already damaged before the edit ({_damaged(pre)}); nothing was changed"}
         new = BRAIN_CHECK.sub("", old, count=1)
         if rows == 0:
             new = BRAIN_DEFAULT.sub(lambda m: m.group(1) + "'" + GENERIC_BRAIN + "'", new, count=1)
         if edit is not None:
-            new = edit(new, rows)
+            new = edit(new, rows, conn)
         if new == old:
             conn.execute("ROLLBACK")
             return {**out, "status": "already", "rows": rows}
@@ -1017,7 +1045,7 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
         try:
             _write_schema(conn, new)
             conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (SAVED_SQL_KEY, old))
-            wrong = _checks(conn) or (None if _label_hash(conn) == before else "a row's label changed")
+            wrong = _checks(conn, pre) or (None if _label_hash(conn) == before else "a row's label changed")
         except sqlite3.Error as e:
             wrong = f"{type(e).__name__}: {e}"
         if wrong:
@@ -1028,7 +1056,7 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
         conn.close()
     again = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
     try:
-        wrong = (None if _memories_sql(again) == new else "the schema read back differs") or _checks(again) or \
+        wrong = (None if _memories_sql(again) == new else "the schema read back differs") or _checks(again, pre) or \
             (None if _label_hash(again) == before else "a row's label changed")
         if wrong:
             again.execute("BEGIN IMMEDIATE")
@@ -1039,7 +1067,31 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
     finally:
         again.close()
     return {**out, "status": "applied", "rows": rows, "check_removed": not BRAIN_CHECK.search(new),
-            "default_changed": not BRAIN_DEFAULT.search(new) and bool(BRAIN_DEFAULT.search(old)), "label_hash": before}
+            "default_changed": not BRAIN_DEFAULT.search(new) and bool(BRAIN_DEFAULT.search(old)), "label_hash": before,
+            "foreign_key_rows_kept": len(pre["foreign_key_check"])}
+
+
+def status_047(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Read only: has migration_047 changed this brain, and if not, why not. 'not applicable' (no source_brain column),
+    'applied' (its CHECK is gone), or 'pending' with the reason an apply would give: a damaged brain, a text it does not
+    match, or none (run the migrator)."""
+    try:
+        old = _memories_sql(conn)
+    except sqlite3.Error as e:
+        return {"status": "unreadable", "reason": f"{type(e).__name__}: {e}"}
+    if not re.search(r"\bsource_brain\b", old):
+        return {"status": "not applicable"}
+    if not BRAIN_CHECK.search(old):
+        return {"status": "applied"}
+    if len(BRAIN_CHECK.findall(old)) > 1:
+        return {"status": "pending", "reason": "the column's text names the legacy labels more than once: an apply aborts"}
+    try:
+        damaged = _damaged(_state(conn))
+    except sqlite3.Error as e:
+        damaged = f"{type(e).__name__}: {e}"
+    if damaged:
+        return {"status": "pending", "reason": f"the brain is damaged ({damaged}): an apply aborts and changes nothing"}
+    return {"status": "pending", "reason": "not run yet: python3 organs/schema_migrator.py apply --db <brain>"}
 
 
 def rollback_047(db: Union[str, Path]) -> Dict[str, Any]:
@@ -1058,10 +1110,13 @@ def rollback_047(db: Union[str, Path]) -> Dict[str, Any]:
             conn.execute("ROLLBACK")
             return {"status": "refused", "reason": f"{others} rows hold a label the older schema refuses: restore the "
                                                    "copy taken before the upgrade instead", "rows_outside": others}
-        before = _label_hash(conn)
+        before, pre = _label_hash(conn), _state(conn)
+        if _damaged(pre):
+            conn.execute("ROLLBACK")
+            return {"status": "refused", "reason": f"the brain is damaged ({_damaged(pre)}): restore the copy instead"}
         _write_schema(conn, saved[0])
         conn.execute("DELETE FROM metadata WHERE key = ?", (SAVED_SQL_KEY,))
-        wrong = _checks(conn) or (None if _label_hash(conn) == before else "a row's label changed")
+        wrong = _checks(conn, pre) or (None if _label_hash(conn) == before else "a row's label changed")
         if wrong:
             conn.execute("ROLLBACK")
             return {"status": "refused", "reason": wrong}

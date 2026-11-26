@@ -601,6 +601,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"  already applied    : {len(_sk)}"
                   + (f"  -> {', '.join(x.replace('migration_', '').replace('.sql', '') for x in _sk[:6])}"
                      + (" ..." if len(_sk) > 6 else "") if _sk else ""))
+        if a.action == "apply":
+            _m = res.get("migration_047") or {}
+            print(f"  migration_047      : {_m.get('status')}" + (f" -- {_m['reason']}" if _m.get("reason") else ""))
         print(f"  missing            : {res['missing_count']}"
               + (f"  -> {', '.join(res['missing'][:8])}" if res["missing"] else ""))
         for what in ("missing_triggers", "altered_triggers", "missing_columns"):

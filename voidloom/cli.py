@@ -2140,7 +2140,7 @@ def _doctor_label(db: Optional[str]) -> Dict[str, Any]:
         import marks
         conn = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
         try:
-            out = {**marks.label_of(conn), "rows_by_label": marks.label_counts(conn)}
+            out = {**marks.label_of(conn), "rows_by_label": marks.label_counts(conn), "migration_047": marks.status_047(conn)}
         finally:
             conn.close()
     except Exception as e:  # noqa: BLE001 -- doctor reports, it does not raise
@@ -2149,9 +2149,9 @@ def _doctor_label(db: Optional[str]) -> Dict[str, Any]:
         out["warning"] = (f"brain label: VOIDLOOM_BRAIN={out['env']} differs from this brain's own label {out['key']!r}; "
                           f"rows are written as {out['key']!r}. Rows by label: {out['rows_by_label']}")
     elif out["legacy_check"]:
-        out["warning"] = ("brain label: this brain's schema still accepts only the legacy labels (migration_047 has not "
-                          f"changed it), so new rows are written as {out['label']!r}. Re-run the installer, or: "
-                          "python3 organs/schema_migrator.py apply --db <brain>")
+        out["warning"] = ("brain label: this brain's schema still accepts only the legacy labels (migration_047: "
+                          f"{out['migration_047'].get('reason') or out['migration_047'].get('status')}), so new rows are "
+                          f"written as {out['label']!r}.")
     return out
 
 
