@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-26T03:13:07Z from the working tree whose HEAD was `85472bd`
+> Generated 2026-11-26T03:16:09Z from the working tree whose HEAD was `e9c4999`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,12 +14,12 @@
 |---|---|
 | files tracked | 577 |
 | files hashed | 577 |
-| total bytes | 12278463 |
+| total bytes | 12278936 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
 
-### `organs` — The organism — engine + L2-L5 organ suite  ·  83 files, 5013657 bytes
+### `organs` — The organism — engine + L2-L5 organ suite  ·  83 files, 5013649 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -58,7 +58,7 @@
 | `organs/kind_taxonomy.py` | 31197 | `b8383f161da3487b` |
 | `organs/least_privilege.py` | 6171 | `79a34a1ddd9ced50` |
 | `organs/mark_admin.py` | 21668 | `e19dee0327ab9345` |
-| `organs/marks.py` | 64936 | `634be9cb5cf4d2c5` |
+| `organs/marks.py` | 64928 | `0595d7e47227e353` |
 | `organs/memory_dreaming.py` | 107928 | `916036661478226c` |
 | `organs/memory_write.py` | 145911 | `d3eb30da3d420b73` |
 | `organs/model_fetch.py` | 8995 | `faf76bcf1a2b2418` |
@@ -107,7 +107,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  295 files, 4037910 bytes
+### `voidloom` — The CLI facade  ·  295 files, 4038391 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -285,7 +285,7 @@
 | `voidloom/tests/test_missing_compute_card_reads_degraded.py` | 6975 | `cb9da9004849e328` |
 | `voidloom/tests/test_models_present_is_this_brains.py` | 9433 | `6b0e351cadd27c2b` |
 | `voidloom/tests/test_names_confined.py` | 27332 | `4198510f56657359` |
-| `voidloom/tests/test_names_edges.py` | 13951 | `bf1362ccd1032a66` |
+| `voidloom/tests/test_names_edges.py` | 14432 | `ac5230a0513975d2` |
 | `voidloom/tests/test_no_test_file_is_gitignored.py` | 1809 | `7bd5fc023edd020e` |
 | `voidloom/tests/test_nothing_private_left_open.py` | 2630 | `d327239c96c22cfd` |
 | `voidloom/tests/test_nothing_re_points_a_brain.py` | 7747 | `3c1186c776e089f6` |
@@ -471,7 +471,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 158204 | `2f2c4a5b01e16268` |
+| `install/lay_manifest.json` | 158204 | `79840fb896de69c9` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |

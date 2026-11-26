@@ -159,6 +159,7 @@ class CheckItDoesNotKnow(Case):
             c.close()
             self.assertEqual((info["legacy_check"], info["label"]), (True, LEGACY[0]), spelling)
             self.assertEqual(status["status"], "pending", spelling)
+            self.assertIn("does not know", status["reason"], spelling)
 
     def test_stores_keep_the_legacy_label_and_doctor_says_why(self):
         db = odd_brain(self.tmp, "values swapped")
@@ -218,6 +219,16 @@ class RollbackOverAChangedTable(Case):
             got = marks.rollback_047(db)
             self.assertEqual(got["status"], "refused", text)
             self.assertEqual(schema(db), before)
+
+    def test_a_database_error_is_a_typed_refusal(self):
+        db = self.migrated()
+        c = sqlite3.connect(db)
+        c.execute("ALTER TABLE metadata RENAME TO metadata_elsewhere")
+        c.commit()
+        c.close()
+        got = marks.rollback_047(db)
+        self.assertEqual((got["status"], got.get("code")), ("refused", "BRAIN_UNREADABLE"))
+        self.assertFalse(HAS_CHECK.search(schema(db)))
 
     def test_a_read_only_brain_is_a_typed_refusal(self):
         db = self.migrated()

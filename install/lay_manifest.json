@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "85472bd",
+  "derived_at_head": "e9c4999",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 577,
   "not_laid": {
@@ -1917,13 +1917,13 @@
    "src": "organs/mark_admin.py"
   },
   {
-   "bytes": 64936,
+   "bytes": 64928,
    "component": "core",
    "dst": "organs/marks.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "634be9cb5cf4d2c57beced2c26a4cbb5491697844f82c0f5a5224c1efd240e36",
+   "sha256": "0595d7e47227e3532f522dcd48400f0bc70a35c14ef851ac3b813842f2421860",
    "src": "organs/marks.py"
   },
   {
@@ -4627,13 +4627,13 @@
    "src": "voidloom/tests/test_names_confined.py"
   },
   {
-   "bytes": 13951,
+   "bytes": 14432,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "bf1362ccd1032a665fdf2c284a8f52b41a7eeec9e0f7e81c06df12be521679b3",
+   "sha256": "ac5230a0513975d278c934aa994c8a9b4d48b5b6841cccd70ada135cf933d002",
    "src": "voidloom/tests/test_names_edges.py"
   },
   {

@@ -863,7 +863,7 @@ _LEGACY_ALT = "\\s*,\\s*".join("'%s'" % n for n in LEGACY_BRAINS)
 #: the CHECK an older schema put on memories.source_brain, in either of the two spellings its two creation routes left
 BRAIN_CHECK = re.compile(r"\s*CHECK\s*\(\s*source_brain\s+IN\s*\(\s*" + _LEGACY_ALT + r"\s*\)\s*\)", re.I)
 #: any CHECK that names source_brain, however it is spelled: quoted, bracketed, commented, values in any order
-ANY_BRAIN_CHECK = re.compile(r"CHECK\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*?[\"`\[]?\bsource_brain\b", re.I)
+ANY_BRAIN_CHECK = re.compile(r"CHECK\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*?\bsource_brain\b", re.I)
 BRAIN_DEFAULT = re.compile(r"(\bsource_brain\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+)'" + LEGACY_BRAINS[0] + "'", re.I)
 
 
