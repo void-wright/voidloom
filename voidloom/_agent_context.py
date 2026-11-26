@@ -311,7 +311,7 @@ TOOLKIT: Dict[str, Any] = {
                 "--force": "flag; change a label already set",
                 "--json": "flag; structured envelope {label, source, key, env, rows_by_label}",
             },
-            "when": "Once, before a brain's first store, when it should keep a name of its own.",
+            "when": "Once, before the first store, to keep a name.",
         },
         {
             "name": "research-register",

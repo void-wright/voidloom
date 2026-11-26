@@ -352,6 +352,8 @@ class TestAgentContext(unittest.TestCase):
         "tier",
         # 2026-11-25, marks: the registrar, the reversible archive and its undo, and the one-time backfill.
         "research-register", "forget", "unarchive", "marks",
+        # 2026-11-26, the brain's own label: show it, or set it once. Admitted deliberately.
+        "brain-label",
     }
 
     def test_manifest_valid_json_all_verbs(self):

@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "b9f41c0",
+  "derived_at_head": "7d880c7",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 576,
   "not_laid": {
@@ -2917,13 +2917,13 @@
    "src": "voidloom/__main__.py"
   },
   {
-   "bytes": 26980,
+   "bytes": 26951,
    "component": "core",
    "dst": "voidloom/_agent_context.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a57bf0d38c5e275867406c890dfb76b41ec98cd241710484a93d89813c59d9df",
+   "sha256": "2072ee878baa3660fd011cc8006bd04e003d1730d19795d1d4a046a3facbdd51",
    "src": "voidloom/_agent_context.py"
   },
   {
@@ -5687,13 +5687,13 @@
    "src": "voidloom/tests/test_upgrade_embeds_nothing_unasked.py"
   },
   {
-   "bytes": 38004,
+   "bytes": 38120,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "608d9b53b234fc5e10f191a6f60eb3aed4c377c367ea80fdb41c0ac1af564f6f",
+   "sha256": "4898a122cf0a6c63e154faec46db06430b8ca8c28a9dd753b381f3752d5d2ce9",
    "src": "voidloom/tests/test_voidloom.py"
   },
   {
