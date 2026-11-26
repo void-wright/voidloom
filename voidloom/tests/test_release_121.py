@@ -107,6 +107,20 @@ class Recorded047(Case):
         self.assertEqual(marks.migrate_047(db)["status"], "already")
 
 
+    def test_a_populated_brain_applied_by_1_2_0_is_recorded_and_keeps_its_copy(self):
+        db = old_brain(self.tmp, "027 file")
+        schema_migrator.apply(db)
+        c = sqlite3.connect(db)
+        c.execute("DELETE FROM schema_migrations WHERE name = ?", (F047,))                  # as 1.2.0 left it
+        c.commit()
+        c.close()
+        copy = saved(db)
+        got = marks.migrate_047(db)
+        self.assertEqual((got["status"], got["recorded"]), ("already", True))
+        self.assertEqual(record(db, F047), (file_sha(F047), 0))
+        self.assertEqual(saved(db), copy)
+
+
 class NoPersonaInTheSchema(Case):
     ALLOWED = {("table", "cross_tier_bridges"): 2}      # its frozen migration's CHECK names both legacy tiers: declared
 
