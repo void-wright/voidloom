@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import io
 import json
+import os
 import re
 import sqlite3
 from unittest import mock
@@ -86,11 +87,15 @@ class Control(_F):
             self.plain({r["id"]: r for r in rows})
 
     def test_control_order_and_distances_of_an_unmarked_brain(self):
-        """Ranking is not this release's business: ids and distances on this fixture (captured on c023b23)."""
+        """Ranking is not this release's business: ids and distances on this fixture (captured on c023b23). They were
+        captured on the path without the reranker, which is the only path on a machine with no compute card; with a card
+        visible the gate turns the reranker on and distances come on its scale. So the path is stated, not inherited."""
         b = Brain(self.tmp / "rank")
         for i, t in enumerate(("gradle cache daemon pressure", "gradle cache daemon", "gradle cache", "gradle", "orchid bark")):
             b.add(t + " row", importance=0.5, kind="semantic")
-        self.assertEqual([(r["id"], r["distance"]) for r in self.engine_recall(b)["results"]],
+        with mock.patch.dict(os.environ, {"VOIDLOOM_RERANKER": "off"}):
+            got = self.engine_recall(b)["results"]
+        self.assertEqual([(r["id"], r["distance"]) for r in got],
                          [(1, -0.1333), (3, -0.1176), (5, -0.0526), (4, -0.1111), (2, -0.125)])
 
 

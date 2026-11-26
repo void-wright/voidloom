@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 559,
+    "core": 561,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 514,
+    "all": 516,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
-    "brain": 263,
+    "brain": 264,
     "home": 2,
-    "null": 293,
+    "null": 294,
     "skills": 19
    }
   },
-  "derived_at_head": "730ffd1",
+  "derived_at_head": "5baabdf",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 577,
+  "entries": 579,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 282,
+     "count": 283,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 293
+   "total": 294
   },
   "platforms": [
    "all",
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 64407,
+   "bytes": 66290,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "e25629bc646f4415b0c286037b37cdc1c94f6057b7e44564ccf2d855c0e822e9",
+   "sha256": "5deab9deeb7ccdc811330b4a708dc24111d47b34bc3d641639ab6603f42fe91d",
    "src": "CHANGELOG.md"
   },
   {
@@ -187,13 +187,13 @@
    "src": "CODE_OF_CONDUCT.md"
   },
   {
-   "bytes": 3122,
+   "bytes": 3169,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "eeea66a770f66396a32009cada356371ca3d82c01bdbbe91963028410cdd25f7",
+   "sha256": "fd3885d1e7c295e01924b817bed22695357ef3a99e8fb3368cc24f4f7426be1f",
    "src": "COMPAT.json"
   },
   {
@@ -217,13 +217,13 @@
    "src": "LICENSE"
   },
   {
-   "bytes": 4988,
+   "bytes": 5305,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "7e9ae36efd31687187519afd08c8006b29a928834627d4c120660b009c6958ca",
+   "sha256": "cce9f7dfb28fd4c77bb44e2a37769eb79561ccc24a525166e8c8a4c912fd0bf7",
    "src": "NOTICE"
   },
   {
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "4e63fb0ea1e4431f99ac77630b42d93c7cd6cd09a5436abb0277629474da57d3",
+   "sha256": "9515252b94808db640bb687ad45503739b03f3321ce1afd8abb109d3c3bdb100",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -843,7 +843,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "af520a9df938cc569beb90a88585e4497a1870fe139bf5bb0bc1ea976b8ced29",
+   "sha256": "5e0528d471e6ac9721ade1865ec2b877a5639478c2af7abfd28be2fa5ed09f94",
    "src": "docs/RESTORE_MANIFEST.md"
   },
   {
@@ -1557,6 +1557,16 @@
    "src": "migrations/migration_047_brain_label.sql"
   },
   {
+   "bytes": 1506,
+   "component": "core",
+   "dst": "migrations/migration_048_persona_schema_text.sql",
+   "exec": false,
+   "platform": "all",
+   "root": "brain",
+   "sha256": "82ca929a5b0ae938c8ab79b92c7db329473ba16f96f6ffacc03bda0440618868",
+   "src": "migrations/migration_048_persona_schema_text.sql"
+  },
+  {
    "bytes": 2640,
    "component": "core",
    "dst": "migrations/schema.sql",
@@ -1917,13 +1927,13 @@
    "src": "organs/mark_admin.py"
   },
   {
-   "bytes": 64928,
+   "bytes": 77262,
    "component": "core",
    "dst": "organs/marks.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "0595d7e47227e3532f522dcd48400f0bc70a35c14ef851ac3b813842f2421860",
+   "sha256": "3694271036d25788048d9f304e632d38dc63dde70147448d0bfbb6bbb926a5ae",
    "src": "organs/marks.py"
   },
   {
@@ -2107,13 +2117,13 @@
    "src": "organs/recall_explain.py"
   },
   {
-   "bytes": 29052,
+   "bytes": 29229,
    "component": "core",
    "dst": "organs/schema_migrator.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "13393dde4162f1badb2d07c38f09416c6ee1254261ef4d4c34d134521b4c5a58",
+   "sha256": "f26c4c806b4d179b484b4345e92f106a72a2d8bbf9d28262b6e5355edc485a9b",
    "src": "organs/schema_migrator.py"
   },
   {
@@ -2613,7 +2623,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "f1e15db427fa7a5647b1e7ff42dfb0de0c6fc3330088d3b7b74d932fdcf6f186",
+   "sha256": "4a886000a5ad42d663a4ba1bb2c119d33d1dab85e51f64f6a941ccdcf947d327",
    "src": "seed/claude_memory_blank.db"
   },
   {
@@ -2987,13 +2997,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 211204,
+   "bytes": 211264,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a4220722f034fd9b18b6fbcebcc9a765ea7cf245475679af53ef862ff77afe6c",
+   "sha256": "07d2b3ea9817c42257165ce2813a94a74a4bd4e39fb8df4ffadf0254cfcf153d",
    "src": "voidloom/cli.py"
   },
   {
@@ -4937,6 +4947,16 @@
    "src": "voidloom/tests/test_refusals_name_the_way_out.py"
   },
   {
+   "bytes": 14282,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "a62a305395ac1607a68fd9dcf4e3758cf2db171807d2e3f7b3e0fe98c64ab938",
+   "src": "voidloom/tests/test_release_121.py"
+  },
+  {
    "bytes": 2414,
    "component": "core",
    "dst": null,
@@ -5747,13 +5767,13 @@
    "src": "voidloom/tests/test_wall_forget.py"
   },
   {
-   "bytes": 11758,
+   "bytes": 12111,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "a61ae539b4ddf3268a8d2b1b75dca2c383f9b852bafdba8372a4d7a851fa37d9",
+   "sha256": "cf6f8ae0199cc0edf4da939685fe9758c4297d83f71d5170f443b74960d6243e",
    "src": "voidloom/tests/test_wall_framing.py"
   },
   {

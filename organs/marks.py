@@ -623,12 +623,21 @@ def unit_interval(value: Any, name: str = "importance") -> float:
 
 
 def write_failure(e: BaseException) -> MarksError:
-    """A store whose writing failed and was rolled back: DISK_FULL when the database or its disk is full, otherwise
-    STORE_FAILED. Nothing was stored, and the answer carries no id."""
-    full = isinstance(e, sqlite3.Error) and "full" in str(e).lower()
-    return MarksError("DISK_FULL" if full else "STORE_FAILED",
-                      f"{type(e).__name__}: {e}. Nothing was stored." + (" Free space where the brain lies and store again."
-                                                                          if full else ""),
+    """A store whose writing failed and was rolled back. Nothing was stored, and the answer carries no id. The code says
+    which kind of failure, as the engine has always said it: DISK_FULL when the database or its disk is full;
+    SCHEMA_DAMAGED when a table or column the brain's own schema names is gone; DB_ERROR when the file cannot be written
+    or used (read-only, locked, unable to open, an I/O error); STORE_FAILED for anything else."""
+    text = str(e).lower()
+    if isinstance(e, sqlite3.Error) and "full" in text:
+        code = "DISK_FULL"
+    elif isinstance(e, sqlite3.OperationalError) and "no such" in text:
+        code = "SCHEMA_DAMAGED"
+    elif isinstance(e, sqlite3.OperationalError):
+        code = "DB_ERROR"
+    else:
+        code = "STORE_FAILED"
+    return MarksError(code, f"{type(e).__name__}: {e}. Nothing was stored." + (" Free space where the brain lies and store again."
+                                                                               if code == "DISK_FULL" else ""),
                       row_may_exist=False)
 
 
@@ -979,13 +988,38 @@ def _label_hash(conn: sqlite3.Connection, upto: Optional[int] = None) -> str:
 
 
 SAVED_SQL_KEY = "migration_047_memories_sql"
+M047_FILE = "migration_047_brain_label.sql"
 
 
-def _write_schema(conn: sqlite3.Connection, text: str) -> None:
+def _record(conn: sqlite3.Connection, name: str) -> bool:
+    """Record a schema-text step in schema_migrations, as the migrator records a file it ran (inside the caller's
+    transaction), so an audit or a later release sees it. A brain with no such table (the blank seed) is not given one."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").fetchone():
+        return False
+    f = Path(__file__).resolve().parent.parent / "migrations" / name
+    sha = hashlib.sha256(f.read_bytes()).hexdigest() if f.is_file() else None
+    conn.execute("INSERT OR REPLACE INTO schema_migrations (name, applied_at, sha256, statements) "
+                 "VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?, 0)", (name, sha))
+    return True
+
+
+def _recorded(conn: sqlite3.Connection, name: str) -> bool:
+    try:
+        return bool(conn.execute("SELECT 1 FROM schema_migrations WHERE name = ?", (name,)).fetchone())
+    except sqlite3.Error:
+        return False
+
+
+def _unrecord(conn: sqlite3.Connection, name: str) -> None:
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").fetchone():
+        conn.execute("DELETE FROM schema_migrations WHERE name = ?", (name,))
+
+
+def _write_schema(conn: sqlite3.Connection, text: str, table: str = "memories") -> None:
     version = conn.execute("PRAGMA schema_version").fetchone()[0]
     conn.execute("PRAGMA writable_schema = ON")
     try:
-        cur = conn.execute("UPDATE sqlite_master SET sql = ? WHERE type = 'table' AND name = 'memories'", (text,))
+        cur = conn.execute("UPDATE sqlite_master SET sql = ? WHERE type = 'table' AND name = ?", (text, table))
         if cur.rowcount != 1:
             raise sqlite3.DatabaseError("the table's schema row was not found")
         conn.execute(f"PRAGMA schema_version = {int(version) + 1}")
@@ -1066,13 +1100,26 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
         if edit is not None:
             new = edit(new, rows, conn)
         if new == old:
+            # already done: make sure it is recorded, and that an empty brain holds no undo copy (nothing to undo there)
+            generic = bool(re.search(r"\bsource_brain\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+'" + GENERIC_BRAIN + "'", old, re.I))
+            stale = generic and conn.execute("SELECT 1 FROM metadata WHERE key = ?", (SAVED_SQL_KEY,)).fetchone()
+            if stale or not _recorded(conn, M047_FILE):
+                if stale:
+                    conn.execute("DELETE FROM metadata WHERE key = ?", (SAVED_SQL_KEY,))
+                recorded = _record(conn, M047_FILE)
+                conn.execute("COMMIT")
+                return {**out, "status": "already", "rows": rows, "recorded": recorded, "undo_copy_dropped": bool(stale)}
             conn.execute("ROLLBACK")
-            return {**out, "status": "already", "rows": rows}
+            return {**out, "status": "already", "rows": rows, "recorded": True}
         top = conn.execute("SELECT COALESCE(MAX(id), 0) FROM memories").fetchone()[0]
         before = _label_hash(conn)
         try:
             _write_schema(conn, new)
-            conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (SAVED_SQL_KEY, old))
+            if rows:        # the undo copy: kept on a brain that holds memories, deliberately (it names the legacy labels)
+                conn.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (SAVED_SQL_KEY, old))
+            else:           # an empty brain: nothing to undo, and no copy of the old names
+                conn.execute("DELETE FROM metadata WHERE key = ?", (SAVED_SQL_KEY,))
+            recorded = _record(conn, M047_FILE)
             wrong = _checks(conn, pre) or (None if _label_hash(conn) == before else "a row's label changed")
         except sqlite3.Error as e:
             wrong = f"{type(e).__name__}: {e}"
@@ -1100,11 +1147,13 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
                                   "if it is damaged"}
             _write_schema(again, old)
             again.execute("DELETE FROM metadata WHERE key = ?", (SAVED_SQL_KEY,))
+            _unrecord(again, M047_FILE)
             again.execute("COMMIT")
             return {**out, "status": "aborted", "reason": wrong, "rows": rows}
     finally:
         again.close()
-    return {**out, "status": "applied", "rows": rows, "check_removed": not BRAIN_CHECK.search(new),
+    return {**out, "status": "applied", "rows": rows, "recorded": recorded, "undo_copy_kept": bool(rows),
+            "check_removed": not BRAIN_CHECK.search(new),
             "default_changed": not BRAIN_DEFAULT.search(new) and bool(BRAIN_DEFAULT.search(old)), "label_hash": before,
             "foreign_key_rows_kept": len(pre["foreign_key_check"])}
 
@@ -1180,6 +1229,7 @@ def rollback_047(db: Union[str, Path]) -> Dict[str, Any]:
                     "reason": f"the brain is damaged ({_damaged(pre)}): restore the copy instead"}
         _write_schema(conn, saved)
         conn.execute("DELETE FROM metadata WHERE key = ?", (SAVED_SQL_KEY,))
+        _unrecord(conn, M047_FILE)
         wrong = _checks(conn, pre) or (None if _label_hash(conn) == before else "a row's label changed")
         if wrong:
             conn.execute("ROLLBACK")
@@ -1204,6 +1254,172 @@ def rollback_047(db: Union[str, Path]) -> Dict[str, Any]:
         return {"status": "refused", "code": "CHECK_FAILED", "reason": f"written, but on reading back: {wrong}"}
     return {"status": "ok", "action": "rollback_047"}
 
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# migration_048: the persona's name leaves the schema text of three tables
+# ---------------------------------------------------------------------------------------------------------------------
+M048_FILE = "migration_048_persona_schema_text.sql"
+SYNTHESIZER_SLUG = "synthesizer"
+
+
+def _persona_edits() -> Dict[str, List[Tuple[str, str]]]:
+    """(old, new) pieces of schema text, per table. Only the council's participants DEFAULT is a value; every other piece
+    is a comment. The persona's name is built from the legacy label, never written here."""
+    p, P = LEGACY_BRAINS[0], LEGACY_BRAINS[0].upper()
+    seats = '"orin","vael","dessa","kael-em",'
+    return {
+        "council_sessions": [
+            (f"participants TEXT DEFAULT '[{seats}\"{p}\"]'", f"participants TEXT DEFAULT '[{seats}\"{SYNTHESIZER_SLUG}\"]'"),
+            (f"-- {P}'s synthesis (extracted from transcript for quick access)",
+             "-- The synthesis (extracted from transcript for quick access)"),
+            (f"-- Default is all four + {P}; allows future partial councils",
+             "-- Default is all four + the synthesizer; allows future partial councils"),
+        ],
+        "arcane_manifests": [(f"-- The full prose document ({P}'s final synthesis)",
+                              "-- The full prose document (the synthesizer's final synthesis)")],
+        "self_eval_reports": [(f"-- Persona evolution narrative: how {P} grew this month.",
+                               "-- Persona evolution narrative: how the persona grew this month.")],
+    }
+
+
+def _table_sql(conn: sqlite3.Connection, table: str) -> Optional[str]:
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone()
+    return row[0] if row else None
+
+
+def _plan_048(conn: sqlite3.Connection, forward: bool = True) -> Tuple[Optional[Dict[str, Tuple[str, str]]], Optional[str]]:
+    """{table: (text now, text after)} for the tables that need the edit, or (None, why) when a text cannot be matched:
+    each piece must be found exactly once, in its old form or its new form (already done), never both, never neither."""
+    plan: Dict[str, Tuple[str, str]] = {}
+    for table, pieces in _persona_edits().items():
+        now = _table_sql(conn, table)
+        if now is None:
+            continue
+        after = now
+        for old, new in pieces:
+            src, dst = (old, new) if forward else (new, old)
+            a, b = now.count(src), now.count(dst)
+            if (a, b) == (1, 0):
+                after = after.replace(src, dst, 1)
+            elif (a, b) != (0, 1):
+                return None, (f"{table}: a piece of its schema text is found {a} time(s) in the form to change and {b} "
+                              "in the changed form; this step changes only a text it matches exactly once")
+        if after != now:
+            plan[table] = (now, after)
+    return plan, None
+
+
+def _rows_hash(conn: sqlite3.Connection, tables: Iterable[str]) -> str:
+    """Every row of these tables, every column, hashed in rowid order: a schema-text edit must change none of them."""
+    h = hashlib.sha256()
+    for table in sorted(tables):
+        h.update(table.encode())
+        for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid'):
+            h.update(repr(tuple(row)).encode("utf-8", "surrogatepass"))
+    return h.hexdigest()
+
+
+def _edit_048(db: Union[str, Path], forward: bool, *, edit: Optional[Any] = None) -> Dict[str, Any]:
+    action = "migrate_048" if forward else "rollback_048"
+    if not os.access(str(db), os.W_OK) or not os.access(os.path.dirname(os.path.abspath(str(db))), os.W_OK):
+        return {"action": action, "status": "aborted", "code": "READ_ONLY",
+                "reason": "the brain or its folder cannot be written; nothing was changed"}
+    try:
+        conn = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
+    except sqlite3.Error as e:
+        return {"action": action, "status": "aborted", "code": "BRAIN_UNREADABLE", "reason": f"{type(e).__name__}: {e}"}
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        plan, why = _plan_048(conn, forward)
+        if plan is None:
+            conn.execute("ROLLBACK")
+            return {"action": action, "status": "aborted", "code": "TEXT_NOT_MATCHED", "reason": why}
+        if not plan:
+            done = forward and any(_table_sql(conn, t) is not None for t in _persona_edits())
+            if done and not _recorded(conn, M048_FILE) and _record(conn, M048_FILE):
+                conn.execute("COMMIT")
+                return {"action": action, "status": "already", "recorded": True}
+            conn.execute("ROLLBACK")
+            return {"action": action, "status": "already" if forward else "refused",
+                    **({} if forward else {"code": "NOTHING_TO_UNDO", "reason": "the schema text is the old one already"}),
+                    "recorded": _recorded(conn, M048_FILE)}
+        pre = _state(conn)
+        if _damaged(pre):
+            conn.execute("ROLLBACK")
+            return {"action": action, "status": "aborted", "code": "BRAIN_DAMAGED",
+                    "reason": f"the brain was already damaged ({_damaged(pre)}); nothing was changed"}
+        if edit is not None:
+            plan = {t: (a, edit(t, b)) for t, (a, b) in plan.items()}
+        before = _rows_hash(conn, plan)
+        try:
+            for table, (_now, after) in plan.items():
+                _write_schema(conn, after, table)
+            recorded = False
+            if forward:
+                recorded = _record(conn, M048_FILE)
+            else:
+                _unrecord(conn, M048_FILE)
+            wrong = _checks(conn, pre) or (None if _rows_hash(conn, plan) == before else "a stored row changed") or \
+                next((f"{t}: the schema read back differs" for t, (_n, a) in plan.items() if _table_sql(conn, t) != a), None)
+        except sqlite3.Error as e:
+            wrong = f"{type(e).__name__}: {e}"
+        if wrong:
+            conn.execute("ROLLBACK")
+            return {"action": action, "status": "aborted", "code": "CHECK_FAILED", "reason": f"{wrong}; nothing was changed"}
+        conn.execute("COMMIT")
+    except sqlite3.Error as e:
+        try:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        return {"action": action, "status": "aborted", "code": "BRAIN_UNREADABLE", "reason": f"{type(e).__name__}: {e}"}
+    finally:
+        conn.close()
+    again = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
+    try:
+        wrong = next((f"{t}: the schema read back differs" for t, (_n, a) in plan.items() if _table_sql(again, t) != a),
+                     None) or _checks(again, pre) or (None if _rows_hash(again, plan) == before else "a stored row changed")
+        if wrong:
+            # the edit touched only schema text: put the text back as it was, in one transaction
+            again.execute("BEGIN IMMEDIATE")
+            for table, (now, _after) in plan.items():
+                _write_schema(again, now, table)
+            (_unrecord if forward else _record)(again, M048_FILE)
+            again.execute("COMMIT")
+            return {"action": action, "status": "aborted", "code": "CHECK_FAILED",
+                    "reason": f"on reading back: {wrong}; the old text was put back"}
+    finally:
+        again.close()
+    return {"action": action, "status": "applied" if forward else "ok", "tables": sorted(plan), "rows_hash": before,
+            "recorded": recorded}
+
+
+def migrate_048(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str, Any]:
+    """migration_048: the schema text of council_sessions, arcane_manifests and self_eval_reports stops naming the
+    persona. The council's participants DEFAULT names the generic synthesizer seat (rows hold their own value: a DEFAULT
+    edit changes none of them, on any brain); three comments lose the name. Each piece matched exactly once; one
+    transaction; whole-database checks and a hash of every row of the three tables before and after, inside and again
+    on a new connection; on any difference nothing is changed. Recorded in schema_migrations. `edit` (tests) replaces
+    the text after the edit."""
+    return _edit_048(db, True, edit=edit)
+
+
+def rollback_048(db: Union[str, Path]) -> Dict[str, Any]:
+    """Put the three texts back as migration_048 found them (the edit is its own undo: no copy of the old text is kept)."""
+    return _edit_048(db, False)
+
+
+def status_048(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Read only: 'applied', 'not applicable' (none of the three tables), or 'pending' with the reason."""
+    if not any(_table_sql(conn, t) is not None for t in _persona_edits()):
+        return {"status": "not applicable"}
+    plan, why = _plan_048(conn, True)
+    if plan is None:
+        return {"status": "pending", "reason": why + ": an apply aborts and changes nothing"}
+    return {"status": "applied"} if not plan else {"status": "pending", "reason": "not run yet: "
+                                                   "python3 organs/schema_migrator.py apply --db <brain>"}
 
 # --------------------------------------------------------------------------------------------------------------------
 # What doctor says

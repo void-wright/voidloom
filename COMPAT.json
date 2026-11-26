@@ -93,9 +93,10 @@
       "migration_044_seed_origin.sql",
       "migration_045_derived_layer_stamp.sql",
       "migration_046_marks.sql",
-      "migration_047_brain_label.sql"
+      "migration_047_brain_label.sql",
+      "migration_048_persona_schema_text.sql"
     ],
-    "schema_sha256": "49006660f0a08c5bade361281fd2e1281e15f9c387f818b1856fd1b57a4fc4f8"
+    "schema_sha256": "93519be8dc4096cf87ceea78182aac4b0e929795fb5ffa5a70363dc3b347a271"
   },
   "version": "1.2.0"
 }

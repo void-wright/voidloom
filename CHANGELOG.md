@@ -6,6 +6,30 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **migration_048: the persona leaves the schema text.** The council's `participants` DEFAULT names the generic
+  `synthesizer` seat, and three comments (in `council_sessions`, `arcane_manifests`, `self_eval_reports`) lose the
+  persona's name, on every brain: a column created with its table stores its value in each row, so no stored row
+  changes (every row of the three tables is hashed before and after). Same discipline as migration_047: one
+  `BEGIN IMMEDIATE`, each piece matched exactly once, whole-database checks inside and on a new connection, abort with
+  nothing changed, recorded in `schema_migrations`, read-only brains left alone. `marks.rollback_048` is the reverse
+  edit; no copy of the old text is kept. The blank seed carries the edit; doctor reports it under `brain_label`.
+  `cross_tier_bridges` keeps the CHECK of its frozen migration (a declared limit).
+
+### Fixed
+
+- **migration_047 is recorded in `schema_migrations`** when it applies and when it finds itself already applied, so
+  an audit or a later release sees it. On an empty brain (a fresh install) it keeps no copy of the old text: there is
+  nothing to undo, and `rollback_047` answers `NOTHING_TO_UNDO` (a 1.2.0 fresh brain's copy is dropped on the next
+  apply). On a brain that holds memories the copy is kept, deliberately: it is the undo copy, and it names the two
+  legacy labels.
+- **A failed store says which kind of failure again.** A table or column the schema names is gone: `SCHEMA_DAMAGED`;
+  the file cannot be written or used (read-only, locked): `DB_ERROR`; a full disk: `DISK_FULL`; anything else:
+  `STORE_FAILED`. Every one has rc 1, `row_may_exist: false` and stores nothing, on the engine, Tier 0 and batch-store.
+- **A test measured the reranker's scale whenever a compute card was visible.** The ranking control now states the
+  path it measures (reranker off).
+
 ## [1.2.0] — 2026-11-25
 
 **What this does not do.** A program that reads an outside memory, restates it in its own words and stores the

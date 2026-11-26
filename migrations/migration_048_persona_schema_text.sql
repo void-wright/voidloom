@@ -1,0 +1,18 @@
+-- migration_048_persona_schema_text.sql
+--
+-- WHAT: the schema text of three tables stops naming the persona the first installs used. council_sessions'
+-- participants DEFAULT lists the generic synthesizer seat; three comments (in council_sessions, arcane_manifests and
+-- self_eval_reports) lose the name. Nothing a program reads changes: the code always writes participants itself, and a
+-- column created with its table stores its value in every row, so editing its DEFAULT changes no stored row.
+--
+-- HOW: SQLite has no ALTER for a DEFAULT or a comment, so this step edits the schema text, which a statement file
+-- cannot do. schema_migrator.apply runs it after every file, as marks.migrate_048:
+--   * every piece is matched exactly once, in its old form or (already done) its new form; anything else is an abort;
+--   * one BEGIN IMMEDIATE transaction; PRAGMA schema_version is bumped; quick_check, integrity_check and
+--     foreign_key_check before and after, and every row of the three tables hashed before and after, inside the
+--     transaction and again on a new connection. On any difference nothing is changed;
+--   * recorded in schema_migrations; a brain that cannot be written is left alone.
+-- Rollback: marks.rollback_048 makes the reverse edit under the same checks. No copy of the old text is kept: the edit
+-- is its own undo. cross_tier_bridges keeps the CHECK of its frozen migration (a declared limit).
+--
+-- Nothing below is a statement: the edit is the step described above.

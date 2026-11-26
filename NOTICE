@@ -81,5 +81,9 @@ legacy labels are also read through three alias maps in the code. They are
 accepted on read and never written by default: a new brain's rows are labelled
 `local` until its owner names it (`voidloom brain-label set NAME`), and no
 default, fallback, example or printed text of an install carries them. They
-stay identifiers until a major-version rename with read aliases.
+stay identifiers until a major-version rename with read aliases. The persona's
+name is gone from a new brain's schema text (migration_048) except the CHECK of
+`cross_tier_bridges`. A brain that held memories when migration_047 ran keeps,
+in metadata, the table text that step replaced: its deliberate undo copy, which
+names the two legacy labels. An empty brain keeps no such copy.
 `voidloom/tests/test_names_confined.py` re-derives this paragraph.

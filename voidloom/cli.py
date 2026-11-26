@@ -2142,7 +2142,8 @@ def _doctor_label(db: Optional[str]) -> Dict[str, Any]:
         import marks
         conn = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
         try:
-            out = {**marks.label_of(conn), "rows_by_label": marks.label_counts(conn), "migration_047": marks.status_047(conn)}
+            out = {**marks.label_of(conn), "rows_by_label": marks.label_counts(conn), "migration_047": marks.status_047(conn),
+                   "migration_048": marks.status_048(conn)}
         finally:
             conn.close()
     except Exception as e:  # noqa: BLE001 -- doctor reports, it does not raise

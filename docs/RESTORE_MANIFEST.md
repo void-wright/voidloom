@@ -83,7 +83,7 @@ built at import (constructing a path is not opening it) and read only on
 `init`, `migrate`, or self-heal. Warden's migration SQL is *embedded in the
 Python*, not on disk.
 
-The tree ships 40 `migration_*.sql` and the code names 27 of them by file. `schema_migrator`
+The tree ships 41 `migration_*.sql` and the code names 29 of them by file. `schema_migrator`
 applies them all, whether the code names them or not.
 
 ## 4. Sidecars — small files with large consequences
@@ -141,7 +141,7 @@ Three smaller ones:
 
 1. The 34 modules above, in one flat directory.
 2. `claude_memory.db` — the brain itself.
-3. `schema.sql` + the 40 `migration_*.sql`.
+3. `schema.sql` + the 41 `migration_*.sql`.
 4. `~/.cache/huggingface/hub/` **and** `.../modules/transformers_modules/`.
 5. The env-dir sidecars — above all the one declaring the GPU device — and the
    thinker's `thinker/` folder, with `THINKER_RECORD` and `embedder.lock.json` beside

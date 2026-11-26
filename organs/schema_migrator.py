@@ -531,10 +531,12 @@ def apply(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
     finally:
         conn.close()
     step_047: Dict[str, Any] = {"status": "skipped"}
+    step_048: Dict[str, Any] = {"status": "skipped"}
     if pathlib.Path(mdir).resolve() == migrations_dir().resolve():
         try:
             import marks
             step_047 = marks.migrate_047(db)
+            step_048 = marks.migrate_048(db)
         except ImportError:
             pass
     errs = [(r["file"], r["errors"]) for r in files if r["errors"]]
@@ -549,6 +551,7 @@ def apply(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
         "skipped_already_applied": skipped,
         "triggers_restored": restored,
         "migration_047": step_047,
+        "migration_048": step_048,
         # These count STATEMENTS EXECUTED, not objects created: `CREATE TABLE
         # IF NOT EXISTS` executes as a silent no-op, so a clean re-run still
         # reports a large `statements_executed`.  Naming it "applied" made a
@@ -602,8 +605,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                   + (f"  -> {', '.join(x.replace('migration_', '').replace('.sql', '') for x in _sk[:6])}"
                      + (" ..." if len(_sk) > 6 else "") if _sk else ""))
         if a.action == "apply":
-            _m = res.get("migration_047") or {}
-            print(f"  migration_047      : {_m.get('status')}" + (f" -- {_m['reason']}" if _m.get("reason") else ""))
+            for _k in ("migration_047", "migration_048"):
+                _m = res.get(_k) or {}
+                print(f"  {_k}      : {_m.get('status')}" + (f" -- {_m['reason']}" if _m.get("reason") else ""))
         print(f"  missing            : {res['missing_count']}"
               + (f"  -> {', '.join(res['missing'][:8])}" if res["missing"] else ""))
         for what in ("missing_triggers", "altered_triggers", "missing_columns"):
