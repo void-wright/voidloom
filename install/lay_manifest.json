@@ -23,7 +23,7 @@
     "skills": 19
    }
   },
-  "derived_at_head": "1cbb40b",
+  "derived_at_head": "aace309",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
   "entries": 574,
   "not_laid": {
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 60693,
+   "bytes": 61615,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "aed78377f838ef77f8d7263a96087adafc0fbcc1a638fe3a84627e3ab49cbb1d",
+   "sha256": "f5eceb3c949ca7ec97110cead0dfe2bfacae77b67593821027fb90fb6fae9a06",
    "src": "CHANGELOG.md"
   },
   {
@@ -193,7 +193,7 @@
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "f1a8d4a39bf4cf5678a33c1953a3132348d3ded8dc86069c360aacdc671384b3",
+   "sha256": "60b940410d43a5204b360a8365d00a6c62b547d3adf06798f25e3dbce05063e1",
    "src": "COMPAT.json"
   },
   {
@@ -2893,7 +2893,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "75f85f31192779f3bd103bc72b91ffa5df4b09d8f2b7268d974a6885ac1feb94",
+   "sha256": "518b2ea0b3c8904f312543a7e48558a9591da9a04befd70a41a7e1ddd4f366da",
    "src": "voidloom/__init__.py"
   },
   {
@@ -2913,7 +2913,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "08c5d2a6266fdc811fea8142c748b64cce08938eb5ca85edc6df378d89823a75",
+   "sha256": "b1005fafc0748bf3e652314bddea779d78a2cc708b2a1be703a75179b798d38f",
    "src": "voidloom/_agent_context.py"
   },
   {

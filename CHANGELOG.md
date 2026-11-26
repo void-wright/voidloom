@@ -6,6 +6,8 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-25
+
 **What this does not do.** A program that reads an outside memory, restates it in its own words and stores the
 restatement as a plain store writes an owner's row: nothing here sees the words pass through it. That relay is open. A
 1.1.3 program on a migrated brain cannot express *outside*; its plain store is an owner write. 1.2.0 is the first
@@ -107,6 +109,15 @@ Known limits, all of them declared rather than fixed:
   `--no-temporal-rerank` no longer binds every later recall of the process.
 - `memory_write` dropped a column the schema lacks with a warning; for a mark it now refuses.
 - A store whose row a trigger discarded reported another row's id as its own.
+- **A store on a full disk no longer answers `ok`.** When a later statement of a store failed (the novelty update on a
+  full disk, for one), the whole store was rolled back but the answer was `ok` with an id that did not exist. A database
+  error now rolls back and answers `DISK_FULL` or `STORE_FAILED` with `row_may_exist: false` and a non-zero exit, in both
+  engines and per item in `batch-store`.
+- Importance outside 0 to 1, NaN or infinity is refused (`IMPORTANCE_OUT_OF_RANGE`) by the facade, the engine and lite
+  `store`, `update` and `batch-store` items, instead of being stored or clamped. `voidloom store` keeps its existing code
+  `invalid_importance`.
+- A recall on a read-only brain that has no `confidence` column answers instead of raising; a database error in a facade
+  recall answers `BRAIN_UNREADABLE`.
 
 ### For callers
 
@@ -761,7 +772,8 @@ The first public release, under the Apache License 2.0.
 - Some schema fields and built-in labels carry names from the system's first
   installation; [`NOTICE`](./NOTICE) explains why they are kept.
 
-[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/void-wright/voidloom/releases/tag/v1.2.0
 [1.1.3]: https://github.com/void-wright/voidloom/releases/tag/v1.1.3
 [1.1.2]: https://github.com/void-wright/voidloom/releases/tag/v1.1.2
 [1.1.1]: https://github.com/void-wright/voidloom/releases/tag/v1.1.1
