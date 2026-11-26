@@ -41,7 +41,7 @@ FEATURES: Dict[str, str] = {
 
 TOOLKIT: Dict[str, Any] = {
     "toolkit": "voidloom",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "summary": (
         "LLM execution surface over the local wizard-library memory brain; a thin "
         "facade over claude_memory.py. Every verb takes --json. Ungated locally; "

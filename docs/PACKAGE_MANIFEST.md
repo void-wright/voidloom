@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-26T11:04:12Z from the working tree whose HEAD was `ccba3d0`
+> Generated 2026-11-26T11:06:44Z from the working tree whose HEAD was `6becbd0`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 579 |
 | files hashed | 579 |
-| total bytes | 12323413 |
+| total bytes | 12323509 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -112,9 +112,9 @@
 | file | bytes | sha256 |
 |---|---:|---|
 | `voidloom/README.md` | 16490 | `89b14c5e5495c16e` |
-| `voidloom/__init__.py` | 1835 | `518b2ea0b3c8904f` |
+| `voidloom/__init__.py` | 1835 | `3321a43691450fba` |
 | `voidloom/__main__.py` | 188 | `37d219722ff5765c` |
-| `voidloom/_agent_context.py` | 26951 | `2072ee878baa3660` |
+| `voidloom/_agent_context.py` | 26951 | `3d11a4ef076cfe23` |
 | `voidloom/_approvals_faces.py` | 43572 | `be442b62098db58a` |
 | `voidloom/_batch.py` | 17565 | `a63f794d60549698` |
 | `voidloom/_bootstrap.py` | 22957 | `05a066e5115d8c5a` |
@@ -473,7 +473,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 158772 | `b020d7f1e3e6361e` |
+| `install/lay_manifest.json` | 158772 | `b87b6c810b4dce63` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |
@@ -633,14 +633,14 @@
 | `docs/gates/CORPUS_INDEX.md` | 7253 | `593555d97bc3cf5a` |
 | `docs/gates/GATE_v1.md` | 12150 | `729190c119096cd6` |
 
-### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 509674 bytes
+### `(root)` — Front door: README, licence, installer, manifest  ·  11 files, 509770 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
 | `.gitignore` | 6351 | `921af78d4a45fc62` |
-| `CHANGELOG.md` | 66870 | `832fb34b2f8c8e8f` |
+| `CHANGELOG.md` | 66966 | `71b36a2c12a33fd2` |
 | `CODE_OF_CONDUCT.md` | 837 | `d8a208bd8c0f35ff` |
-| `COMPAT.json` | 3169 | `ad07589b2d8bcd06` |
+| `COMPAT.json` | 3169 | `579e078c655fa2e8` |
 | `CONTRIBUTING.md` | 7188 | `1afdadec1fd60f91` |
 | `LICENSE` | 11362 | `73c162a8c72b5ed4` |
 | `NOTICE` | 5325 | `188a38f39abd6f71` |

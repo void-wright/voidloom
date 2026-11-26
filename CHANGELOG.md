@@ -6,6 +6,8 @@ All notable changes to Voidloom are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-11-26
+
 ### Added
 
 - **migration_048: the names of the first installation leave the schema text.** The council's `participants` DEFAULT
@@ -832,7 +834,8 @@ The first public release, under the Apache License 2.0.
 - Some schema fields and built-in labels carry names from the system's first
   installation; [`NOTICE`](./NOTICE) explains why they are kept.
 
-[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/void-wright/voidloom/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/void-wright/voidloom/releases/tag/v1.2.1
 [1.2.0]: https://github.com/void-wright/voidloom/releases/tag/v1.2.0
 [1.1.3]: https://github.com/void-wright/voidloom/releases/tag/v1.1.3
 [1.1.2]: https://github.com/void-wright/voidloom/releases/tag/v1.1.2
