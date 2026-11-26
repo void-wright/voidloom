@@ -56,6 +56,7 @@ import argparse
 import json
 import re
 import os
+import math
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -518,6 +519,10 @@ def cmd_store(args: argparse.Namespace) -> int:
         sys.stderr.write(f"ERROR: invalid kind '{args.kind}'. "
                          f"Valid: {sorted(VALID_KINDS)}\n")
         return 2
+    imp = args.importance
+    if isinstance(imp, bool) or not isinstance(imp, (int, float)) or not math.isfinite(imp) or not 0.0 <= imp <= 1.0:
+        return _refuse("IMPORTANCE_OUT_OF_RANGE", f"importance must be a number from 0 to 1; got {imp!r}. "
+                                                  "Nothing was stored.")
     ask = {k: getattr(args, k, None) for k in ("outside", "research", "author", "session_id", "parent_ref", "source_ids")}
     if _marks is None and any(v not in (None, False, []) for v in ask.values()):
         return _refuse("OUTSIDE_REQUIRES_MARK", "this store asked for a mark and marks.py is not laid beside this file. "

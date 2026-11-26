@@ -607,6 +607,19 @@ def read_back(db: Union[str, Path], memory_id: Any, *, content: str, outside: bo
                      memory_id=memory_id, row_may_exist=True)
 
 
+def unit_interval(value: Any, name: str = "importance") -> float:
+    """`value` as a stored importance or confidence: a finite number from 0 to 1. Anything else refuses
+    IMPORTANCE_OUT_OF_RANGE / CONFIDENCE_OUT_OF_RANGE before anything is written; it is never clamped."""
+    try:
+        number = float(value) if not isinstance(value, bool) else None
+    except (TypeError, ValueError):
+        number = None
+    if number is None or not math.isfinite(number) or not 0.0 <= number <= 1.0:
+        code = f"{name.upper()}_OUT_OF_RANGE"
+        raise MarksError(code, f"{name} must be a number from 0 to 1; got {ascii(value)[:40]}. Nothing was written.")
+    return number
+
+
 def write_failure(e: BaseException) -> MarksError:
     """A store whose writing failed and was rolled back: DISK_FULL when the database or its disk is full, otherwise
     STORE_FAILED. Nothing was stored, and the answer carries no id."""

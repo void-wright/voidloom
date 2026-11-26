@@ -160,6 +160,11 @@ def recall_batch(queries: Sequence[RecallItem], *, top_k: int = 5,
     return results
 
 
+class _OutOfRange(ValueError):
+    """An item's importance that is not a number from 0 to 1: the code the single store answers with."""
+    code = "IMPORTANCE_OUT_OF_RANGE"
+
+
 def _validate_store_item(item: StoreItem) -> Dict[str, Any]:
     """Validate + normalise a memory dict into the kwargs ``store_full`` expects.
 
@@ -180,11 +185,11 @@ def _validate_store_item(item: StoreItem) -> Dict[str, Any]:
             raise ValueError(f"store item missing required non-empty {req!r}")
     importance = item.get("importance", 0.5)
     try:
-        importance = float(importance)
+        importance = float(importance) if not isinstance(importance, bool) else float("nan")
     except (TypeError, ValueError):
-        raise ValueError(f"importance {importance!r} is not a number")
-    if not (0.0 <= importance <= 1.0):
-        raise ValueError(f"importance {importance} out of range [0.0, 1.0]")
+        raise _OutOfRange(f"importance {importance!r} is not a number")
+    if not (0.0 <= importance <= 1.0):              # NaN fails this too
+        raise _OutOfRange(f"importance {importance} out of range [0.0, 1.0]")
     tags = item.get("tags", "")
     if isinstance(tags, (list, tuple)):
         tags = ",".join(str(t) for t in tags)
@@ -304,8 +309,8 @@ def store_batch(items: Sequence[StoreItem], *,
                             rec[key] = res[key]
                 results.append({**rec, "result": res})
         except Exception as e:  # noqa: BLE001 — per-item isolation is the contract
-            results.append({"index": i, "status": "error",
-                            "message": f"{type(e).__name__}: {e}"})
+            results.append({"index": i, "status": "error", "message": f"{type(e).__name__}: {e}",
+                            **({"code": e.code} if isinstance(getattr(e, "code", None), str) else {})})
     return results
 
 

@@ -33,6 +33,7 @@ import argparse
 import io
 import json
 import os
+import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -783,7 +784,12 @@ def recall(query: str, top_k: int = 5, explain: bool = False,
     ns = _recall_namespace(query, top_k, explain=explain,
                            no_cross_tier=no_cross_tier, leads=leads, explore=explore,
                            no_rerank=no_rerank, no_log=no_log)
-    res = _call_engine("recall", ns, db_path=db_path)
+    try:
+        res = _call_engine("recall", ns, db_path=db_path)
+    except sqlite3.Error as e:          # a brain this engine cannot read as it expects: an answer, never a raise
+        return {"status": "error", "error": "BRAIN_UNREADABLE", "code": "BRAIN_UNREADABLE", "action": "recall",
+                "degraded": True, "message": f"{type(e).__name__}: {e}. The brain could not be read as this release "
+                "expects; run doctor, or open it once writable so its schema can be brought up to date."}
     if explain:
         _attach_structured_explain(res)
     return res

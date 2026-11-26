@@ -1475,6 +1475,10 @@ def _marks_refusal(e: "marks.MarksError", action: str):
 
 def cmd_store(args):
     t0 = time.time()
+    try:
+        args.importance = marks.unit_interval(args.importance)
+    except marks.MarksError as e:
+        _marks_refusal(e, "store")
     conn = _get_conn()
 
     category = args.category
@@ -1964,8 +1968,9 @@ def cmd_recall(args):
     if has_kind_col and results:
         ids = [r["id"] for r in results]
         placeholders = ",".join("?" * len(ids))
+        # an old brain opened read-only cannot be given the confidence column: it reads as none
         kind_rows = conn.execute(
-            f"SELECT id, kind, confidence FROM memories "
+            f"SELECT id, kind, {'confidence' if 'confidence' in columns else 'NULL'} FROM memories "
             f"WHERE id IN ({placeholders})", ids
         ).fetchall()
         kind_map = {row[0]: row for row in kind_rows}
@@ -2018,7 +2023,8 @@ def cmd_recall(args):
                 exp_kind_map: Dict[int, tuple] = {}
                 if has_kind_col:
                     exp_kind_rows = conn.execute(
-                        f"SELECT id, kind, confidence FROM memories WHERE id IN ({expanded_placeholders})",
+                        f"SELECT id, kind, {'confidence' if 'confidence' in columns else 'NULL'} FROM memories "
+                        f"WHERE id IN ({expanded_placeholders})",
                         expanded_ids,
                     ).fetchall()
                     exp_kind_map = {row[0]: (row[1], row[2]) for row in exp_kind_rows}
@@ -2698,6 +2704,11 @@ def cmd_list(args):
 
 def cmd_update(args):
     t0 = time.time()
+    if args.importance is not None:
+        try:
+            args.importance = marks.unit_interval(args.importance)
+        except marks.MarksError as e:
+            _marks_refusal(e, "update")
     conn = _get_conn()
 
     mem = conn.execute("SELECT id, content FROM memories WHERE id = ?", (args.id,)).fetchone()
