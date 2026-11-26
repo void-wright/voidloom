@@ -40,7 +40,9 @@ Known limits, all of them declared rather than fixed:
 **Upgrading a brain you want to keep a name for.** Every row an existing brain already holds keeps its label. From 1.2.0
 on, a row is labelled with the brain's own label (`voidloom brain-label set NAME`), else `VOIDLOOM_BRAIN`, else `local`.
 Set the label BEFORE the first 1.2.0 run if you want new rows to carry the name the old ones do. The envelope key
-`source_brain` keeps its name and its type (a string).
+`source_brain` keeps its name and its type (a string). Stop every 1.1.3 timer and any second checkout that writes to
+the brain before upgrading: 1.1.3 code keeps writing the legacy label into every row it stores, whatever the brain's own
+label is.
 
 ### Added
 

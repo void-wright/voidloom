@@ -222,7 +222,8 @@ _INJECTION_PATTERNS = [
         r"\bnew instructions?\b\s*[:=]",
         r"\bas an ai\b.*\byou (?:should|must|will)\b",
         r"\boverride (?:your |the )?(?:rules|instructions|guardrails|safety)\b",
-        r"\b(?:do not|don'?t) (?:tell|inform|alert|notify) (?:the owner|the user|anyone)\b",
+        # an instruction to keep something from whoever reads the brain: the owner, the user, anyone, or a person by name
+        r"\b(?:do not|don'?t) (?:tell|inform|alert|notify) (?:the owner|the user|anyone|[a-z][\w'-]*)\b",
     )
 ]
 

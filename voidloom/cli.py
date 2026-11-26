@@ -1760,8 +1760,10 @@ def verb_batch_store(args) -> Dict[str, Any]:
     summary = _batch.summarize(results)
     # C5: the verdict is taken from the SAME count this envelope prints.
     _env = (incomplete if summary.get("failed") else ok)
+    warned = sorted({r["brain_label_warning"] for r in results if isinstance(r, dict) and r.get("brain_label_warning")})
     env = _env("batch_store_incomplete" if summary.get("failed") else "batch_store_ok",
-               {**summary, "results": results}, verb="batch-store")
+               {**summary, **({"brain_label_warning": "; ".join(warned)} if warned else {}), "results": results},
+               verb="batch-store")
     return _lift_fault(env, "batch_store_degraded",
                        any(_engine_degraded(r.get("result")) for r in results if isinstance(r, dict)))
 
@@ -2148,6 +2150,9 @@ def _doctor_label(db: Optional[str]) -> Dict[str, Any]:
     if out["mismatch"]:
         out["warning"] = (f"brain label: VOIDLOOM_BRAIN={out['env']} differs from this brain's own label {out['key']!r}; "
                           f"rows are written as {out['key']!r}. Rows by label: {out['rows_by_label']}")
+    elif out.get("env_invalid"):
+        out["warning"] = (f"brain label: VOIDLOOM_BRAIN={out['env_invalid']!r} is not a label (1 to 64 of a-z, 0-9, _ "
+                          f"and -) and is ignored; rows are written as {out['label']!r}.")
     elif out["legacy_check"]:
         out["warning"] = ("brain label: this brain's schema still accepts only the legacy labels (migration_047: "
                           f"{out['migration_047'].get('reason') or out['migration_047'].get('status')}), so new rows are "

@@ -292,7 +292,7 @@ def store_batch(items: Sequence[StoreItem], *,
             res = _facade.store_full(db_path=resolved, **kw)
             if isinstance(res, dict) and res.get("status") == "ok":
                 rec = {"index": i, "status": "ok", "memory_id": res.get("memory_id")}
-                for key in ("stored_sha256", "marks", "premark"):       # read back by the engine after its commit
+                for key in ("stored_sha256", "marks", "premark", "brain_label_warning"):    # as the engine answered
                     if key in res:
                         rec[key] = res[key]
                 results.append({**rec, "result": res})

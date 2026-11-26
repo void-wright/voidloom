@@ -534,8 +534,10 @@ def cmd_store(args: argparse.Namespace) -> int:
     summary = args.summary or (args.content[:100] + ("..." if len(args.content) > 100 else ""))
     wanted, stored = None, {}
     mid = None
+    warning = None
     try:
         if _marks is not None:
+            warning = _marks.label_warning(_marks.label_of(conn))
             _marks.ensure_triggers(conn)
             wanted = _marks.store_marks(conn, **ask, confidence=1.0)
         mid = _insert_memory(
@@ -566,6 +568,7 @@ def cmd_store(args: argparse.Namespace) -> int:
         "status": "ok", "action": "store", "memory_id": mid,
         **stored, **({"premark": True} if wanted is not None and wanted.premark else {}),
         "importance": args.importance,   # the value PERSISTED (lite applies no surprise adjustment): the H4 echo contract
+        **({"brain_label_warning": warning} if warning else {}),
         "mode": "fts5-keyword", "embedding": "deferred",
         "note": ("Stored + FTS-indexed (keyword recall works now). Semantic embedding "
                  "is deferred — install Tier 1 (full CLI) to add semantic recall; it "

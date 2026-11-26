@@ -425,15 +425,19 @@ def _opts(argv, names, flags=()):
     return o
 
 
+#: what a wrong call prints: the CLI part of the docstring, not the history above it
+USAGE = __doc__[__doc__.index("CLI (every verb"):]
+
+
 def main(argv):
     if not argv:
-        sys.stderr.write(__doc__)
+        sys.stderr.write(USAGE)
         return 64
     verb, rest = argv[0], argv[1:]
     if verb == "plan":
         o = _opts(rest, ("--organs", "--request", "--python", "--reranker-override", "--os", "--arch", "--pin-from"))
         if o is None:
-            sys.stderr.write(__doc__)
+            sys.stderr.write(USAGE)
             return 64
         py = None
         if o["--python"]:
@@ -464,7 +468,7 @@ def main(argv):
     if verb == "on-proof-failure":
         o = _opts(rest, ("--backend", "--reason", "--owner-line"))
         if o is None or not o["--backend"]:
-            sys.stderr.write(__doc__)
+            sys.stderr.write(USAGE)
             return 64
         d = on_proof_failure(o["--backend"], o["--reason"] or "", o["--owner-line"] or "")
         for k in ("action", "label", "comment", "announce"):
@@ -473,7 +477,7 @@ def main(argv):
     if verb == "write-gate":
         o = _opts(rest, ("--config", "--plan"), flags=("--dry-run",))
         if o is None or not o["--config"] or not o["--plan"]:
-            sys.stderr.write(__doc__)
+            sys.stderr.write(USAGE)
             return 64
         if o["--plan"] == "-":
             p = json.load(sys.stdin)
@@ -483,7 +487,7 @@ def main(argv):
         rc, msg = write_gate(o["--config"], p, dry_run=o["--dry-run"])
         print(json.dumps({"rc": rc, "message": msg}))
         return rc
-    sys.stderr.write(__doc__)
+    sys.stderr.write(USAGE)
     return 64
 
 

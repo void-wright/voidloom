@@ -862,6 +862,8 @@ _LABEL = re.compile(r"[a-z0-9_-]{1,64}")
 _LEGACY_ALT = "\\s*,\\s*".join("'%s'" % n for n in LEGACY_BRAINS)
 #: the CHECK an older schema put on memories.source_brain, in either of the two spellings its two creation routes left
 BRAIN_CHECK = re.compile(r"\s*CHECK\s*\(\s*source_brain\s+IN\s*\(\s*" + _LEGACY_ALT + r"\s*\)\s*\)", re.I)
+#: any CHECK that names source_brain, however it is spelled: quoted, bracketed, commented, values in any order
+ANY_BRAIN_CHECK = re.compile(r"CHECK\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*?[\"`\[]?\bsource_brain\b", re.I)
 BRAIN_DEFAULT = re.compile(r"(\bsource_brain\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+)'" + LEGACY_BRAINS[0] + "'", re.I)
 
 
@@ -888,13 +890,32 @@ def label_of(conn: sqlite3.Connection) -> Dict[str, Any]:
     env = env if valid_label(env) else None
     label, source = (key, "database") if key else (env, "environment") if env else (GENERIC_BRAIN, "default")
     try:
-        checked = bool(BRAIN_CHECK.search(_memories_sql(conn)))
+        checked = bool(ANY_BRAIN_CHECK.search(_memories_sql(conn)))
     except sqlite3.Error:
         checked = False
+    raw_env = (os.environ.get(LABEL_ENV) or "").strip()
     if checked and label not in LEGACY_BRAINS:
         label, source = LEGACY_BRAINS[0], "legacy-check"
-    return {"label": label, "source": source, "key": key, "env": env,
-            "mismatch": bool(key and env and key != env), "legacy_check": checked}
+    out = {"label": label, "source": source, "key": key, "env": env,
+           "mismatch": bool(key and env and key != env), "legacy_check": checked}
+    if raw_env and env is None:
+        out["env_invalid"] = raw_env
+    return out
+
+
+def label_warning(info: Dict[str, Any]) -> Optional[str]:
+    """The sentence a store answers with when the label it wrote is not the one the environment asked for."""
+    if info.get("mismatch"):
+        return (f"{LABEL_ENV}={info['env']} differs from this brain's own label {info['key']!r}; the brain's label "
+                "was written")
+    if info.get("env_invalid"):
+        return (f"{LABEL_ENV}={info['env_invalid']!r} is not a label (1 to 64 of a-z, 0-9, _ and -) and was ignored; "
+                f"{info['label']!r} was written")
+    asked = info.get("key") or info.get("env")
+    if info.get("source") == "legacy-check" and asked:
+        return (f"this brain's schema still accepts only the legacy labels, so {info['label']!r} was written instead of "
+                f"{asked!r}: run the migrator (doctor says why it has not applied)")
+    return None
 
 
 def brain_label(conn: sqlite3.Connection) -> str:
@@ -917,7 +938,7 @@ def set_label(db: Union[str, Path], label: Any, *, force: bool = False) -> Dict[
             conn.execute("ROLLBACK")
             raise MarksError("LABEL_ALREADY_SET", f"this brain is labelled {held[0]!r}; pass --force to change it",
                              label=held[0])
-        if BRAIN_CHECK.search(_memories_sql(conn)) and label not in LEGACY_BRAINS:
+        if ANY_BRAIN_CHECK.search(_memories_sql(conn)) and label not in LEGACY_BRAINS:
             conn.execute("ROLLBACK")
             raise MarksError("BRAIN_NEEDS_MIGRATION", "this brain's schema accepts only the legacy labels until "
                              "migration_047 has run (python3 organs/schema_migrator.py apply --db <brain>)")
@@ -948,9 +969,11 @@ def label_counts(conn: sqlite3.Connection, limit: int = 8) -> Dict[str, int]:
         return {}
 
 
-def _label_hash(conn: sqlite3.Connection) -> str:
+def _label_hash(conn: sqlite3.Connection, upto: Optional[int] = None) -> str:
+    """Every row's (id, source_brain), hashed; with `upto`, only the rows up to that id."""
     h = hashlib.sha256()
-    for mid, label in conn.execute("SELECT id, source_brain FROM memories ORDER BY id"):
+    for mid, label in conn.execute("SELECT id, source_brain FROM memories WHERE ? IS NULL OR id <= ? ORDER BY id",
+                                   (upto, upto)):
         h.update(f"{mid}\x1f{label}\x1e".encode("utf-8", "surrogatepass"))
     return h.hexdigest()
 
@@ -1023,6 +1046,10 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
             return out
         if len(BRAIN_CHECK.findall(old)) > 1 or len(BRAIN_DEFAULT.findall(old)) > 1:
             return {**out, "status": "aborted", "reason": "the column's text names the legacy labels more than once"}
+        if len(ANY_BRAIN_CHECK.findall(old)) != len(BRAIN_CHECK.findall(old)):
+            return {**out, "status": "aborted",
+                    "reason": "a CHECK on source_brain is written in a form this migration does not know; nothing was "
+                              "changed (the brain keeps writing the legacy label)"}
         try:
             conn.execute("BEGIN IMMEDIATE")
         except sqlite3.Error as e:
@@ -1041,6 +1068,7 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
         if new == old:
             conn.execute("ROLLBACK")
             return {**out, "status": "already", "rows": rows}
+        top = conn.execute("SELECT COALESCE(MAX(id), 0) FROM memories").fetchone()[0]
         before = _label_hash(conn)
         try:
             _write_schema(conn, new)
@@ -1054,12 +1082,22 @@ def migrate_047(db: Union[str, Path], *, edit: Optional[Any] = None) -> Dict[str
         conn.execute("COMMIT")
     finally:
         conn.close()
+    # Read back on a new connection. Another writer may have stored rows since the COMMIT: only the rows that existed
+    # inside the edit are compared, and the old text is never put back over a row it would refuse.
     again = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
     try:
         wrong = (None if _memories_sql(again) == new else "the schema read back differs") or _checks(again, pre) or \
-            (None if _label_hash(again) == before else "a row's label changed")
+            (None if _label_hash(again, top) == before else "a row's label changed")
         if wrong:
             again.execute("BEGIN IMMEDIATE")
+            outside = again.execute(f"SELECT COUNT(*) FROM memories WHERE source_brain NOT IN "
+                                    f"({','.join('?' * len(LEGACY_BRAINS))})", LEGACY_BRAINS).fetchone()[0]
+            if outside:
+                again.execute("ROLLBACK")
+                return {**out, "status": "applied-unverified", "rows": rows, "rows_outside_legacy": outside,
+                        "reason": f"{wrong}, and {outside} row(s) already hold a label the old schema refuses, so it was "
+                                  "not put back: check this brain (doctor) and restore the copy taken before the upgrade "
+                                  "if it is damaged"}
             _write_schema(again, old)
             again.execute("DELETE FROM metadata WHERE key = ?", (SAVED_SQL_KEY,))
             again.execute("COMMIT")
@@ -1081,10 +1119,11 @@ def status_047(conn: sqlite3.Connection) -> Dict[str, Any]:
         return {"status": "unreadable", "reason": f"{type(e).__name__}: {e}"}
     if not re.search(r"\bsource_brain\b", old):
         return {"status": "not applicable"}
-    if not BRAIN_CHECK.search(old):
+    if not ANY_BRAIN_CHECK.search(old):
         return {"status": "applied"}
-    if len(BRAIN_CHECK.findall(old)) > 1:
-        return {"status": "pending", "reason": "the column's text names the legacy labels more than once: an apply aborts"}
+    if len(BRAIN_CHECK.findall(old)) != 1 or len(ANY_BRAIN_CHECK.findall(old)) != 1:
+        return {"status": "pending", "reason": "a CHECK on source_brain is written in a form migration_047 does not "
+                                               "know: an apply aborts and changes nothing"}
     try:
         damaged = _damaged(_state(conn))
     except sqlite3.Error as e:
@@ -1095,35 +1134,75 @@ def status_047(conn: sqlite3.Connection) -> Dict[str, Any]:
 
 
 def rollback_047(db: Union[str, Path]) -> Dict[str, Any]:
-    """Put back the schema text migration_047 replaced, only while every row still holds a legacy label (the older CHECK
-    would refuse any other). Otherwise restore the copy taken before the upgrade."""
-    conn = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
+    """Put back the schema text migration_047 replaced: only while the table's text is still exactly what 047 wrote from
+    it (a column added since would vanish otherwise), and only while every row holds a legacy label (the older CHECK
+    would refuse any other). Otherwise, restore the copy taken before the upgrade. Every refusal is typed; read back on a
+    new connection."""
+    if not os.access(str(db), os.W_OK) or not os.access(os.path.dirname(os.path.abspath(str(db))), os.W_OK):
+        return {"status": "refused", "code": "READ_ONLY", "reason": "the brain or its folder cannot be written"}
+    try:
+        conn = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
+    except sqlite3.Error as e:
+        return {"status": "refused", "code": "BRAIN_UNREADABLE", "reason": f"{type(e).__name__}: {e}"}
     try:
         conn.execute("BEGIN IMMEDIATE")
         saved = conn.execute("SELECT value FROM metadata WHERE key = ?", (SAVED_SQL_KEY,)).fetchone()
         if saved is None:
             conn.execute("ROLLBACK")
-            return {"status": "refused", "reason": "no saved schema text: migration_047 did not change this brain"}
+            return {"status": "refused", "code": "NOTHING_TO_UNDO",
+                    "reason": "no saved schema text: migration_047 did not change this brain"}
+        saved = saved[0]
+        if not isinstance(saved, str) or len(BRAIN_CHECK.findall(saved)) != 1 or len(ANY_BRAIN_CHECK.findall(saved)) != 1:
+            conn.execute("ROLLBACK")
+            return {"status": "refused", "code": "SAVED_TEXT_INVALID",
+                    "reason": "the saved schema text is not one migration_047 would have saved; restore the copy taken "
+                              "before the upgrade instead"}
+        now = _memories_sql(conn)
+        wrote = BRAIN_CHECK.sub("", saved, count=1)
+        could = {wrote, BRAIN_DEFAULT.sub(lambda m: m.group(1) + "'" + GENERIC_BRAIN + "'", wrote, count=1)}
+        if now not in could:
+            conn.execute("ROLLBACK")
+            return {"status": "refused", "code": "SCHEMA_CHANGED_SINCE",
+                    "reason": "the table's text is no longer what migration_047 wrote (something changed it since); "
+                              "restore the copy taken before the upgrade instead"}
         others = conn.execute(f"SELECT COUNT(*) FROM memories WHERE source_brain NOT IN "
                               f"({','.join('?' * len(LEGACY_BRAINS))})", LEGACY_BRAINS).fetchone()[0]
         if others:
             conn.execute("ROLLBACK")
-            return {"status": "refused", "reason": f"{others} rows hold a label the older schema refuses: restore the "
-                                                   "copy taken before the upgrade instead", "rows_outside": others}
+            return {"status": "refused", "code": "LABELS_OUTSIDE_LEGACY", "rows_outside": others,
+                    "reason": f"{others} rows hold a label the older schema refuses: restore the copy taken before the "
+                              "upgrade instead"}
+        top = conn.execute("SELECT COALESCE(MAX(id), 0) FROM memories").fetchone()[0]
         before, pre = _label_hash(conn), _state(conn)
         if _damaged(pre):
             conn.execute("ROLLBACK")
-            return {"status": "refused", "reason": f"the brain is damaged ({_damaged(pre)}): restore the copy instead"}
-        _write_schema(conn, saved[0])
+            return {"status": "refused", "code": "BRAIN_DAMAGED",
+                    "reason": f"the brain is damaged ({_damaged(pre)}): restore the copy instead"}
+        _write_schema(conn, saved)
         conn.execute("DELETE FROM metadata WHERE key = ?", (SAVED_SQL_KEY,))
         wrong = _checks(conn, pre) or (None if _label_hash(conn) == before else "a row's label changed")
         if wrong:
             conn.execute("ROLLBACK")
-            return {"status": "refused", "reason": wrong}
+            return {"status": "refused", "code": "CHECK_FAILED", "reason": wrong}
         conn.execute("COMMIT")
-        return {"status": "ok", "action": "rollback_047"}
+    except sqlite3.Error as e:
+        try:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        return {"status": "refused", "code": "BRAIN_UNREADABLE", "reason": f"{type(e).__name__}: {e}. Nothing was changed."}
     finally:
         conn.close()
+    again = sqlite3.connect(str(db), timeout=60.0, isolation_level=None)
+    try:
+        wrong = (None if _memories_sql(again) == saved else "the schema read back differs") or _checks(again, pre) or \
+            (None if _label_hash(again, top) == before else "a row's label changed")
+    finally:
+        again.close()
+    if wrong:
+        return {"status": "refused", "code": "CHECK_FAILED", "reason": f"written, but on reading back: {wrong}"}
+    return {"status": "ok", "action": "rollback_047"}
 
 
 # --------------------------------------------------------------------------------------------------------------------

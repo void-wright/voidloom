@@ -1760,9 +1760,8 @@ def cmd_store(args):
         result["confidence"] = kind_confidence
     if "source_brain" in columns:
         result["source_brain"] = _label["label"]
-        if _label["mismatch"]:
-            result["brain_label_warning"] = (f"VOIDLOOM_BRAIN={_label['env']} differs from this brain's own label "
-                                             f"{_label['key']!r}; the brain's label was written")
+        if marks.label_warning(_label):
+            result["brain_label_warning"] = marks.label_warning(_label)
         result["source_user"] = _source_user_stamp(args)
     if "encoding_surprise" in columns:
         result["encoding_surprise"] = novelty

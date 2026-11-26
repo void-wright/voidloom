@@ -7,29 +7,29 @@
   ],
   "counts": {
    "by_component": {
-    "core": 558,
+    "core": 559,
     "council": 6,
     "forge": 12
    },
    "by_platform": {
-    "all": 513,
+    "all": 514,
     "posix": 60,
     "windows": 3
    },
    "by_root": {
     "brain": 263,
     "home": 2,
-    "null": 292,
+    "null": 293,
     "skills": 19
    }
   },
-  "derived_at_head": "ab8640f",
+  "derived_at_head": "85472bd",
   "doc": "DERIVED by tools/build_manifest.py --lay from `git ls-files --stage`; never hand-edited. Executed by install/lay.py. Bound to the tree by voidloom/tests/test_lay_manifest.py. derived_at_head is the HEAD at derivation time -- the PARENT of the commit that carries this file, never that commit (a file cannot name the commit it is part of); --check ignores it.",
-  "entries": 576,
+  "entries": 577,
   "not_laid": {
    "declared": {
     "voidloom/tests/": {
-     "count": 281,
+     "count": 282,
      "reason": "the package's test suite is a CHECKOUT surface: it derives its population from `git ls-files` and skips or refuses outside a checkout, so it is run from the package, never from a laid brain; and its gate files necessarily carry the needles and planted faults they gate. Runtime self-tests live in organs/."
     }
    },
@@ -46,7 +46,7 @@
     "install.sh",
     "uninstall.sh"
    ],
-   "total": 292
+   "total": 293
   },
   "platforms": [
    "all",
@@ -167,13 +167,13 @@
    "src": ".gitignore"
   },
   {
-   "bytes": 64214,
+   "bytes": 64407,
    "component": "core",
    "dst": null,
    "exec": false,
    "platform": "all",
    "root": null,
-   "sha256": "5976de35a313b1cda682d7ad242e454d22200b8d145f5a49b59df979995a3fcb",
+   "sha256": "e25629bc646f4415b0c286037b37cdc1c94f6057b7e44564ccf2d855c0e822e9",
    "src": "CHANGELOG.md"
   },
   {
@@ -793,7 +793,7 @@
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "8ad33cc9a9c1a8244bf8a5391f81bb35b6c1bf4dead044958cf6770c16cdf79f",
+   "sha256": "4e63fb0ea1e4431f99ac77630b42d93c7cd6cd09a5436abb0277629474da57d3",
    "src": "docs/LAYOUT.md"
   },
   {
@@ -927,13 +927,13 @@
    "src": "install/CLAUDE.md.template"
   },
   {
-   "bytes": 29139,
+   "bytes": 29267,
    "component": "core",
    "dst": "install/accelerator_plan.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "5aed96c2e335eb035ac10e265c2d193d97eef5dbcfd2d5634ccd7891e6492cf7",
+   "sha256": "0eb1bd2d25e01e0cd70675db307b178f39d771b0592cc17a361578df1b9c66e3",
    "src": "install/accelerator_plan.py"
   },
   {
@@ -1687,23 +1687,23 @@
    "src": "organs/calibration_memory.py"
   },
   {
-   "bytes": 234806,
+   "bytes": 234673,
    "component": "core",
    "dst": "organs/claude_memory.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a27f4cd105be36274c2755e24181e57868e757fdb8cf759aeff95b932e63c99a",
+   "sha256": "eede8ef986c01770f08f3335043d602c2a4f1e7ad07195111fc00d9dfac7a038",
    "src": "organs/claude_memory.py"
   },
   {
-   "bytes": 70074,
+   "bytes": 70224,
    "component": "core",
    "dst": "organs/claude_memory_lite.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "658288280a602fcd1b4d5d1cc832d3e48e1fc59f821487859be444c353dcfc00",
+   "sha256": "6f937d31a09772f6a7ca399a17c17b0fd1e271d5be454edc53b4206d6dc862f3",
    "src": "organs/claude_memory_lite.py"
   },
   {
@@ -1857,13 +1857,13 @@
    "src": "organs/gap_mapping.py"
   },
   {
-   "bytes": 46816,
+   "bytes": 46951,
    "component": "core",
    "dst": "organs/governance.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "dce3f94be09b81b646df435d53d98562f41c2a318dda3ba5d4453499232ed6e1",
+   "sha256": "3e147b993863aabb45befb02264f6f8128e46f937db16edeb28650d26ad8ce81",
    "src": "organs/governance.py"
   },
   {
@@ -1917,13 +1917,13 @@
    "src": "organs/mark_admin.py"
   },
   {
-   "bytes": 59561,
+   "bytes": 64936,
    "component": "core",
    "dst": "organs/marks.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "a5f78d0032fd1ad26e4df55dc5803b08e776553f649c8e3017b21f8f51fb57db",
+   "sha256": "634be9cb5cf4d2c57beced2c26a4cbb5491697844f82c0f5a5224c1efd240e36",
    "src": "organs/marks.py"
   },
   {
@@ -2937,13 +2937,13 @@
    "src": "voidloom/_approvals_faces.py"
   },
   {
-   "bytes": 17563,
+   "bytes": 17565,
    "component": "core",
    "dst": "voidloom/_batch.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "06edbe4bc58e32097037330fec52fdbbc682418b41cf97bdeacb1e13f360311d",
+   "sha256": "a63f794d6054969894916476b908977a245527277d4f7173fd2a025312baf57a",
    "src": "voidloom/_batch.py"
   },
   {
@@ -2987,13 +2987,13 @@
    "src": "voidloom/_paths.py"
   },
   {
-   "bytes": 210758,
+   "bytes": 211204,
    "component": "core",
    "dst": "voidloom/cli.py",
    "exec": false,
    "platform": "all",
    "root": "brain",
-   "sha256": "7972b25dde758515513e51159595da4d4d4e03e5e1c55ddcf9f2cb2354b80c3b",
+   "sha256": "a4220722f034fd9b18b6fbcebcc9a765ea7cf245475679af53ef862ff77afe6c",
    "src": "voidloom/cli.py"
   },
   {
@@ -4625,6 +4625,16 @@
    "root": null,
    "sha256": "4198510f566573599409e00c43b211b32b3a2fd61c3f1d944f38905c8c77904e",
    "src": "voidloom/tests/test_names_confined.py"
+  },
+  {
+   "bytes": 13951,
+   "component": "core",
+   "dst": null,
+   "exec": false,
+   "platform": "all",
+   "root": null,
+   "sha256": "bf1362ccd1032a665fdf2c284a8f52b41a7eeec9e0f7e81c06df12be521679b3",
+   "src": "voidloom/tests/test_names_edges.py"
   },
   {
    "bytes": 1809,
