@@ -1,6 +1,6 @@
 # PACKAGE_MANIFEST — the inventory of what ships
 
-> Generated 2026-11-26T03:16:09Z from the working tree whose HEAD was `e9c4999`
+> Generated 2026-11-26T04:35:06Z from the working tree whose HEAD was `730ffd1`
 > (the shipped sha is the commit that CARRIES this file -- HEAD's successor, by construction;
 > `install/lay_manifest.json`, emitted from the same index, is the file `lay.py` verifies against).
 > **The git index is the declaration.** There is no second exclusion list to
@@ -14,7 +14,7 @@
 |---|---|
 | files tracked | 577 |
 | files hashed | 577 |
-| total bytes | 12278936 |
+| total bytes | 12279165 |
 | tracked but ABSENT on disk | 0 |
 
 ## What is in the package, by subsystem
@@ -107,7 +107,7 @@
 | `organs/wizard_config.py` | 43143 | `b41f3696865a214a` |
 | `organs/wizard_paths.py` | 4635 | `56f9a0a72042f0e9` |
 
-### `voidloom` — The CLI facade  ·  295 files, 4038391 bytes
+### `voidloom` — The CLI facade  ·  295 files, 4038620 bytes
 
 | file | bytes | sha256 |
 |---|---:|---|
@@ -126,7 +126,7 @@
 | `voidloom/tests/_owned_brain.py` | 4509 | `e550d2b14985ecb6` |
 | `voidloom/tests/_thinker_fakes.py` | 15135 | `d63b82c100143add` |
 | `voidloom/tests/_thinker_gemini_fake.py` | 10414 | `f573c49ac6eaa4f5` |
-| `voidloom/tests/_wall_brain.py` | 12087 | `5dd4a5e29f630008` |
+| `voidloom/tests/_wall_brain.py` | 12316 | `2e6ad565255fb0bf` |
 | `voidloom/tests/conftest.py` | 10411 | `37a08850c815bed6` |
 | `voidloom/tests/fixtures/claude_2_1_287_tool_call_unparsed.json` | 3665 | `8fc8387ca64a6711` |
 | `voidloom/tests/fixtures/fakesmi_card_dropped/nvidia-smi` | 752 | `517fe6d7900c1d3d` |
@@ -471,7 +471,7 @@
 | `install/install_crons.sh` | 29886 | `083aef2869e64648` |
 | `install/install_persona_forge.sh` | 6387 | `fe9730cd877a6a74` |
 | `install/lay.py` | 17458 | `90cf7eb13d48e731` |
-| `install/lay_manifest.json` | 158204 | `79840fb896de69c9` |
+| `install/lay_manifest.json` | 158204 | `8efec299c584fbac` |
 | `install/merge_config.py` | 4601 | `8fbef13d93358b0f` |
 | `install/preflight.py` | 15888 | `878d5abbb01219e3` |
 | `install/requirements.hashes.txt` | 1742 | `ca1b6241e2a83b32` |

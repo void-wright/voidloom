@@ -258,6 +258,7 @@ def brain_over(db):
 class Case(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory(prefix="wall-")
+        self.addCleanup(self._td.cleanup)
         self.tmp = Path(self._td.name)
         # any resolver that ignores the path it was given lands here, never on a real brain
         self._env = mock.patch.dict(os.environ, {
@@ -265,11 +266,10 @@ class Case(unittest.TestCase):
             "TRANSFORMERS_OFFLINE": "1", "CUDA_VISIBLE_DEVICES": "", "VOIDLOOM_ENV_DIR": str(self.tmp / "envdir"),
             "HOME": str(self.tmp)})
         self._env.start()
+        # a cleanup, not tearDown: a subclass that skips or fails in its own setUp after this point gets no tearDown,
+        # and the patched HOME would then outlive the test and point every later test at a deleted folder
+        self.addCleanup(self._env.stop)
         (self.tmp / "envdir").mkdir()
-
-    def tearDown(self):
-        self._env.stop()
-        self._td.cleanup()
 
     def needs(self, cond, what):
         """The interface is absent: a RED that names it, never an import error or a TypeError."""
