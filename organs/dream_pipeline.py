@@ -216,19 +216,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
                                            #   else a dict {phase_name: bool} override
 }
 
-# Running brain identity. Resolved from env (the install stamps this), defaults
-# to the canonical primary brain. AGNOSTIC: this is a process-identity env knob,
-# never a behavioral lever -- it only labels authorship (J-alpha).
-_KNOWN_BRAINS = ("milamber", "eddie")
-
-
-def _running_brain() -> str:
-    val = (os.environ.get("VOIDLOOM_BRAIN") or "").strip().lower()
-    if val in _KNOWN_BRAINS:
-        return val
-    return _KNOWN_BRAINS[0]
-
-
 # access_log hygiene: ONLY real session recalls feed the activity profile.
 # Machine traffic (cron / sleep / dreaming / probe reads) is excluded. We match
 # the real-session recall family and exclude any machine sentinel prefix. This is
@@ -346,9 +333,9 @@ def _cosine_distance(a: bytes, b: bytes) -> float:
 
 _DREAM_ALTERS = [
     # (table, column, full ALTER statement)
+    # which brain wrote a row: a label the brain holds (marks.brain_label); a new column names none
     ("memories", "source_brain",
-     "ALTER TABLE memories ADD COLUMN source_brain TEXT NOT NULL DEFAULT 'milamber' "
-     "CHECK (source_brain IN ('milamber', 'eddie'))"),
+     "ALTER TABLE memories ADD COLUMN source_brain TEXT NOT NULL DEFAULT 'local'"),
     ("memories", "source_user",
      "ALTER TABLE memories ADD COLUMN source_user TEXT DEFAULT NULL"),
     ("memories", "encoding_surprise",
@@ -2093,7 +2080,7 @@ def _store_synthesis_node(conn, cfg, label, text, members) -> Optional[int]:
         row = {"content": text, "summary": summary, "category": "insight", "importance": 0.5, "kind": "semantic",
                "source_project": "dream-pipeline"}
         if "source_brain" in cols:
-            row["source_brain"] = _running_brain()
+            row["source_brain"] = marks.brain_label(conn)
         if outside:
             row.update(derived_from="raptor_synthesis", confidence=_TAINTED_SYNTHESIS_CONFIDENCE)
         mid = marks.derived_insert(conn, row, members)
@@ -2241,7 +2228,7 @@ def _emit_playbook(conn, cfg, label, occ, evidence, note: Optional[Dict[str, Any
                "kind": "procedural", "source_project": "dream-pipeline", "source_context": "dream-synthesis",
                "derived_from": PLAYBOOK_DERIVED_FROM, "confidence": PLAYBOOK_BIRTH_CONFIDENCE}
         if has_brain:
-            row["source_brain"] = _running_brain()
+            row["source_brain"] = marks.brain_label(conn)
         pid = marks.derived_insert(conn, row, members)
         for tag in ("playbook", "dream-synthesis", "unvalidated"):
             conn.execute("INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (?, ?)",

@@ -461,7 +461,7 @@ def _insert_memory(conn: sqlite3.Connection, *, content: str, summary: str,
     double-index (external-content FTS5) and corrupt recall.
     """
     now = _now()
-    cols = _has_columns(conn, "memories", {"kind", "confidence"})
+    cols = _has_columns(conn, "memories", {"kind", "confidence", "source_brain"})
     has_kind = "kind" in cols
     has_conf = "confidence" in cols
 
@@ -476,6 +476,9 @@ def _insert_memory(conn: sqlite3.Connection, *, content: str, summary: str,
     if has_conf:
         base_cols.append("confidence")
         base_vals.append(1.0)
+    if "source_brain" in cols and _marks is not None:
+        base_cols.append("source_brain")         # never the column's DEFAULT, which on an older brain names another brain
+        base_vals.append(_marks.brain_label(conn))
     for col, val in (wanted.columns.items() if wanted is not None else ()):
         if col in base_cols:
             base_vals[base_cols.index(col)] = val

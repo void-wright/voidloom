@@ -32,6 +32,16 @@ Known limits, all of them declared rather than fixed:
   disk image is malformed"; `doctor` names the trigger whatever else it finds. A brain migrated by a newer release is
   left as it is: its triggers are its own, and `doctor` says `brain_newer_than_package`.
 
+- a twin's bridge table (`cross_tier_bridges`) keeps the CHECK of its frozen migration, which allows only the two legacy
+  tier names; no code in the package writes that table;
+- a brain from before `source_brain` existed reads the legacy label for the rows it held then: the frozen
+  `migration_027` gives the new column that DEFAULT, and on a brain that holds memories the DEFAULT is never changed.
+
+**Upgrading a brain you want to keep a name for.** Every row an existing brain already holds keeps its label. From 1.2.0
+on, a row is labelled with the brain's own label (`voidloom brain-label set NAME`), else `VOIDLOOM_BRAIN`, else `local`.
+Set the label BEFORE the first 1.2.0 run if you want new rows to carry the name the old ones do. The envelope key
+`source_brain` keeps its name and its type (a string).
+
 ### Added
 
 - **A memory says where its words came from.** `store` and `batch-store` (both engines) take `--outside`, and
@@ -58,6 +68,18 @@ Known limits, all of them declared rather than fixed:
   reports missing and altered triggers and missing columns as well as tables; a trigger that is gone or no longer says
   what was shipped is put back when an engine opens the brain to write, and by `apply`. `capabilities` (also where no organ
   registry is laid: exit 0, code `no_organs`), `agent-context` and `--version --json` list `features` by stable name.
+
+- **A brain names itself.** `voidloom brain-label [show | set NAME [--force]]` (facade `brain_label`) shows or sets the
+  label new rows carry in `source_brain`: 1 to 64 of a-z, 0-9, `_` and `-`, held in the brain's own `metadata`, set only
+  by that command. Every writer stamps it explicitly (store and batch-store on both engines, the seed loader, the
+  organs' writer, every derived writer and every raw insert); none leaves the column to its DEFAULT. When
+  `VOIDLOOM_BRAIN` names another label, the brain's own wins: the store answers with `brain_label_warning` and doctor
+  counts the rows by label. A store is never refused for it.
+- `migration_047` removes the CHECK that allowed `memories.source_brain` only the two legacy labels, keeps NOT NULL,
+  and on a brain with no memories makes the DEFAULT `local`. One transaction, checked whole and hashed row by row
+  before and after; on any difference, or on a connection that may not edit its schema, nothing changes, the brain
+  keeps writing the legacy label, and doctor says so. `marks.rollback_047` puts the old text back while every row holds
+  a legacy label.
 
 ### Changed
 
@@ -101,6 +123,13 @@ Known limits, all of them declared rather than fixed:
 - A brain before `migration_046`: plain stores work and say `premark: true`; marked and derived writes refuse
   `BRAIN_NEEDS_MIGRATION`. A read no longer adds the mark column to a brain that has none.
 - `memories_fts_after_update` fires on a change of the indexed text only, so archiving a memory no longer needs the index.
+
+- **No name from the first installation is a default, a fallback, an example or printed text.** The council table a
+  counterfactual creates lists the generic synthesizer; a twin's tier is named from configuration (`VOIDLOOM_TWIN_TIER`,
+  a persona's `twin`) as `<label>-<platform>`, and with none configured the cross-tier read and the hook's twin lines do
+  nothing; the hooks status looks for the product's own marker. Legacy labels and slugs are still read through their
+  alias maps. Output keys and functions named for the first owner gain generic names beside the old ones
+  (`owner_flagged`, `owner_interest_ratio`, `monthly_self_eval.owner_review`).
 
 ### Fixed
 

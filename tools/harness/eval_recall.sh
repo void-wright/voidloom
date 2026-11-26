@@ -162,14 +162,14 @@ if [ "${VOIDLOOM_SKIP_UNBLIND:-0}" != "1" ] && [ -n "$CANARY" ]; then
   RC_A=$?
 
   # --- Leg B: cross-tier ENABLED + declared same-era twin -> no dim error. ------
-  # Point the eddie-windows tier at a COPY of THIS brain (same jina-1024 era) via
+  # Point a twin tier (twin-windows) at a COPY of THIS brain (same jina-1024 era) via
   # the underscore env key, so the resolver path is exercised end-to-end and MUST
   # NOT raise a dim mismatch. We use a second disposable scratch copy as the twin.
   TWIN="$SCRATCH/twin_brain.db"
   cp "$SCRATCH/claude_memory.db" "$TWIN" 2>/dev/null
   ERR_B="$(cd "$SCRATCH" && VOIDLOOM_NO_LOG_USAGE=1 \
         VOIDLOOM_ENABLE_CROSS_TIER=1 \
-        MEMORY_TIER_EDDIE_WINDOWS_PATH="$TWIN" \
+        VOIDLOOM_TWIN_TIER=twin-windows MEMORY_TIER_TWIN_WINDOWS_PATH="$TWIN" \
         python3 "$SCRATCH/claude_memory.py" recall --query "$CANARY" \
         --top_k "$TOPK" ${PASSTHRU[@]+"${PASSTHRU[@]}"} 2>&1 1>/dev/null)"
   RC_B=$?
@@ -248,7 +248,7 @@ out = {
         "detail": unblind_detail,
         "checks": ("legA: default-OFF recall -> clean stderr (no 'Error querying "
                    "tier'/'Dimension mismatch'); legB: VOIDLOOM_ENABLE_CROSS_TIER=1 "
-                   "+ MEMORY_TIER_EDDIE_WINDOWS_PATH=<same-era twin> -> resolver "
+                   "+ VOIDLOOM_TWIN_TIER + MEMORY_TIER_TWIN_WINDOWS_PATH=<same-era twin> -> resolver "
                    "uses _embed_table(), no dim error."),
     },
     "snapshots": snaps,

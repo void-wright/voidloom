@@ -1224,7 +1224,7 @@ def unit_test_counterfactual_memory():
                 drew_input TEXT DEFAULT NULL,
                 decision_memory_id INTEGER DEFAULT NULL,
                 decision_weight_score REAL DEFAULT NULL,
-                participants TEXT DEFAULT '["orin","vael","dessa","kael-em","milamber"]',
+                participants TEXT DEFAULT '["orin","vael","dessa","kael-em","synthesizer"]',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 completed_at TEXT DEFAULT NULL,
                 status TEXT NOT NULL DEFAULT 'in_progress'

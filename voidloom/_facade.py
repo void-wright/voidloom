@@ -653,7 +653,7 @@ def _recall_namespace(query: str, top_k: int,
     # ``getattr(args, "explain", False)`` to run its render-only L5-N explainer.
     # OFF by default => the recall path is byte-identical to before.
     # ``no_cross_tier`` (H12) threads the engine's own ``--no-cross-tier`` arg:
-    # cmd_recall reads ``args.no_cross_tier`` and skips the EDDIE cross-tier
+    # cmd_recall reads ``args.no_cross_tier`` and skips the twin cross-tier
     # enrichment when True. Default False keeps the namespace byte-identical to
     # before; the explicit-OFF request now reaches the engine (belt-and-suspenders
     # alongside C1's default-OFF gate in the engine core).
@@ -769,7 +769,7 @@ def recall(query: str, top_k: int = 5, explain: bool = False,
     ``no_cross_tier`` (H12) is the pass-through for the engine's own
     ``--no-cross-tier`` arg: it threads onto the Namespace exactly like ``top_k``
     /``explain`` do, and ``cmd_recall`` reads ``args.no_cross_tier`` to skip the
-    EDDIE cross-tier enrichment when True. Default False keeps the call
+    twin cross-tier enrichment when True. Default False keeps the call
     byte-identical to before; with C1's engine-core default-OFF gate this is
     belt-and-suspenders, but a ``voidloom recall --no-cross-tier`` request now
     reaches the engine instead of being silently dropped.
@@ -918,6 +918,26 @@ def _marks_call(module: str, fn: str, db_path: Optional[str], *args: Any, **kw: 
             if not isinstance(code, str):
                 raise
             return {"status": "error", "error": code, "code": code, "message": str(e), **(getattr(e, "detail", None) or {})}
+
+
+def brain_label(label: Optional[str] = None, *, force: bool = False, db_path: Optional[str] = None) -> Dict[str, Any]:
+    """This brain's own label: shown, or (with `label`) set. Rows written from then on carry it; no stored row changes."""
+    import importlib
+    if label is not None:
+        return _marks_call("marks", "set_label", db_path, label, force=force)
+    with _engine_pin().LOCK:
+        mod = importlib.import_module("marks")
+        db = db_path if db_path is not None else _paths.resolve_db()
+        try:
+            conn = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True, timeout=60.0)
+        except sqlite3.Error as e:
+            return {"status": "error", "error": "BRAIN_UNREADABLE", "code": "BRAIN_UNREADABLE", "message": str(e)}
+        try:
+            return {"status": "ok", "action": "brain-label", **mod.label_of(conn), "rows_by_label": mod.label_counts(conn)}
+        except sqlite3.Error as e:
+            return {"status": "error", "error": "BRAIN_UNREADABLE", "code": "BRAIN_UNREADABLE", "message": str(e)}
+        finally:
+            conn.close()
 
 
 def research_register(config: Dict[str, Any], run_id: Optional[str] = None,

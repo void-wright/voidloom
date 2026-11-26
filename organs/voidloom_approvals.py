@@ -1683,7 +1683,7 @@ def approve(ref: str, *, titles: Optional[Sequence[str]] = None,
     """Approve (and enact) items in ONE surface item.
 
     self-eval:<report_id>  -> requires `titles` (>=1). Drives the existing
-        monthly_self_eval.drew_review() -> enact_approved() path. There is
+        monthly_self_eval.owner_review() -> enact_approved() path. There is
         deliberately no approve-all: each proposal is named. ``confirm`` is
         threaded into enact_approved for the L5-I-β variance-gate (a bulk
         enactment returns needs_confirm unless confirm=True).
@@ -1805,7 +1805,7 @@ def _decide_dispatch(db_path: str, ref: str, *, approve_titles=None,
         report_id = int(raw)
         rejected = [{"title": t, "reason": (reason or "declined via --decide")}
                     for t in no]
-        review = _SE.drew_review(db_path, report_id,
+        review = _SE.owner_review(db_path, report_id,
                                  approved=yes, rejected=rejected, actor=actor)
         if review.get("status") != "ok":
             return {"action": "review_failed", "surface": surface, "ref": ref,
@@ -1854,7 +1854,7 @@ def _approve_dispatch(db_path: str, ref: str, *,
                             f"`voidloom approvals --show self-eval:{raw}` "
                             "to see titles.")
             report_id = int(raw)
-            review = _SE.drew_review(db_path, report_id, approved=titles, actor=actor)
+            review = _SE.owner_review(db_path, report_id, approved=titles, actor=actor)
             if review.get("status") != "ok":
                 return {"action": "review_failed", "surface": surface,
                         "ref": ref, "review": review,
@@ -1989,7 +1989,7 @@ def reject(ref: str, *, titles: Optional[Sequence[str]] = None,
     """Reject items in ONE surface item. Records a rejection; NEVER enacts.
 
     self-eval:<report_id>  -> requires `titles` (>=1); drives
-        monthly_self_eval.drew_review(rejected=...).
+        monthly_self_eval.owner_review(rejected=...).
     belief:<report_batch>  -> requires `ids` (>=1); drives
         belief_engine.reject_proposals(...).
 
@@ -2025,7 +2025,7 @@ def _reject_dispatch(db_path: str, ref: str, *,
             if not titles:
                 return _err("self-eval reject requires >=1 --title.")
             rejected = [{"title": t, "reason": reason} for t in titles]
-            review = _SE.drew_review(db_path, int(raw), rejected=rejected, actor=actor)
+            review = _SE.owner_review(db_path, int(raw), rejected=rejected, actor=actor)
             review.setdefault("action", "reject_recorded")
             review["surface"] = surface
             review["ref"] = ref

@@ -294,6 +294,8 @@ def write_memory(
                                   "nothing was written. Run migration_046 (re-run the installer).")
     if parents:
         proposed = marks.derived_columns(conn, proposed, parents, author=proposed.get("author"))
+    if "source_brain" in have and proposed.get("source_brain") is None:
+        proposed["source_brain"] = marks.brain_label(conn)      # never the column's DEFAULT, which may name another brain
 
     if embed_policy == "skip":
         note = f"embed_policy=skip: {skip_reason.strip()}"

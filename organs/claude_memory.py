@@ -343,20 +343,11 @@ def _active_embed_dim() -> int:
 # L5-J-alpha actor-stamping + L5-G surprise (store-path helpers)
 # ============================================================
 
-_KNOWN_BRAINS = ("milamber", "eddie")
 VOIDLOOM_SURPRISE_BETA = 0.1  # importance += beta * novelty (feeds, never replaces)
 
 
-def _running_brain_stamp() -> str:
-    """The brain AUTHORING this write == the RUNNING brain (env-resolved). A dream
-    this brain runs over a twin-synced source is this brain's memory: attribution
-    follows the running brain, not the source."""
-    val = (os.environ.get("VOIDLOOM_BRAIN") or "").strip().lower()
-    return val if val in _KNOWN_BRAINS else _KNOWN_BRAINS[0]
-
-
 def _source_user_stamp(args) -> Optional[str]:
-    """'drew' (or another human handle) on a human-author write; NULL on a process
+    """A human author's handle on a human-author write; NULL on a process
     write. Resolved from --source-user, else VOIDLOOM_SOURCE_USER, else NULL.
     Propagates conservatively: an unset value means 'process / unknown' (NULL)."""
     val = getattr(args, "source_user", None)
@@ -1614,11 +1605,12 @@ def cmd_store(args):
         insert_cols += ["kind", "confidence"]
         insert_vals += [kind_str, kind_confidence]
     if "source_brain" in columns:
-        # Attribution follows the RUNNING brain, not the source.
+        # The label of the brain being written (its own key, else VOIDLOOM_BRAIN, else the generic word).
+        _label = marks.label_of(conn)
         insert_cols.append("source_brain")
-        insert_vals.append(_running_brain_stamp())
+        insert_vals.append(_label["label"])
     if "source_user" in columns:
-        # 'drew' on a human-author write (--source-user or VOIDLOOM_SOURCE_USER),
+        # a human handle on a human-author write (--source-user or VOIDLOOM_SOURCE_USER),
         # NULL on a process write (dream / sleep / gap-research).
         insert_cols.append("source_user")
         insert_vals.append(_source_user_stamp(args))
@@ -1767,7 +1759,10 @@ def cmd_store(args):
         result["kind"] = kind_str
         result["confidence"] = kind_confidence
     if "source_brain" in columns:
-        result["source_brain"] = _running_brain_stamp()
+        result["source_brain"] = _label["label"]
+        if _label["mismatch"]:
+            result["brain_label_warning"] = (f"VOIDLOOM_BRAIN={_label['env']} differs from this brain's own label "
+                                             f"{_label['key']!r}; the brain's label was written")
         result["source_user"] = _source_user_stamp(args)
     if "encoding_surprise" in columns:
         result["encoding_surprise"] = novelty
@@ -2084,20 +2079,22 @@ def cmd_recall(args):
     # foundation_score) are emitted onto the result dicts they touch.
     rerank_info: Dict[str, Any] = {}
 
-    # (1) Cross-tier enrichment: surface a few high-similarity EDDIE memories and
+    # (1) Cross-tier enrichment: surface a few high-similarity memories of the twin brain and
     # merge them into the local pool. Deduped by (id, tier); local entries (no
     # 'tier' key) always win over a same-id remote entry. Small top_k so it
     # enriches without flooding the local ranking.
     #
-    # C1 gate: the cross-tier (eddie-windows) organ is OPT-IN and OFF by default.
-    # It fires ONLY when env VOIDLOOM_ENABLE_CROSS_TIER is truthy. Default (unset)
+    # C1 gate: the cross-tier organ is OPT-IN and OFF by default.
+    # It fires ONLY when env VOIDLOOM_ENABLE_CROSS_TIER is truthy and VOIDLOOM_TWIN_TIER names the twin's tier. Default (unset)
     # = OFF → the entire block below is skipped: no tier path resolved, no remote
     # query attempted. This kills the dim-mismatch error, the ~449ms hot-path
     # waste, and the recall noise for the common single-brain case. The
     # --no-cross-tier flag and the legacy VOIDLOOM_NO_CROSS_TIER kill-switch still
     # force it off even when enabled (belt-and-suspenders).
+    _twin_tier = (os.environ.get("VOIDLOOM_TWIN_TIER") or "").strip()     # <label>-<platform>; absent: no twin
     want_cross_tier = (
-        _env_flag("VOIDLOOM_ENABLE_CROSS_TIER")
+        bool(_twin_tier)
+        and _env_flag("VOIDLOOM_ENABLE_CROSS_TIER")
         and not getattr(args, "no_cross_tier", False)
         and not _env_flag("VOIDLOOM_NO_CROSS_TIER")
     )
@@ -2110,7 +2107,7 @@ def cmd_recall(args):
                     query=args.query,
                     query_vec=query_vec,
                     top_k=ct_top_k,
-                    tiers=["eddie-windows"],
+                    tiers=[_twin_tier],
                     threshold=0.95,
                 )
                 if ct_results:
@@ -2128,7 +2125,7 @@ def cmd_recall(args):
                         merged += 1
                     if merged:
                         rerank_info["cross_tier_merged"] = merged
-                        rerank_info["cross_tier_tier"] = "eddie-windows"
+                        rerank_info["cross_tier_tier"] = _twin_tier
         except Exception as _e:  # noqa: BLE001 - never break recall
             rerank_info["cross_tier_error"] = str(_e)
 
@@ -3571,6 +3568,7 @@ def cmd_migrate(args):
                  project, f"Migrated from {md_file.name}"),
             )
             memory_id = cursor.lastrowid
+            marks.stamp_label(conn, memory_id)
 
             _vt, _vd = _active_embed_table(), _active_embed_dim()
             conn.execute(
@@ -4175,7 +4173,7 @@ def _cmd_approvals_self_eval_only(args, t0, db):
         Show one report's full proposals (rationale/evidence/priority).
     approvals --approve N --title "T" [--title "T2" ...]
         Approve the named proposals in report N, then enact them. This drives
-        the EXISTING monthly_self_eval.drew_review() -> enact_approved() path:
+        the EXISTING monthly_self_eval.owner_review() -> enact_approved() path:
         drew_review records the approval and seeds self_eval_enacted_proposals;
         enact_approved executes them (creates procedural memories) and flips
         the report to 'enacted'.
@@ -4204,7 +4202,7 @@ def _cmd_approvals_self_eval_only(args, t0, db):
                    "There is no approve-all; name each proposal explicitly "
                    "(run `approvals --report-id %d` to see titles)." % report_id)
 
-        review = monthly_self_eval.drew_review(db, report_id, approved=titles)
+        review = monthly_self_eval.owner_review(db, report_id, approved=titles)
         if review.get("status") != "ok":
             # Surface the underlying validation error verbatim (unknown titles,
             # already-reviewed, not-found) and stop -- do NOT enact.
@@ -4250,7 +4248,7 @@ def _cmd_approvals_self_eval_only(args, t0, db):
             _error("approvals --reject requires at least one --title.")
         reason = getattr(args, "reason", None) or "rejected"
         rejected = [{"title": t, "reason": reason} for t in titles]
-        review = monthly_self_eval.drew_review(db, report_id, rejected=rejected)
+        review = monthly_self_eval.owner_review(db, report_id, rejected=rejected)
         review["time_ms"] = int((time.time() - t0) * 1000)
         review["action"] = review.get("action", "reject_recorded")
         _output(review)

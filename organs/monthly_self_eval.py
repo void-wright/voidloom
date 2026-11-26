@@ -145,6 +145,20 @@ def _vl_ensure_vec(conn):
         return False
 
 
+def _label_row(conn, memory_id):
+    """This brain's label on a row just inserted (marks.stamp_label); a partial lay without marks.py leaves the DEFAULT."""
+    try:
+        import marks as _marks_mod
+    except ImportError:
+        import os as _os, sys as _sys
+        _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+        try:
+            import marks as _marks_mod
+        except ImportError:
+            return
+    _marks_mod.stamp_label(conn, memory_id)
+
+
 def _vl_attach(conn, memory_id, text, organ, sources=None, transformation=None,
                attach=True):
     """TO-03 + TO-08 + TO-09: everything a freshly written memory owes the brain.
@@ -1466,9 +1480,11 @@ def _compute_dream_quality(conn: sqlite3.Connection, month: str) -> Dict[str, An
         'status': 'ok',
         'total_dreams': total,
         'meaningful': meaningful,
-        'drew_flagged': flagged,
+        'drew_flagged': flagged,                    # legacy keys, kept for readers that use them
+        'owner_flagged': flagged,
         'signal_to_noise_ratio': round(signal_ratio, 3),
         'drew_interest_ratio': round(drew_ratio, 3),
+        'owner_interest_ratio': round(drew_ratio, 3),
     }
 
 
@@ -2464,6 +2480,7 @@ def surface_pending_for_owner(db_path: str) -> Dict[str, Any]:
             (body, summary)
         )
         memory_id = cur.lastrowid
+        _label_row(conn, memory_id)
         # TO-03: this memory must be findable.
         _vl_attach(conn, memory_id, body, "monthly_self_eval.surface_pending_for_owner")
         for tag in (PENDING_SURFACE_TAG, 'self-eval', 'voidloom'):
@@ -2502,7 +2519,7 @@ surface_pending_for_drew = surface_pending_for_owner
 # The Owner's Review Gate
 # ============================================================
 
-def drew_review(db_path: str, report_id: int,
+def owner_review(db_path: str, report_id: int,
                 approved: List[str] | None = None,
                 rejected: List[Dict[str, str]] | None = None,
                 actor: str | None = None) -> Dict[str, Any]:
@@ -2526,7 +2543,7 @@ def drew_review(db_path: str, report_id: int,
     # never `?mode=rw`, which converts {"status":"ok"}+exit 0 into an uncaught
     # traceback+exit 1 (VAEL, Council #5).
     if not _brain_exists(db_path):
-        return _brain_absent_error(db_path, "drew_review")
+        return _brain_absent_error(db_path, "owner_review")
     approved = approved or []
     rejected = rejected or []
 
@@ -2706,6 +2723,9 @@ def drew_review(db_path: str, report_id: int,
     finally:
         conn.close()
 
+
+
+drew_review = owner_review       # the name it had; kept for callers that use it
 
 def _approved_unenacted_here(conn, report_id: int) -> int:
     """How many of this report's units the owner APPROVED and nothing enacted.
@@ -3451,6 +3471,7 @@ def enact_approved(db_path: str, report_id: int,
                     (content, summary, *(("model",) if _authored else ()))
                 )
                 memory_id = cur2.lastrowid
+                _label_row(conn, memory_id)
                 # TO-03: this memory must be findable.
                 _vl_attach(conn, memory_id, content, "monthly_self_eval.enact_approved")
 
@@ -4161,7 +4182,7 @@ def unit_test_monthly_self_eval():
     enhancements = report.get('proposed_enhancements', [])
     if enhancements:
         first_title = enhancements[0]['title']
-        review_result = drew_review(
+        review_result = owner_review(
             db_path, report_id,
             approved=[first_title],
             rejected=[{'title': enhancements[1]['title'], 'reason': 'Not needed'}] if len(enhancements) > 1 else []
@@ -4186,14 +4207,14 @@ def unit_test_monthly_self_eval():
 
     # --- Test 17: Double review prevention ---
     print("\n--- Double Review Prevention ---")
-    double_review = drew_review(db_path, report_id, approved=[])
+    double_review = owner_review(db_path, report_id, approved=[])
     _assert(double_review['status'] == 'error', "Double review blocked")
 
     # --- Test 18: Unknown proposal title ---
     print("\n--- Unknown Proposal Title ---")
     new_result = run_self_eval(db_path, month="2026-04", config={'use_llm_proposals': False})
     new_id = new_result['report_id']
-    bad_review = drew_review(db_path, new_id, approved=['NONEXISTENT TITLE'])
+    bad_review = owner_review(db_path, new_id, approved=['NONEXISTENT TITLE'])
     _assert(bad_review['status'] == 'error', "Unknown title rejected")
     _assert(len(bad_review.get('unknown_approved', [])) > 0, "Unknown title listed")
 
@@ -4354,7 +4375,7 @@ if __name__ == "__main__":
                 rejected.append(json.loads(r))
             except json.JSONDecodeError:
                 rejected.append({'title': r, 'reason': 'rejected'})
-        result = drew_review(db_path, args.review, approved=approved, rejected=rejected)
+        result = owner_review(db_path, args.review, approved=approved, rejected=rejected)
         print(json.dumps(result, indent=2, ensure_ascii=False))
     elif args.surface:
         result = surface_pending_for_owner(db_path)

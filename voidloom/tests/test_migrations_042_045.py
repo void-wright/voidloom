@@ -46,14 +46,20 @@ def _norm(sql):
     return s
 
 
+_SB = re.compile(r"(source_brain TEXT NOT NULL DEFAULT )'[a-z0-9_-]+'", re.I)
+
+
 def _touched_schema(db: Path) -> dict:
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
         rows = c.execute("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE tbl_name IN (%s) "
                          "AND name NOT LIKE 'sqlite_%%'" % ",".join("?" * len(TOUCHED)), TOUCHED).fetchall()
-        out = {(t, n): (tb, _norm(s)) for t, n, tb, s in rows}
+        # migration_047 gives source_brain the generic DEFAULT only on a brain with no memories: a populated brain keeps
+        # the DEFAULT its old rows read. That one difference is by design, so it is left out of the comparison.
+        out = {(t, n): (tb, _SB.sub(r"\1?", _norm(s))) for t, n, tb, s in rows}
         for t in TOUCHED:
-            out[("table_info", t)] = tuple(tuple(r) for r in c.execute(f"PRAGMA table_info({t})"))
+            out[("table_info", t)] = tuple(tuple("?" if r[1] == "source_brain" and i == 4 else v for i, v in enumerate(r))
+                                           for r in c.execute(f"PRAGMA table_info({t})"))
         return out
     finally:
         c.close()

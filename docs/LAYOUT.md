@@ -1,6 +1,6 @@
 # Repository layout — how to find anything in one screen
 
-> Read this before you read code. **574 tracked files, 11 of them at the
+> Read this before you read code. **576 tracked files, 11 of them at the
 > top level.** Every count on this page is derived from the tree, and
 > `voidloom/tests/test_docs_name_real_paths.py` re-derives them and fails if
 > this page and `git ls-files` disagree — because the previous version said
@@ -60,7 +60,7 @@ the directory around it is the tidying.**
 │   ├── cli.py  _facade.py  _guard.py  _bootstrap.py
 │   └── voidloom                the shell shim symlinked onto PATH
 │
-├── migrations/            ← schema.sql + 39 additive migrations
+├── migrations/            ← schema.sql + 40 additive migrations
 ├── install/               ← install.ps1, cron/council/persona wiring, self_check,
 │   │                        requirements (pinned + hash-pinned), CLAUDE.md.template
 │   ├── lay_manifest.json       ★ WHERE EVERY TRACKED FILE LANDS — derived from

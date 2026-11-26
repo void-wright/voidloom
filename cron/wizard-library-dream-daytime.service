@@ -16,7 +16,7 @@ ExecStart=/usr/bin/env python3 -u %h/.claude/memory/organs/dream_pipeline.py run
 WorkingDirectory=%h/.claude/memory
 StandardOutput=journal
 StandardError=journal
-# Heavy phases (RAPTOR/gap-dispatch) defer here, gpu_guard-gated, while Drew is not gaming.
+# Heavy phases (RAPTOR/gap-dispatch) defer here, gpu_guard-gated, while the card is not in use.
 TimeoutStartSec=3600
 # STARVED (round 1): exit 79 = the thinker was unavailable (quota/auth/unreachable): nothing could be dreamt
 # and nothing empty was written (organs/memory_dreaming.py EXIT_STARVED). Admitted, so a quota week is not a

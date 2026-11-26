@@ -1260,7 +1260,7 @@ def _recall_via_facade(facade, query: str, *, top_k: int, explain: bool,
     """Call ``_facade.recall`` forwarding ``--no-cross-tier`` (H12).
 
     The flag threads to the engine exactly like ``top_k``/``explain`` do: the
-    engine reads ``args.no_cross_tier`` and skips the EDDIE enrichment when True
+    engine reads ``args.no_cross_tier`` and skips the twin enrichment when True
     (belt-and-suspenders alongside C1's default-OFF gate). The facade owns the
     Namespace; this helper passes the kwarg, falling back gracefully if a facade
     build predating the kwarg is in place (no_cross_tier defaults False there, so
@@ -1503,6 +1503,21 @@ def _marks_result(res: Dict[str, Any], verb: str, ok_code: str) -> Dict[str, Any
     if res.get("status") == "ok":
         return ok(ok_code, res, verb=verb)
     return error(str(res.get("code") or "engine_error"), str(res.get("message") or "refused"), data=res, verb=verb)
+
+
+def verb_brain_label(args) -> Dict[str, Any]:
+    """`brain-label` shows this brain's own label; `brain-label set NAME` sets it. The label is what rows written from
+    then on carry in source_brain; no stored row changes."""
+    db, verb = getattr(args, "db", None), "brain-label"
+    setting = args.brain_label_action == "set"
+    if setting and not args.name:
+        return error("LABEL_INVALID", "brain-label set needs a NAME", verb=verb)
+    refusal = _guard.require_write(db) if setting else _guard.require_local(db)
+    if refusal is not None:
+        return refused(refusal["code"], refusal["message"], data=refusal, verb=verb)
+    from . import _facade
+    return _marks_result(_facade.brain_label(args.name if setting else None, force=bool(args.force), db_path=db),
+                         verb, "brain_label_set" if setting else "brain_label")
 
 
 def verb_research_register(args) -> Dict[str, Any]:
@@ -2115,6 +2130,31 @@ def _verb_tui(backend, db, face: Optional[str] = None) -> Dict[str, Any]:
     return _approvals_envelope(res.get("code", "tui_done"), res, _count_trust(db))
 
 
+def _doctor_label(db: Optional[str]) -> Dict[str, Any]:
+    """The label new rows carry, its source, and the rows by label. A warning when the environment names another label
+    than the brain's own (the brain's wins), and when the brain's schema can still hold only the legacy labels."""
+    if not db:
+        return {"label": None}
+    try:
+        _organs_importable()
+        import marks
+        conn = sqlite3.connect(f"{Path(db).resolve().as_uri()}?mode=ro", uri=True, timeout=5.0)
+        try:
+            out = {**marks.label_of(conn), "rows_by_label": marks.label_counts(conn)}
+        finally:
+            conn.close()
+    except Exception as e:  # noqa: BLE001 -- doctor reports, it does not raise
+        return {"label": None, "error": f"{type(e).__name__}: {e}"}
+    if out["mismatch"]:
+        out["warning"] = (f"brain label: VOIDLOOM_BRAIN={out['env']} differs from this brain's own label {out['key']!r}; "
+                          f"rows are written as {out['key']!r}. Rows by label: {out['rows_by_label']}")
+    elif out["legacy_check"]:
+        out["warning"] = ("brain label: this brain's schema still accepts only the legacy labels (migration_047 has not "
+                          f"changed it), so new rows are written as {out['label']!r}. Re-run the installer, or: "
+                          "python3 organs/schema_migrator.py apply --db <brain>")
+    return out
+
+
 def _doctor_marks(db: Optional[str]) -> Dict[str, Any]:
     """marks.health, with the line a person reads. A lost trigger is a fault of the brain: derived rows written while it is
     gone carry no mark. A brain before migration_046 is a warning: it works, and frames what it cannot vouch for."""
@@ -2266,6 +2306,9 @@ def verb_doctor(args) -> Dict[str, Any]:
     _marks = _doctor_marks(brain.get("db_path") if brain.get("db_present") else None)
     if _marks.get("warning"):
         _warnings = _warnings + [_marks["warning"]]
+    _label = _doctor_label(brain.get("db_path") if brain.get("db_present") else None)
+    if _label.get("warning"):
+        _warnings = _warnings + [_label["warning"]]
     _coh = _embedding_coherence(brain.get("db_path"))
     _reason: Optional[str] = None
     if not guard.ok:
@@ -2317,6 +2360,8 @@ def verb_doctor(args) -> Dict[str, Any]:
             "embedding_coherence": _coh,
             # can this brain hold where a memory came from, and are the triggers that carry it all there?
             "marks": _marks,
+            # which label new rows carry, where it came from, and how many rows carry each
+            "brain_label": _label,
             "gpu_declaration": _gpu_decl,
             "gpu_pin": _pin,
             # round 2, M5: the backend, cpu_only and the proof label, beside the pin
@@ -3565,6 +3610,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_global_flags(sp)
     sp.set_defaults(_fn=verb_export)
 
+    sp = sub.add_parser("brain-label", help="this brain's own label, the one new rows carry in source_brain: show, or set NAME.")
+    sp.add_argument("brain_label_action", nargs="?", choices=["show", "set"], default="show", help="show (default) or set")
+    sp.add_argument("name", nargs="?", default=None, help="the label: 1 to 64 of a-z, 0-9, _ and -")
+    sp.add_argument("--force", action="store_true", help="change a label already set")
+    sp.add_argument("--json", action="store_true", help="structured envelope")
+    _add_global_flags(sp)
+    sp.set_defaults(_fn=verb_brain_label)
+
     # marks: what is outside, what research wrote, and taking either back
     sp = sub.add_parser("research-register",
                         help="register a research configuration (JSON file) and a run of it; insert-only, starts nothing.")
@@ -3615,7 +3668,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="surface per-result 'why-surfaced' provenance "
                          "(L5-N; render-only, additive; default off)")
     # H12: forward the engine's own --no-cross-tier off-switch. Belt-and-
-    # suspenders alongside C1's default-OFF gate: when set, the EDDIE enrichment
+    # suspenders alongside C1's default-OFF gate: when set, the twin enrichment
     # is skipped explicitly (the engine reads `args.no_cross_tier`). Previously
     # `voidloom recall --no-cross-tier` exited 2 (unrecognized) because the
     # wrapper never surfaced the flag.

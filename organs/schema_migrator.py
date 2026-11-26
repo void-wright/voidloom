@@ -495,7 +495,9 @@ def apply(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
                 # and not from an error code. Four migrations destroy data when
                 # re-run; 022 wiped 26 live cross-brain bridges in the measured
                 # case, and it did so by SUCCEEDING.
-                if already_applied(target, deltas.get(f.name, (set(), set()))) is True:
+                if already_applied(target, deltas.get(f.name, (set(), set()))) is True or not [
+                        x for x in iter_statements(f.read_text(encoding="utf-8")) if not _is_txn_control(x)]:
+                    # a file with no statement (migration_047: its step runs after the files) has nothing to apply
                     results[f.name] = {"file": f.name, "applied": 0, "already": 0,
                                        "unmeasurable": [], "errors": [],
                                        "skipped_already_applied": True, "atomic": True}
@@ -528,6 +530,13 @@ def apply(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
                 pass
     finally:
         conn.close()
+    step_047: Dict[str, Any] = {"status": "skipped"}
+    if pathlib.Path(mdir).resolve() == migrations_dir().resolve():
+        try:
+            import marks
+            step_047 = marks.migrate_047(db)
+        except ImportError:
+            pass
     errs = [(r["file"], r["errors"]) for r in files if r["errors"]]
     unm = [f"{r['file']}: {m}" for r in files for m in r["unmeasurable"]]
     out = audit(db, mdir)
@@ -539,6 +548,7 @@ def apply(db: str, mdir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
         "bootstrapped_base_schema": bootstrapped,
         "skipped_already_applied": skipped,
         "triggers_restored": restored,
+        "migration_047": step_047,
         # These count STATEMENTS EXECUTED, not objects created: `CREATE TABLE
         # IF NOT EXISTS` executes as a silent no-op, so a clean re-run still
         # reports a large `statements_executed`.  Naming it "applied" made a

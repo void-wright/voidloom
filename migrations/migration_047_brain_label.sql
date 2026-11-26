@@ -1,0 +1,22 @@
+-- migration_047_brain_label.sql
+--
+-- WHAT: memories.source_brain stops naming two particular brains. Until now the column carried a CHECK that allowed
+-- only the two labels the first installs used, and a DEFAULT naming the first of them; a stranger's brain could store no
+-- name of its own, and every writer that left the column out stamped somebody else's.
+--
+-- HOW: SQLite has no ALTER for a CHECK, so this step edits the table's schema text, which a statement file cannot do.
+-- schema_migrator.apply runs it after every file, as marks.migrate_047:
+--   * it removes only that CHECK, matched exactly once whichever creation route wrote it (migration_027's text or the
+--     dream pipeline's own ALTER), and keeps NOT NULL;
+--   * on a brain with no memories at all it also makes the DEFAULT the generic word 'local'. On a brain that holds
+--     memories the DEFAULT is left alone: rows stored before migration_027 hold no value of their own, read it, and
+--     would change if it changed;
+--   * one BEGIN IMMEDIATE transaction; PRAGMA schema_version is bumped (metadata.schema_version is not touched); the
+--     database is checked whole (quick_check, integrity_check, foreign_key_check) and every row's (id, source_brain) is
+--     hashed before and after, inside the transaction and again on a new connection. On any difference nothing is
+--     changed. A connection that may not edit its schema, or a text that does not match, leaves the brain as it was:
+--     it keeps working and writes the legacy label, and doctor says so.
+-- The replaced text is kept in metadata ('migration_047_memories_sql'). Rollback: marks.rollback_047 writes it back,
+-- only while every row holds one of the two legacy labels; otherwise restore the copy taken before the upgrade.
+--
+-- Nothing below is a statement: the edit is the step described above.

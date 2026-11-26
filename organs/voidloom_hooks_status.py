@@ -969,7 +969,7 @@ def unreceipted_markers(rows: Sequence[Dict[str, Any]], cwd: str,
                 except OSError:
                     txt = ""
                 mentions = [n for n, ln in enumerate(txt.splitlines(), 1)
-                            if re.search(r"MILAMBER|Voidloom|voidloom", ln)]
+                            if re.search(r"Voidloom|voidloom|VOIDLOOM", ln)]
                 baks = sorted(str(b) for b in Path(ct["path"]).parent.glob(
                     Path(ct["path"]).name + ".bak.*"))
                 if (mentions or baks) and os.path.abspath(ct["path"]) not in receipted:

@@ -457,7 +457,8 @@ def _gather_dream_data(conn: sqlite3.Connection, data: dict, start: str, end: st
         data["dreaming"] = {
             "total_dreams": dreams["total"] or 0,
             "meaningful": dreams["meaningful"] or 0,
-            "drew_flagged": dreams["drew_flagged"] or 0,
+            "drew_flagged": dreams["drew_flagged"] or 0,           # legacy key, kept for readers that use it
+            "owner_flagged": dreams["drew_flagged"] or 0,
         }
 
         interesting_dreams = conn.execute(

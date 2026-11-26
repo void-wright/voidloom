@@ -67,7 +67,7 @@ _NETWORK_FSTYPES: Tuple[str, ...] = (
     "fuse.rclone", "fuse.gdrive", "fuse.davfs", "davfs", "ncpfs",
     "glusterfs", "ceph",
     # WSL host bridges — the brain belongs on native Linux block storage, NOT on
-    # the Windows-host bridge (that path is the *other* brain's home, e.g. EDDIE
+    # the Windows-host bridge (that path is the *other* brain's home, e.g. a twin
     # under /mnt/c, reached only via the cross-tier bridge — never the primary).
     # 9p is the WSL1 bridge; iter-2 (Morrow) adds drvfs, the WSL2 /mnt/<drive>
     # bridge, so /mnt/c is detected as non-local on drvfs boxes too, not only 9p.

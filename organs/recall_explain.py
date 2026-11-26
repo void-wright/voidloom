@@ -552,7 +552,7 @@ def _self_test() -> int:
 
     print("[7] sanitizer neutralizes a hostile memory-derived field (tier)")
     hostile = {"id": 1, "retrieval_path": "hybrid", "score": 0.5,
-               "tier": "eddie\x1b]52;c;BAD\x07-windows"}
+               "tier": "twin\x1b]52;c;BAD\x07-windows"}
     hline = render_explanation(build_explanation(hostile), mode="none")
     check("\x1b" not in hline, "OSC-52 in tier neutralized (no ESC survives)")
     check("]52;c" not in hline, "no OSC-52 payload survives")

@@ -109,6 +109,20 @@ except Exception:                       # pragma: no cover - substrate absent
     _vl_mw = None
 
 
+def _label_row(conn, memory_id):
+    """This brain's label on a row just inserted (marks.stamp_label); a partial lay without marks.py leaves the DEFAULT."""
+    try:
+        import marks as _marks_mod
+    except ImportError:
+        import os as _os, sys as _sys
+        _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+        try:
+            import marks as _marks_mod
+        except ImportError:
+            return
+    _marks_mod.stamp_label(conn, memory_id)
+
+
 def _vl_attach(conn, memory_id, text, organ, sources=None, transformation=None,
                attach=True):
     """TO-03 + TO-08 + TO-09: everything a freshly written memory owes the brain.
@@ -208,7 +222,7 @@ _INJECTION_PATTERNS = [
         r"\bnew instructions?\b\s*[:=]",
         r"\bas an ai\b.*\byou (?:should|must|will)\b",
         r"\boverride (?:your |the )?(?:rules|instructions|guardrails|safety)\b",
-        r"\b(?:do not|don'?t) (?:tell|inform|alert|notify) (?:drew|the user|anyone)\b",
+        r"\b(?:do not|don'?t) (?:tell|inform|alert|notify) (?:the owner|the user|anyone)\b",
     )
 ]
 
@@ -585,6 +599,7 @@ def _maybe_distill_failure(
             (content, summary),
         )
         seed_id = cur.lastrowid
+        _label_row(conn, seed_id)
         # TO-03: this memory must be findable.
         _vl_attach(conn, seed_id, content, "governance._maybe_distill_failure")
         for tag in (seed_tag, code_tag, "governance"):

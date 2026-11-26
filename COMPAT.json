@@ -1,5 +1,5 @@
 {
-  "cli_surface_version": "cli-surface/1:baf83e1259ee960a",
+  "cli_surface_version": "cli-surface/1:4fbc2b82c196f389",
   "install_verb_contract": "install-verb/1:8fadbc9fe991e287",
   "oldest_migratable_schema": {
     "migrations": []
@@ -92,9 +92,10 @@
       "migration_043_retire_encumbered_default.sql",
       "migration_044_seed_origin.sql",
       "migration_045_derived_layer_stamp.sql",
-      "migration_046_marks.sql"
+      "migration_046_marks.sql",
+      "migration_047_brain_label.sql"
     ],
-    "schema_sha256": "da4ce80ee1a894e4410ca877f26ab6e953d1b125d609ff9cba778ffba9a33e82"
+    "schema_sha256": "49006660f0a08c5bade361281fd2e1281e15f9c387f818b1856fd1b57a4fc4f8"
   },
   "version": "1.2.0"
 }

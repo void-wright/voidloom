@@ -90,6 +90,7 @@ voidloom export  --ids 1,2,3 [--json]          an explicit selection as plain JS
 ```
 
 ```
+voidloom brain-label [show | set NAME [--force]] [--json]   this brain's own label, the one new rows carry
 voidloom research-register --config FILE [--run RUN_ID] [--json]   register a research configuration and a run of it
                                                (insert-only, idempotent; starts nothing)
 voidloom forget    --id N | --run RUN_ID [--dry-run] [--include-mixed] [--json]   archive, with a receipt
@@ -124,6 +125,12 @@ each call's database and output are its own.
 **Batch is the default for more than one operation.** The single verbs reload the
 embedding model on every call; the batch verbs load it once. `--items` takes inline
 JSON, `@file`, or `-` for stdin.
+
+**Which brain wrote a row.** Every row carries a label in `source_brain`: the brain's own, set once with
+`voidloom brain-label set NAME` (1 to 64 of a-z, 0-9, `_` and `-`; `--force` changes it; `voidloom brain-label` shows it
+and the rows by label), else `VOIDLOOM_BRAIN`, else `local`. The brain's own label wins over the environment, and doctor
+says when they differ. Rows already stored keep the label they hold: set the label before a brain's first 1.2.0 run to
+keep its name on new rows.
 
 ### Integration
 

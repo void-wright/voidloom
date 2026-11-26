@@ -1739,6 +1739,7 @@ def dispatch_auto_research(
                             datetime('now'), datetime('now'), datetime('now'))
                 """, (content[:10000], summary[:500], f"gap_id={gap_id},method={method}", _marks.SENTINEL,
                       _marks.OUTSIDE_CONFIDENCE)).lastrowid
+                _marks.stamp_label(conn, research_memory_id)
                 # TO-03: this memory must be findable.
                 _vl_attach(conn, research_memory_id, content[:10000], "gap_mapping.dispatch_auto_research")
 

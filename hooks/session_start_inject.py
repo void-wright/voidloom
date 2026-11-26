@@ -125,12 +125,16 @@ def _env_truthy(name: str) -> bool:
     return v in ("1", "true", "yes", "on")
 
 
+#: a twin tier is named <label>-<platform>; these platforms are this machine
+LOCAL_PLATFORMS = ("wsl", "linux", "posix", "local")
+
+
 def _twin_db_path(rtier: str) -> str:
     """Resolve the off-machine twin brain DB path WITHOUT a personal literal.
 
     Env-first, mirroring cross_tier_bridges._twin_brain_default / the C1 contract
-    override key ``MEMORY_TIER_EDDIE_WINDOWS_PATH``:
-      1. the tier override env var (e.g. MEMORY_TIER_EDDIE_WINDOWS_PATH) — wins;
+    override key ``MEMORY_TIER_<TIER>_PATH`` (a tier is named ``<label>-<platform>``):
+      1. the tier override env var (e.g. MEMORY_TIER_TWIN_WINDOWS_PATH) — wins;
       2. else a WSL-visible Windows home derived from WIN_HOME / USERPROFILE, or
          reconstructed from WIN_USER / USERNAME;
       3. else '' (no derivable path) — the block then teaches the override key
@@ -140,9 +144,9 @@ def _twin_db_path(rtier: str) -> str:
     explicit = os.environ.get(override_key, "").strip()
     if explicit:
         return explicit
-    if rtier == "milamber-wsl":
+    if rtier.rsplit("-", 1)[-1] in LOCAL_PLATFORMS:     # a twin on this machine: this home
         return str(Path.home() / ".claude" / "memory" / "claude_memory.db")
-    # eddie-windows (or any off-machine twin): derive a WSL-visible Windows home.
+    # an off-machine twin (<label>-windows): derive a WSL-visible Windows home.
     win_home = os.environ.get("WIN_HOME") or os.environ.get("USERPROFILE")
     if win_home:
         wh = win_home.replace("\\", "/")

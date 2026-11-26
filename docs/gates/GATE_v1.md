@@ -118,7 +118,7 @@ A floor whose denominator is unpublished is not a floor.
 
 > **No cap on DECLINED in `gate-v1`.** An underived literal in a governance document is the defect
 > this file exists to remove. The count is published so a cap can be *argued from data* next
-> round. A creditor waiving their own debt needs no cap — if Drew has signed a hundred waivers,
+> round. A creditor waiving their own debt needs no cap — if the owner has signed a hundred waivers,
 > he knows, because he signed a hundred times.
 
 ---

@@ -33,6 +33,7 @@ FEATURES: Dict[str, str] = {
     "derive.inherit": "a row written from marked rows is marked, whoever writes it; the package's derived writers also cap its worth",
     "research.register": "research-register --config FILE [--run RUN_ID], facade research_register: insert-only",
     "research.dispatch_closed": "gap research refuses RESEARCH_DISPATCH_CLOSED without an exactly approved topic, named by --gap-ids",
+    "brain.label": "brain-label [show | set NAME]: the label new rows carry in source_brain (key, else VOIDLOOM_BRAIN, else 'local')",
     "forget": "forget / unarchive --id N | --run RUN_ID: a reversible archive with a receipt",
     "marks.backfill": "marks backfill [--dry-run] [--yes-many] [--undo]",
     "engine.pinned": "engine calls are pinned to their database and run one at a time per process",
@@ -299,6 +300,18 @@ TOOLKIT: Dict[str, Any] = {
                 "--json": "flag; structured envelope {memory_id, stored_sha256, marks}",
             },
             "when": "A durable fact/decision/lesson worth keeping appears.",
+        },
+        {
+            "name": "brain-label",
+            "purpose": ("Show this brain's own label, or set it (`brain-label set NAME`). New rows carry it in "
+                        "source_brain; no stored row changes. Without one: VOIDLOOM_BRAIN, else 'local'."),
+            "args": {
+                "show|set": "the action (default show)",
+                "NAME": "str; 1 to 64 of a-z, 0-9, _ and -",
+                "--force": "flag; change a label already set",
+                "--json": "flag; structured envelope {label, source, key, env, rows_by_label}",
+            },
+            "when": "Once, before a brain's first store, when it should keep a name of its own.",
         },
         {
             "name": "research-register",

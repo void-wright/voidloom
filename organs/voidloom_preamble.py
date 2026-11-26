@@ -419,13 +419,17 @@ def env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
+#: a twin tier is named <label>-<platform>; these platforms are this machine
+LOCAL_PLATFORMS = ("wsl", "linux", "posix", "local")
+
+
 def twin_db_path(rtier: str) -> str:
     """Off-machine twin path, env-first.  No username literal ever ships."""
     override_key = f"MEMORY_TIER_{rtier.upper().replace('-', '_')}_PATH"
     explicit = os.environ.get(override_key, "").strip()
     if explicit:
         return explicit
-    if rtier == "milamber-wsl":
+    if rtier.rsplit("-", 1)[-1] in LOCAL_PLATFORMS:     # a twin on this machine: this home
         return str(Path.home() / ".claude" / "memory" / "claude_memory.db")
     win_home = os.environ.get("WIN_HOME") or os.environ.get("USERPROFILE")
     if win_home:
